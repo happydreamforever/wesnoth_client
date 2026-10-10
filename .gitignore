@@ -1,0 +1,45 @@
+# Private configuration and signing material
+.env
+.env.*
+!.env.example
+*.keystore
+*.jks
+*.p12
+
+# Machine-local reports and tools
+/diagnostics/
+.venv/
+__pycache__/
+*.pyc
+.gradle/
+local.properties
+
+# Generated builds and downloaded dependencies
+/build/
+/build-*/
+/packaging/android/build/
+/packaging/android/build-*/
+!/packaging/android/build-android-dependencies/
+/packaging/android/prefix/
+/packaging/android/downloads/
+/packaging/android/app/build/
+/packaging/android/app/src/main/jniLibs/
+.sconsign*
+.scons-option-cache
+*.o
+*.obj
+*.a
+*.so
+*.dll
+*.exe
+*.apk
+*.obb
+*.zip
+*.rar
+*.7z
+*.tar
+*.tar.gz
+*.tar.bz2
+*.tar.xz
+*.tgz
+*.log
