@@ -1,0 +1,1435 @@
+/*
+	Copyright (C) 2003 - 2025
+	by David White <dave@whitevine.net>
+	Part of the Battle for Wesnoth Project https://www.wesnoth.org/
+
+	This program is free software; you can redistribute it and/or modify
+	it under the terms of the GNU General Public License as published by
+	the Free Software Foundation; either version 2 of the License, or
+	(at your option) any later version.
+	This program is distributed in the hope that it will be useful,
+	but WITHOUT ANY WARRANTY.
+
+	See the COPYING file for more details.
+*/
+
+#include "help/help_impl.hpp"
+
+#include "actions/attack.hpp"           // for time_of_day bonus
+#include "color.hpp"
+#include "formula/string_utils.hpp"     // for VGETTEXT
+#include "font/standard_colors.hpp"     // for NORMAL_COLOR
+#include "game_config.hpp"              // for debug, menu_contract, etc
+#include "game_config_manager.hpp"      // for game_config_manager
+#include "gettext.hpp"                  // for _, gettext, N_
+#include "help/help_topic_generators.hpp"
+#include "hotkey/hotkey_command.hpp"    // for is_scope_active, etc
+#include "log.hpp"                      // for LOG_STREAM, logger, etc
+#include "map/map.hpp"                  // for gamemap
+#include "picture.hpp"                  // for get_image, locator
+#include "preferences/preferences.hpp"  // for encountered_terrains, etc
+#include "resources.hpp"                // for tod_manager, config_manager
+#include "serialization/markup.hpp"     // for markup utility functions
+#include "serialization/parser.hpp"
+#include "serialization/string_utils.hpp"  // for split, quoted_split, etc
+#include "terrain/terrain.hpp"          // for terrain_type
+#include "terrain/translation.hpp"      // for operator==, ter_list, etc
+#include "terrain/type_data.hpp"        // for terrain_type_data, etc
+#include "time_of_day.hpp"              // for time_of_day
+#include "tod_manager.hpp"              // for tod_manager
+#include "tstring.hpp"                  // for t_string, operator<<
+#include "units/race.hpp"               // for unit_race, etc
+#include "units/types.hpp"              // for unit_type, unit_type_data, etc
+#include "utils/general.hpp"            // for contains
+
+#include <algorithm>                    // for sort, find, transform, etc
+#include <boost/algorithm/string.hpp>
+#include <cassert>                     // for assert
+#include <iterator>                     // for back_insert_iterator, etc
+#include <map>                          // for map, etc
+#include <set>
+#include <utility>
+
+static lg::log_domain log_help("help");
+#define WRN_HP LOG_STREAM(warn, log_help)
+#define DBG_HP LOG_STREAM(debug, log_help)
+
+namespace help {
+
+const int max_section_level = 15;
+// The topic to open by default when opening the help dialog.
+const std::string default_show_topic = "..introduction";
+const std::string unknown_unit_topic = ".unknown_unit";
+const std::string unit_prefix = "unit_";
+const std::string terrain_prefix = "terrain_";
+const std::string race_prefix = "race_";
+const std::string faction_prefix = "faction_";
+const std::string era_prefix = "era_";
+const std::string variation_prefix = "variation_";
+const std::string ability_prefix = "ability_";
+const std::string weaponspecial_prefix = "weaponspecial_";
+
+bool section_is_referenced(const std::string& section_id, const config& cfg)
+{
+	if(auto toplevel = cfg.optional_child("toplevel"))
+	{
+		if(utils::contains(utils::quoted_split(toplevel["sections"]), section_id)) {
+			return true;
+		}
+	}
+
+	for(const config& section : cfg.child_range("section"))
+	{
+		if(utils::contains(utils::quoted_split(section["sections"]), section_id)) {
+			return true;
+		}
+	}
+	return false;
+}
+
+bool topic_is_referenced(const std::string& topic_id, const config& cfg)
+{
+	if(auto toplevel = cfg.optional_child("toplevel"))
+	{
+		if(utils::contains(utils::quoted_split(toplevel["topics"]), topic_id)) {
+			return true;
+		}
+	}
+
+	for(const config& section : cfg.child_range("section"))
+	{
+		if(utils::contains(utils::quoted_split(section["topics"]), topic_id)) {
+			return true;
+		}
+	}
+	return false;
+}
+
+section parse_config_internal(const config& help_cfg, const config& section_cfg, int level)
+{
+	if(level > max_section_level) {
+		PLAIN_LOG << "Maximum section depth has been reached. Maybe circular dependency?";
+		return section{};
+	}
+	const std::vector<std::string> sections = utils::quoted_split(section_cfg["sections"]);
+	std::string id = level == 0 ? "toplevel" : section_cfg["id"].str();
+	if(level != 0) {
+		if(!is_valid_id(id)) {
+			std::stringstream ss;
+			ss << "Invalid ID, used for internal purpose: '" << id << "'";
+			throw parse_error(ss.str());
+		}
+	}
+	std::string title = level == 0 ? "" : section_cfg["title"].str();
+	section sec;
+	sec.id = id;
+	sec.title = title;
+	// Find all child sections.
+	for(const std::string& sec_id : sections) {
+		if(auto child_cfg = help_cfg.find_child("section", "id", sec_id)) {
+			sec.add_section(parse_config_internal(help_cfg, *child_cfg, level + 1));
+		} else {
+			std::stringstream ss;
+			ss << "Help-section '" << sec_id << "' referenced from '"
+				<< id << "' but could not be found.";
+			throw parse_error(ss.str());
+		}
+	}
+
+	generate_sections(help_cfg, section_cfg["sections_generator"], sec, level);
+	if(section_cfg["sort_sections"] == "yes") {
+		sec.sections.sort(section_less());
+	}
+
+	bool sort_topics = false;
+	bool sort_generated = true;
+
+	if(section_cfg["sort_topics"] == "yes") {
+		sort_topics = true;
+		sort_generated = false;
+	} else if(section_cfg["sort_topics"] == "no") {
+		sort_topics = false;
+		sort_generated = false;
+	} else if(section_cfg["sort_topics"] == "generated") {
+		sort_topics = false;
+		sort_generated = true;
+	} else if(!section_cfg["sort_topics"].empty()) {
+		std::stringstream ss;
+		ss << "Invalid sort option: '" << section_cfg["sort_topics"] << "'";
+		throw parse_error(ss.str());
+	}
+
+	std::vector<topic> generated_topics = generate_topics(sort_generated, section_cfg["generator"]);
+	std::vector<topic> topics;
+
+	// Find all topics in this section.
+	for(const std::string& topic_id : utils::quoted_split(section_cfg["topics"])) {
+		if(auto topic_cfg = help_cfg.find_child("topic", "id", topic_id)) {
+			std::string text = topic_cfg["text"];
+			text += generate_topic_text(topic_cfg["generator"], help_cfg, sec);
+			topic child_topic(topic_cfg["title"], topic_cfg["id"], text);
+			if(!is_valid_id(child_topic.id)) {
+				std::stringstream ss;
+				ss << "Invalid ID, used for internal purpose: '" << id << "'";
+				throw parse_error(ss.str());
+			}
+			topics.push_back(child_topic);
+		} else {
+			std::stringstream ss;
+			ss << "Help-topic '" << topic_id << "' referenced from '" << id
+				<< "' but could not be found." << std::endl;
+			throw parse_error(ss.str());
+		}
+	}
+
+	if(sort_topics) {
+		std::sort(topics.begin(),topics.end(), title_less());
+		std::sort(generated_topics.begin(),
+			generated_topics.end(), title_less());
+		std::merge(generated_topics.begin(),
+			generated_topics.end(),topics.begin(),topics.end()
+			,std::back_inserter(sec.topics),title_less());
+	} else {
+		sec.topics.insert(sec.topics.end(),
+			topics.begin(), topics.end());
+		sec.topics.insert(sec.topics.end(),
+			generated_topics.begin(), generated_topics.end());
+	}
+	return sec;
+}
+
+section parse_config(const config& cfg)
+{
+	if(auto toplevel_cfg = cfg.optional_child("toplevel")) {
+		return parse_config_internal(cfg, *toplevel_cfg);
+	} else {
+		return section{};
+	}
+}
+
+std::vector<topic> generate_topics(const bool sort_generated, const std::string& generator)
+{
+	std::vector<topic> res;
+	if(generator.empty()) {
+		return res;
+	}
+
+	if(generator == "abilities") {
+		res = generate_ability_topics(sort_generated);
+	} else if(generator == "weapon_specials") {
+		res = generate_weapon_special_topics(sort_generated);
+	} else if(generator == "time_of_days") {
+		res = generate_time_of_day_topics(sort_generated);
+	} else if(generator == "traits") {
+		res = generate_trait_topics(sort_generated);
+	} else {
+		std::vector<std::string> parts = utils::split(generator, ':', utils::STRIP_SPACES);
+		if(parts.size() > 1 && parts[0] == "units") {
+			res = generate_unit_topics(parts[1], sort_generated);
+		} else if(parts[0] == "era" && parts.size() > 1) {
+			res = generate_era_topics(parts[1], sort_generated);
+		} else {
+			WRN_HP << "Found a topic generator that I didn't recognize: " << generator;
+		}
+	}
+
+	return res;
+}
+
+void generate_sections(const config& help_cfg, const std::string& generator, section& sec, int level)
+{
+	if(generator == "races") {
+		generate_races_sections(help_cfg, sec, level);
+	} else if(generator == "terrains") {
+		generate_terrain_sections(sec, level);
+	} else if(generator == "eras") {
+		DBG_HP << "Generating eras...";
+		generate_era_sections(help_cfg, sec, level);
+	} else 	{
+		std::vector<std::string> parts = utils::split(generator, ':', utils::STRIP_SPACES);
+		if(parts.size() > 1 && parts[0] == "units") {
+			generate_unit_sections(help_cfg, sec, level, true, parts[1]);
+		} else if(generator.size() > 0) {
+			WRN_HP << "Found a section generator that I didn't recognize: " << generator;
+		}
+	}
+}
+
+std::string generate_topic_text(const std::string& generator, const config& help_cfg, const section& sec)
+{
+	std::string empty_string = "";
+	if(generator.empty()) {
+		return empty_string;
+	} else {
+		std::vector<std::string> parts = utils::split(generator, ':');
+		if(parts.size() > 1 && parts[0] == "contents") {
+			if(parts[1] == "generated") {
+				return generate_contents_links(sec);
+			} else {
+				return generate_contents_links(parts[1], help_cfg);
+			}
+		}
+	}
+	return empty_string;
+}
+
+const config& topic_text::parsed_text() const
+{
+	if(generator_) {
+		parsed_text_ = markup::parse_text((*generator_)());
+		// This caches the result, so doesn't need the generator any more
+		generator_.reset();
+	}
+	return parsed_text_;
+}
+
+static std::string time_of_day_bonus_colored(const int time_of_day_bonus)
+{
+	return markup::span_color((time_of_day_bonus > 0 ? "green" : (time_of_day_bonus < 0 ? "red" : "white")), time_of_day_bonus);
+}
+
+std::vector<topic> generate_time_of_day_topics(const bool /*sort_generated*/)
+{
+	std::vector<topic> topics;
+	std::stringstream toplevel;
+
+	if(!resources::tod_manager) {
+		toplevel << _("Only available during a scenario.");
+		topics.emplace_back(_("Time of Day Schedule"), "..schedule", toplevel.str());
+		return topics;
+	}
+
+	const std::vector<time_of_day>& times = resources::tod_manager->times();
+	for(const time_of_day& time : times)
+	{
+		const std::string id = "time_of_day_" + time.id;
+		const std::string image = markup::img(time.image);
+		const std::string image_lawful = markup::img("icons/alignments/alignment_lawful_30.png");
+		const std::string image_neutral = markup::img("icons/alignments/alignment_neutral_30.png");
+		const std::string image_chaotic = markup::img("icons/alignments/alignment_chaotic_30.png");
+		const std::string image_liminal = markup::img("icons/alignments/alignment_liminal_30.png");
+		std::stringstream text, row_ss;
+
+		const int lawful_bonus = generic_combat_modifier(time.lawful_bonus, unit_alignments::type::lawful, false, resources::tod_manager->get_max_liminal_bonus());
+		const int neutral_bonus = generic_combat_modifier(time.lawful_bonus, unit_alignments::type::neutral, false, resources::tod_manager->get_max_liminal_bonus());
+		const int chaotic_bonus = generic_combat_modifier(time.lawful_bonus, unit_alignments::type::chaotic, false, resources::tod_manager->get_max_liminal_bonus());
+		const int liminal_bonus = generic_combat_modifier(time.lawful_bonus, unit_alignments::type::liminal, false, resources::tod_manager->get_max_liminal_bonus());
+
+		row_ss << markup::tag("col", markup::make_link(time.name.str(), id))
+			   << markup::tag("col", image)
+			   << markup::tag("col", image_lawful, time_of_day_bonus_colored(lawful_bonus))
+			   << markup::tag("col", image_neutral, time_of_day_bonus_colored(neutral_bonus))
+			   << markup::tag("col", image_chaotic, time_of_day_bonus_colored(chaotic_bonus))
+			   << markup::tag("col", image_liminal, time_of_day_bonus_colored(liminal_bonus));
+		toplevel << markup::tag("row", row_ss.str());
+
+		text << image << '\n'
+			 << time.description.str() << '\n'
+			 << image_lawful << _("Lawful Bonus:") << ' ' << time_of_day_bonus_colored(lawful_bonus) << '\n'
+			 << image_neutral << _("Neutral Bonus:") << ' ' << time_of_day_bonus_colored(neutral_bonus) << '\n'
+			 << image_chaotic << _("Chaotic Bonus:") << ' ' << time_of_day_bonus_colored(chaotic_bonus) << '\n'
+			 << image_liminal << _("Liminal Bonus:") << ' ' << time_of_day_bonus_colored(liminal_bonus) << '\n' << '\n'
+			 << markup::make_link(_("Schedule"), "..schedule");
+
+		topics.emplace_back(time.name.str(), id, text.str());
+	}
+
+	topics.emplace_back(_("Time of Day Schedule"), "..schedule", markup::tag("table", toplevel.str()));
+	return topics;
+}
+
+std::vector<topic> generate_weapon_special_topics(const bool sort_generated)
+{
+	std::vector<topic> topics;
+
+	auto comp = [](const unit_ability_t::tooltip_info& t1, const unit_ability_t::tooltip_info& t2) {
+		return t1.help_topic_id < t2.help_topic_id;
+	};
+	auto special_description = std::set<unit_ability_t::tooltip_info, decltype(comp)>(comp);
+
+	// a map used to check weapon special uniqueness
+	std::map<std::string, std::string> specials_check_map;
+
+	std::map<std::string, std::set<std::string, string_less>> special_units;
+
+	for(const auto& [type_id, type] : unit_types.types()) {
+		// Only show the weapon special if we find it on a unit that
+		// detailed description should be shown about.
+		if(description_type(type) != FULL_DESCRIPTION)
+			continue;
+
+		for(const attack_type& atk : type.attacks()) {
+			for(auto& tt_info : atk.special_tooltips()) {
+				special_description.emplace(tt_info);
+				const auto& [itor, is_added] = specials_check_map.emplace(tt_info.help_topic_id, tt_info.name.base_str());
+				if(!is_added && itor->second != tt_info.name.base_str()) {
+					WRN_HP << "Duplicate weapon special with help id ‘" << tt_info.help_topic_id << "’ but different name ‘"
+						<< tt_info.name.base_str() << "’ != ‘" << itor->second << "’ detected, help page not added again.";
+				}
+
+				if(!type.hide_help()) {
+					special_units[tt_info.help_topic_id].insert(make_unit_link(type));
+				}
+			}
+		}
+
+		for(const config& adv : type.modification_advancements()) {
+			for(const config& effect : adv.child_range("effect")) {
+				if(effect["apply_to"] == "new_attack" && effect.has_child("specials")) {
+					for(const auto [_, special] : effect.mandatory_child("specials").all_children_view()) {
+						if(!special["name"].empty()) {
+							std::string topic_id = unit_ability_t::get_help_topic_id(special);
+							const t_string& name = special["name"].t_str();
+
+							//c++20: use emplace
+							special_description.insert({ name, special["description"].t_str(), topic_id });
+
+							const auto& [itor, is_added] = specials_check_map.emplace(topic_id, name.base_str());
+							if(!is_added && itor->second != name.base_str()) {
+								WRN_HP << "Duplicate weapon special with help id ‘" << topic_id << "’ but different name ‘"
+									<< name.base_str() << "’ != ‘" << itor->second << "’ detected, help page not added again.";
+							}
+
+							if(!type.hide_help()) {
+								special_units[topic_id].insert(make_unit_link(type));
+							}
+						}
+					}
+				} else if(effect["apply_to"] == "attack" && effect.has_child("set_specials")) {
+					for(const auto [_, special] : effect.mandatory_child("set_specials").all_children_view()) {
+						if(!special["name"].empty()) {
+							std::string topic_id = unit_ability_t::get_help_topic_id(special);
+							const t_string& name = special["name"].t_str();
+
+							//c++20: use emplace
+							special_description.insert({ name, special["description"].t_str(), topic_id });
+
+							const auto& [itor, is_added] = specials_check_map.emplace(topic_id, name.base_str());
+							if(!is_added && itor->second != name.base_str()) {
+								WRN_HP << "Duplicate weapon special with help id ‘" << topic_id << "’ but different name ‘"
+									<< name.base_str() << "’ != ‘" << itor->second << "’ detected, help page not added again.";
+							}
+
+							if(!type.hide_help()) {
+								special_units[topic_id].insert(make_unit_link(type));
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	for(const auto& [name, description, help_topic_id] : special_description) {
+		std::string id = weaponspecial_prefix + help_topic_id;
+		std::stringstream text;
+		text << description;
+		text << "\n\n" << markup::tag("header", _("Units with this special attack")) << "\n";
+		for(const std::string& type_link : special_units[help_topic_id]) {
+			text << font::unicode_bullet << " " << type_link << "\n";
+		}
+
+		topics.emplace_back(name, id, text.str());
+	}
+
+	if(sort_generated)
+		std::sort(topics.begin(), topics.end(), title_less());
+	return topics;
+}
+
+std::vector<topic> generate_ability_topics(const bool sort_generated)
+{
+	std::vector<topic> topics;
+
+	std::map<std::string, const unit_type::ability_metadata&> ability_topic_data;
+	std::map<std::string, std::set<std::string, string_less>> ability_units;
+
+	const auto parse = [&](const unit_type& type, const unit_type::ability_metadata& ability) {
+		const auto& [itor, is_added] = ability_topic_data.emplace(ability.help_topic_id, ability);
+		if(!is_added && itor->second.name.base_str() != ability.name.base_str()) {
+			WRN_HP << "Duplicate ability with help id ‘" << ability.help_topic_id << "’ but different name ‘"
+				<< ability.name.base_str() << "’ != ‘" << itor->second.name.base_str() << "’ detected, help page not added again.";
+		}
+
+		if(!type.hide_help()) {
+			ability_units[ability.help_topic_id].insert(make_unit_link(type));
+		}
+	};
+
+	// Look through all the unit types. If a unit of that type would have a full
+	// description, add its abilities to the potential topic list. We don't want
+	// to show abilities that the user has not encountered yet.
+	for(const auto& [type_id, type] : unit_types.types()) {
+		if(description_type(type) != FULL_DESCRIPTION) {
+			continue;
+		}
+
+		for(const unit_type::ability_metadata& ability : type.abilities_metadata()) {
+			parse(type, ability);
+		}
+
+		for(const unit_type::ability_metadata& ability : type.adv_abilities_metadata()) {
+			parse(type, ability);
+		}
+	}
+
+	for(const auto& [help_topic_id, ability] : ability_topic_data) {
+		if(ability.name.empty()) {
+			continue;
+		}
+		std::ostringstream text;
+		text << ability.description;
+		text << "\n\n" << markup::tag("header", _("Units with this ability")) << "\n";
+
+		for(const auto& link : ability_units[help_topic_id]) {
+			text << font::unicode_bullet << " " << link << "\n";
+		}
+
+		topics.emplace_back(ability.name, ability_prefix + help_topic_id, text.str());
+	}
+
+	if(sort_generated) {
+		std::sort(topics.begin(), topics.end(), title_less());
+	}
+
+	return topics;
+}
+
+std::vector<topic> generate_era_topics(const std::string& era_id, const bool sort_generated)
+{
+	std::vector<topic> topics;
+
+	auto era = game_config_manager::get()->game_config().find_child("era","id", era_id);
+	if(era && !era["hide_help"].to_bool()) {
+		topics = generate_faction_topics(*era, sort_generated);
+
+		std::vector<std::string> faction_links;
+		for(const topic& t : topics) {
+			faction_links.push_back(markup::make_link(t.title, t.id));
+		}
+
+		std::stringstream text;
+		const config::attribute_value& description = era["description"];
+		if(!description.empty()) {
+			text << description.t_str() << "\n";
+			text << "\n";
+		}
+
+		text << markup::tag("header", _("Factions")) << "\n";
+
+		std::sort(faction_links.begin(), faction_links.end());
+		for(const std::string& link : faction_links) {
+			text << font::unicode_bullet << " " << link << "\n";
+		}
+
+		topics.emplace_back(era["name"], ".." + era_prefix + era["id"].str(), text.str());
+	}
+	return topics;
+}
+
+std::vector<topic> generate_faction_topics(const config& era, const bool sort_generated)
+{
+	std::vector<topic> topics;
+	std::set<std::string> faction_help_ids;
+
+	for(const config& f : era.child_range("multiplayer_side")) {
+		const std::string& id = f["id"];
+		if(id == "Random")
+			continue;
+
+		std::stringstream text;
+
+		const config::attribute_value& description = f["description"];
+		if(!description.empty()) {
+			text << description.t_str() << "\n";
+			text << "\n";
+		}
+
+		const std::vector<std::string> recruit_ids = utils::split(f["recruit"]);
+		std::set<std::string> races;
+		std::set<std::string> alignments;
+
+		for(const std::string& u_id : recruit_ids) {
+			if(const unit_type* t = unit_types.find(u_id, unit_type::HELP_INDEXED)) {
+				assert(t);
+				const unit_type& type = *t;
+
+				if(const unit_race* r = unit_types.find_race(type.race_id())) {
+					races.insert(markup::make_link(r->plural_name(), std::string("..") + race_prefix + r->id()));
+				}
+				alignments.insert(markup::make_link(type.alignment_description(type.alignment(), type.genders().front()), "time_of_day"));
+			}
+		}
+
+		if(!races.empty()) {
+			std::set<std::string>::iterator it = races.begin();
+			text << _("Races: ") << *(it++);
+			while(it != races.end()) {
+				text << ", " << *(it++);
+			}
+			text << "\n\n";
+		}
+
+		if(!alignments.empty()) {
+			std::set<std::string>::iterator it = alignments.begin();
+			text << _("Alignments: ") << *(it++);
+			while(it != alignments.end()) {
+				text << ", " << *(it++);
+			}
+			text << "\n\n";
+		}
+
+		text << markup::tag("header", _("Leaders")) << "\n";
+		const std::vector<std::string> leaders =
+				make_unit_links_list( utils::split(f["leader"]), true );
+		for(const std::string& link : leaders) {
+			text << font::unicode_bullet << " " << link << "\n";
+		}
+
+		text << "\n";
+
+		text << markup::tag("header", _("Recruits")) << "\n";
+		const std::vector<std::string> recruit_links =
+				make_unit_links_list( recruit_ids, true );
+		for(const std::string& link : recruit_links) {
+			text << font::unicode_bullet << " " << link << "\n";
+		}
+
+		const std::string name = f["name"];
+		const std::string ref_id = faction_prefix + era["id"].str() + "_" + id;
+		const bool is_added = faction_help_ids.insert(ref_id).second;
+		if(!is_added) {
+			WRN_HP << "Duplicate faction with id ‘" << id << "’, (help id ‘" << ref_id << "’) detected.";
+		}
+		topics.emplace_back(name, ref_id, text.str());
+	}
+	if(sort_generated)
+		std::sort(topics.begin(), topics.end(), title_less());
+	return topics;
+}
+
+namespace {
+const unsigned PAGE_LIMIT = 20;
+
+// Page 1 is already done by caller, this function generates
+// the rest of pages, starting with Page 2.
+void add_remaining_pages(
+	std::vector<topic>& topics,
+	const std::string& topic_name,
+	const std::string& topic_id,
+	const std::string& suffix,
+	const std::set<std::string, string_less>& list)
+{
+	const size_t rem = list.size() % PAGE_LIMIT;
+	const size_t page_count = list.size() / PAGE_LIMIT + (rem != 0 ? 1 : 0);
+	auto it = std::next(list.begin(), PAGE_LIMIT);
+
+	for(size_t page_num = 2; page_num <= page_count; page_num++) {
+		std::stringstream text;
+
+		// Page 1 is visible in Help Browser sidebar, but continuation pages are hidden
+		std::string prev_id = topic_id;
+		if(page_num > 2) {
+			prev_id = "." + topic_id + suffix + "_" + std::to_string(page_num - 1);
+		}
+
+		text << markup::make_link("&lt;&lt; " + _("Previous"),  prev_id)
+			 << "\n\n";
+
+		for(size_t row = 0; row < PAGE_LIMIT; row++) {
+			if(it != list.end()) {
+				text << font::unicode_bullet << " " << *it << "\n";
+				std::advance(it, 1);
+			}
+		}
+
+		// Pages other than the last page have "Next Page" link
+		if(page_num != page_count) {
+			text << "\n"
+				 << markup::make_link(_("Next") + " &gt;&gt;", "." + topic_id + suffix + "_" + std::to_string(page_num + 1))
+				 << "\n";
+		}
+
+		std::string new_topic_name = formatter() << topic_name << " (" << page_num << "/" << page_count << ")";
+		topics.emplace_back(new_topic_name, "." + topic_id + suffix + "_" + std::to_string(page_num), text.str());
+	}
+}
+
+} // end anon namespace
+
+std::vector<topic> generate_trait_topics(const bool sort_generated)
+{
+	// All traits that could be assigned to at least one discovered or HIDDEN_BUT_SHOW_MACROS unit.
+	// This is collected from the [units][trait], [race][traits], and [unit_type][traits] tags. If
+	// there are duplicates with the same id, it takes the first one encountered.
+	std::map<std::string, const config> trait_list;
+
+	std::set<std::string, string_less> global_traits;
+
+	// A map that stores which unit types have a particular trait
+	std::map<std::string, std::set<std::string, string_less>> trait_units;
+
+	// A map that stores which race have a particular trait
+	std::map<std::string, std::set<std::string, string_less>> trait_races;
+
+	// The global traits that are direct children of a [units] tag
+	for(const config& trait : unit_types.traits()) {
+		trait_list.emplace(trait["id"], trait);
+		if(!global_traits.insert(trait["id"]).second) {
+			WRN_HP << "Duplicate global trait ‘" << trait["id"] << "’ detected, help page not added again.";
+		}
+	}
+
+	// Search for discovered races
+	std::set<std::string> races;
+	for(const auto& [_, type] : unit_types.types()) {
+		UNIT_DESCRIPTION_TYPE desc_type = description_type(type);
+		if(desc_type == FULL_DESCRIPTION) {
+			races.insert(type.race_id());
+		}
+	}
+
+	// Race traits
+	//
+	// For traits, assume we don't discover additional races via the [race]help_taxonomy= links. The
+	// traits themselves don't propagate down those links, so if the trait is interesting w.r.t. the
+	// discovered units then their own race will already include it.
+	for(const auto& race_id : races) {
+		if(const unit_race* r = unit_types.find_race(race_id)) {
+			for(const config& trait : r->additional_traits()) {
+				if(!utils::contains(global_traits, trait["id"])) {
+					trait_list.emplace(trait["id"], trait);
+					if(!trait_races[trait["id"]].insert(race_id).second) {
+						WRN_HP << "Duplicate trait ‘" << trait["id"] << "’ detected in race ‘" << r->id() << "’, help page not added again.";
+					}
+				}
+			}
+		}
+	}
+
+	// Search for discovered unit types
+	for(const auto& [_, type] : unit_types.types()) {
+		UNIT_DESCRIPTION_TYPE desc_type = description_type(type);
+
+		// Handle [unit_type][trait]s.
+		//
+		// but the unmerged unit_type_data.traits() isn't easily available currently.
+		// As a workaround we use possible_traits() instead which returns all traits.
+		if(desc_type == FULL_DESCRIPTION || desc_type == HIDDEN_BUT_SHOW_MACROS) {
+			for(const config& trait : type.possible_traits()) {
+				trait_list.emplace(trait["id"], trait);
+				auto it = trait_races.find(trait["id"]);
+				const bool is_not_racial_trait = it == trait_races.end() || it->second.find(type.race_id()) == it->second.end();
+
+				if(desc_type != HIDDEN_BUT_SHOW_MACROS
+					&& !utils::contains(global_traits, trait["id"])
+					&& is_not_racial_trait)
+				{
+					if(!trait_units[trait["id"]].insert(type.id()).second) {
+						WRN_HP << "Duplicate trait ‘" << trait["id"] << "’ detected in unit type ‘" << type.id() << "’, help page not added again.";
+					}
+				}
+			}
+		}
+	}
+
+	std::vector<topic> topics;
+	for(auto& [trait_id, trait] : trait_list) {
+		std::string id = "traits_" + trait_id;
+
+		std::string name = trait["male_name"].str();
+		if(name.empty()) name = trait["female_name"].str();
+		if(name.empty()) name = trait["name"].str();
+		if(name.empty()) continue; // Hidden trait
+
+		std::stringstream text;
+		if(!trait["help_text"].empty()) {
+			text << trait["help_text"];
+		} else if(!trait["description"].empty()) {
+			text << trait["description"];
+		} else {
+			text << _("No description available.");
+		}
+
+		if(utils::contains(global_traits, trait_id)) {
+			text << "\n\n" << markup::italic(_("This is a global trait."));
+			topics.emplace_back(name, id, text.str());
+			continue;
+		}
+
+		text << "\n";
+
+		if(!trait_races[trait_id].empty()) {
+			text << "\n" << markup::tag("header", _("Races with this trait")) << "\n";
+		}
+
+		unsigned i = 0;
+		for(const auto& race_id : trait_races[trait_id]) {
+			// Too many units can horribly slow down the page or crash it, so we paginate.
+			if (i < PAGE_LIMIT) {
+				const unit_race* r = unit_types.find_race(race_id);
+				const std::string link_race = markup::make_link(r->plural_name(), ".." + race_prefix + race_id);
+				text << font::unicode_bullet << " " << link_race << "\n";
+				i++;
+			} else {
+				// continuation pages, accessible only via the links
+				text << markup::make_link(_("Next") + " &gt;&gt;",  "." + id + "_races_2") << "\n";
+				add_remaining_pages(topics, name, id, "_races", trait_races[trait_id]);
+				break;
+			}
+		}
+
+		if(!trait_units[trait_id].empty()) {
+			text << "\n" << markup::tag("header", _("Units with this trait")) << "\n";
+		}
+
+		i = 0;
+		for(const auto& type_id : trait_units[trait_id]) {
+			// Too many units can horribly slow down the page or crash it, so we paginate.
+			if (i < PAGE_LIMIT) {
+				text << font::unicode_bullet << " " << make_unit_link(type_id) << "\n";
+				i++;
+			} else {
+				// continuation pages, accessible only via the links
+				text << markup::make_link(_("Next") + " &gt;&gt;", "." + id + "_units_2") << "\n";
+				add_remaining_pages(topics, name, id, "_units", trait_units[trait_id]);
+				break;
+			}
+		}
+
+		text << "\n\n";
+
+		topics.emplace_back(name, id, text.str());
+	}
+
+	if(sort_generated)
+		std::sort(topics.begin(), topics.end(), title_less());
+	return topics;
+}
+
+std::string make_unit_link(const std::string& type_id)
+{
+	const unit_type* type = unit_types.find(type_id, unit_type::HELP_INDEXED);
+	if(!type) {
+		// don't return an hyperlink (no page)
+		// instead show the id (as hint)
+		return type_id;
+	}
+	return make_unit_link(*type);
+}
+
+std::string make_unit_link(const unit_type& type)
+{
+	if(!type.hide_help()) {
+		std::string name = type.type_name();
+		std::string ref_id;
+		if(description_type(type) == FULL_DESCRIPTION) {
+			const std::string section_prefix = type.show_variations_in_help() ? ".." : "";
+			ref_id = section_prefix + unit_prefix + type.id();
+		} else {
+			ref_id = unknown_unit_topic;
+			name += " (?)";
+		}
+		return markup::make_link(name, ref_id);
+	}
+	return "";
+}
+
+std::vector<std::string> make_unit_links_list(const std::vector<std::string>& type_id_list, bool ordered)
+{
+	std::vector<std::string> links_list;
+	for(const std::string& type_id : type_id_list) {
+		std::string unit_link = make_unit_link(type_id);
+		if(!unit_link.empty())
+			links_list.push_back(unit_link);
+	}
+
+	if(ordered)
+		std::sort(links_list.begin(), links_list.end());
+
+	return links_list;
+}
+
+void generate_races_sections(const config& help_cfg, section& sec, int level)
+{
+	std::set<std::string, string_less> races;
+	std::set<std::string, string_less> visible_races;
+
+	// Calculate which races have been discovered, from the list of discovered unit types.
+	for(const auto& [_, type] : unit_types.types()) {
+		UNIT_DESCRIPTION_TYPE desc_type = description_type(type);
+		if(desc_type == FULL_DESCRIPTION) {
+			races.insert(type.race_id());
+			if(!type.hide_help())
+				visible_races.insert(type.race_id());
+		}
+	}
+
+	// Propagate visibility up the help_taxonomy tree.
+	std::set<std::string, string_less> last_sweep = visible_races;
+	while(!last_sweep.empty()) {
+		std::set<std::string, string_less> current_sweep;
+		for(const auto& race_id : last_sweep) {
+			if(const unit_race* r = unit_types.find_race(race_id)) {
+				const auto& help_taxonomy = r->help_taxonomy();
+				if(!help_taxonomy.empty() && !visible_races.count(help_taxonomy) && unit_types.find_race(help_taxonomy)) {
+					current_sweep.insert(help_taxonomy);
+					races.insert(help_taxonomy);
+					visible_races.insert(help_taxonomy);
+				}
+			}
+		}
+		last_sweep = std::move(current_sweep);
+	}
+
+	struct taxonomy_queue_type
+	{
+		std::string parent_id;
+		section content;
+	};
+	std::vector<taxonomy_queue_type> taxonomy_queue;
+
+	// Add all races without a [race]help_taxonomy= to the documentation section, and queue the others.
+	// This avoids a race condition dependency on the order that races are encountered in help_cfg.
+	for(const auto& race_id : races) {
+		config section_cfg;
+
+		bool hidden = (visible_races.count(race_id) == 0);
+
+		section_cfg["id"] = hidden_symbol(hidden) + race_prefix + race_id;
+
+		std::string title;
+		std::string help_taxonomy;
+		if(const unit_race* r = unit_types.find_race(race_id)) {
+			title = r->plural_name();
+			help_taxonomy = r->help_taxonomy();
+		} else {
+			title = _("race^Miscellaneous");
+			// leave help_taxonomy empty
+		}
+		section_cfg["title"] = title;
+
+		section_cfg["sections_generator"] = "units:" + race_id;
+		section_cfg["generator"] = "units:" + race_id;
+
+		section race_section = parse_config_internal(help_cfg, section_cfg, level + 1);
+
+		if(help_taxonomy.empty()) {
+			sec.add_section(race_section);
+		} else {
+			bool parent_hidden = (visible_races.count(help_taxonomy) == 0);
+			auto parent_id = hidden_symbol(parent_hidden) + race_prefix + help_taxonomy;
+			taxonomy_queue.push_back({std::move(parent_id), std::move(race_section)});
+		}
+	}
+
+	// Each run through this loop handles one level of nesting of [race]help_taxonomy=
+	bool process_queue_again = true;
+	while(process_queue_again && !taxonomy_queue.empty()) {
+		process_queue_again = false;
+		auto to_process = std::exchange(taxonomy_queue, {});
+
+		for(auto& x : to_process) {
+			auto parent = find_section(sec, x.parent_id);
+			if(parent) {
+				parent->add_section(x.content);
+				process_queue_again = true;
+			} else {
+				taxonomy_queue.push_back(std::move(x));
+			}
+		}
+	}
+
+	// Fallback to adding the new race at the top level, as if it had help_taxonomy.empty().
+	for(auto& x : taxonomy_queue) {
+		sec.add_section(x.content);
+	}
+}
+
+void generate_era_sections(const config& help_cfg, section& sec, int level)
+{
+	std::set<std::string> era_ids;
+	for(const config& era : game_config_manager::get()->game_config().child_range("era")) {
+		if(era["hide_help"].to_bool()) {
+			continue;
+		}
+
+		config section_cfg;
+		section_cfg["id"] = era_prefix + era["id"].str();
+		section_cfg["title"] = era["name"];
+		section_cfg["generator"] = "era:" + era["id"].str();
+
+		const bool is_added = era_ids.insert(section_cfg["id"]).second;
+		if(is_added) {
+			DBG_HP << "Adding help section: " << era["id"].str();
+		} else {
+			WRN_HP << "Duplicate era with id ‘" << era["id"] << "’, (help id ‘" << section_cfg["id"] << "’) detected";
+		}
+		DBG_HP << section_cfg.debug();
+		sec.add_section(parse_config_internal(help_cfg, section_cfg, level + 1));
+	}
+}
+
+void generate_terrain_sections(section& sec, int /*level*/)
+{
+	auto tdata = terrain_type_data::get();
+	if(!tdata) {
+		WRN_HP << "When building terrain help sections, couldn't acquire terrain types data, aborting.";
+		return;
+	}
+
+	std::map<std::string, section> base_map;
+
+	const t_translation::ter_list& t_listi = tdata->list();
+
+	for(const t_translation::terrain_code& t : t_listi) {
+
+		const terrain_type& info = tdata->get_terrain_info(t);
+
+		bool hidden = info.hide_help();
+
+		if(prefs::get().encountered_terrains().find(t)
+				== prefs::get().encountered_terrains().end() && !info.is_overlay())
+			hidden = true;
+
+		topic terrain_topic{
+			info.editor_name(),
+			hidden_symbol(hidden) + terrain_prefix + info.id(),
+			std::make_shared<terrain_topic_generator>(info)
+		};
+
+		t_translation::ter_list base_terrains = info.union_type();
+
+		if(info.has_default_base()) {
+			for(const auto& base : tdata->get_terrain_info(info.default_base()).union_type()) {
+				if(!utils::contains(base_terrains, base)) {
+					base_terrains.emplace_back(base);
+				}
+			}
+		}
+
+		for(const t_translation::terrain_code& base : base_terrains) {
+
+			const terrain_type& base_info = tdata->get_terrain_info(base);
+
+			if(!base_info.is_nonnull() || base_info.hide_help())
+				continue;
+
+			section& base_section = base_map[base_info.id()];
+
+			base_section.id = terrain_prefix + base_info.id();
+			base_section.title = base_info.editor_name();
+
+			if(base_info.id() == info.id())
+				terrain_topic.id = ".." + terrain_prefix + info.id();
+			base_section.topics.push_back(terrain_topic);
+		}
+	}
+
+	std::vector<section> sorted_sections;
+	for(const auto& pair : base_map) {
+		sorted_sections.push_back(pair.second);
+	}
+
+	std::sort(sorted_sections.begin(), sorted_sections.end(), section_less());
+
+	for(const section& s : sorted_sections) {
+		sec.add_section(s);
+	}
+}
+
+void generate_unit_sections(const config& /*help_cfg*/, section& sec, int /*level*/, const bool /*sort_generated*/, const std::string& race)
+{
+	for(const unit_type_data::unit_type_map::value_type& i : unit_types.types()) {
+		const unit_type& type = i.second;
+
+		if(type.race_id() != race)
+			continue;
+
+		if(!type.show_variations_in_help())
+			continue;
+
+		section base_unit;
+		for(const std::string& variation_id : type.variations()) {
+			// TODO: Do we apply encountered stuff to variations?
+			const unit_type& var_type = type.get_variation(variation_id);
+			const std::string topic_name = var_type.variation_name();
+			const std::string var_ref = hidden_symbol(var_type.hide_help()) + variation_prefix + var_type.id() + "_" + variation_id;
+
+			base_unit.topics.emplace_back(topic_name, var_ref, std::make_shared<unit_topic_generator>(var_type, variation_id));
+		}
+
+		const std::string type_name = type.type_name();
+		const std::string ref_id = hidden_symbol(type.hide_help()) + unit_prefix +  type.id();
+
+		base_unit.id = ref_id;
+		base_unit.title = type_name;
+
+		sec.add_section(base_unit);
+	}
+}
+
+std::vector<topic> generate_unit_topics(const std::string& race, const bool sort_generated)
+{
+	std::vector<topic> topics;
+	std::set<std::string, string_less> race_units;
+	std::set<std::string, string_less> race_topics;
+	std::set<std::string> alignments;
+
+	for(const auto& [_, type] : unit_types.types())
+	{
+		if(type.race_id() != race)
+			continue;
+
+		UNIT_DESCRIPTION_TYPE desc_type = description_type(type);
+		if(desc_type != FULL_DESCRIPTION)
+			continue;
+
+		const std::string debug_suffix = (game_config::debug ? " (" + type.id() + ")" : "");
+		const std::string type_name = type.type_name() + (type.id() == type.type_name().str() ? "" : debug_suffix);
+		const std::string real_prefix = type.show_variations_in_help() ? ".." : "";
+		const std::string ref_id = hidden_symbol(type.hide_help()) + real_prefix + unit_prefix +  type.id();
+		topics.emplace_back(type_name, ref_id, std::make_shared<unit_topic_generator>(type));
+
+		if(!type.hide_help()) {
+			// we also record an hyperlink of this unit
+			// in the list used for the race topic
+			std::string link = markup::make_link(type_name, ref_id);
+			race_units.insert(link);
+
+			alignments.insert(markup::make_link(type.alignment_description(type.alignment(), type.genders().front()), "time_of_day"));
+		}
+	}
+
+	// generate the hidden race description topic
+	std::string race_id = "..race_"+race;
+	std::string race_name;
+	std::string race_description;
+	std::string race_help_taxonomy;
+	if(const unit_race* r = unit_types.find_race(race)) {
+		race_name = r->plural_name();
+		race_description = r->description();
+		race_help_taxonomy = r->help_taxonomy();
+		// if(description.empty()) description =  _("No description Available");
+		for(const config& additional_topic : r->additional_topics())
+		{
+			std::string id = additional_topic["id"];
+			std::string title = additional_topic["title"];
+			std::string text = additional_topic["text"];
+			//topic additional_topic(title, id, text);
+			topics.emplace_back(title, id, text);
+			std::string link = markup::make_link(title, id);
+			race_topics.insert(link);
+		}
+	} else {
+		race_name = _ ("race^Miscellaneous");
+		// description =  _("Here put the description of the Miscellaneous race");
+	}
+
+	// Find any other races whose [race]help_taxonomy points to the current race
+	std::map<std::string, t_string> subgroups;
+	for(const auto& r : unit_types.races()) {
+		if(r.second.help_taxonomy() == race) {
+			if(!r.second.plural_name().empty())
+				subgroups[r.first] = r.second.plural_name();
+			else
+				subgroups[r.first] = r.first;
+		}
+	}
+
+	std::stringstream text;
+
+	if(!race_description.empty()) {
+		text << race_description << "\n\n";
+	}
+
+	if(!alignments.empty()) {
+		std::set<std::string>::iterator it = alignments.begin();
+		text << (alignments.size() > 1 ? _("Alignments: ") : _("Alignment: ")) << *(it++);
+		while(it != alignments.end()) {
+			text << ", " << *(it++);
+		}
+		text << "\n\n";
+	}
+
+	if(!race_help_taxonomy.empty()) {
+		utils::string_map symbols;
+		symbols["topic_id"] = "..race_"+race_help_taxonomy;
+		if(const unit_race* r = unit_types.find_race(race_help_taxonomy)) {
+			symbols["help_taxonomy"] = r->plural_name();
+		} else {
+			// Fall back to using showing the race id for the race that we couldn't find.
+			// Not great, but probably useful if UMC has a broken link.
+			symbols["help_taxonomy"] = race_help_taxonomy;
+		}
+		// TRANSLATORS: this is expected to say "[Dunefolk are] a group of units, all of whom are Humans",
+		// or "[Quenoth Elves are] a group of units, all of whom are Elves".
+		text << VGETTEXT("This is a group of units, all of whom are <ref dst='$topic_id'>$help_taxonomy</ref>.", symbols) << "\n\n";
+	}
+
+	if(!subgroups.empty()) {
+		if(!race_help_taxonomy.empty()) {
+			text << markup::tag("header", _("Subgroups of units within this group")) << "\n";
+		} else {
+			text << markup::tag("header", _("Groups of units within this race")) << "\n";
+		}
+		for(const auto& sg : subgroups) {
+			text << font::unicode_bullet << " " << markup::make_link(sg.second, "..race_" + sg.first) << "\n";
+		}
+		text << "\n";
+	}
+
+	if(!race_help_taxonomy.empty()) {
+		text << markup::tag("header", _("Units of this group")) << "\n";
+	} else {
+		text << markup::tag("header", _("Units of this race")) << "\n";
+	}
+	for(const auto& u : race_units) {
+		text << font::unicode_bullet << " " << u << "\n";
+	}
+
+	topics.emplace_back(race_name, race_id, text.str());
+
+	if(sort_generated)
+		std::sort(topics.begin(), topics.end(), title_less());
+
+	return topics;
+}
+
+UNIT_DESCRIPTION_TYPE description_type(const unit_type& type)
+{
+	// See the docs of HIDDEN_BUT_SHOW_MACROS
+	if(type.id() == "Fog Clearer") {
+		return HIDDEN_BUT_SHOW_MACROS;
+	}
+
+	if(game_config::debug || prefs::get().show_all_units_in_help()	||
+			hotkey::is_scope_active(hotkey::SCOPE_EDITOR) ) {
+		return FULL_DESCRIPTION;
+	}
+
+	const std::set<std::string>& encountered_units = prefs::get().encountered_units();
+	if(encountered_units.find(type.id()) != encountered_units.end()) {
+		return FULL_DESCRIPTION;
+	}
+
+	return NO_DESCRIPTION;
+}
+
+std::string generate_contents_links(const std::string& section_name, const config& help_cfg)
+{
+	auto section_cfg = help_cfg.find_child("section", "id", section_name);
+	if(!section_cfg) {
+		return std::string();
+	}
+
+	std::ostringstream res;
+
+	std::vector<std::string> topics = utils::quoted_split(section_cfg["topics"]);
+
+	// we use an intermediate structure to allow a conditional sorting
+	typedef std::pair<std::string,std::string> link;
+	std::vector<link> topics_links;
+
+	// Find all topics in this section.
+	for(const std::string& topic : topics) {
+		if(auto topic_cfg = help_cfg.find_child("topic", "id", topic)) {
+			std::string id = topic_cfg["id"];
+			if(is_visible_id(id))
+				topics_links.emplace_back(topic_cfg["title"], id);
+		}
+	}
+
+	if(section_cfg["sort_topics"] == "yes") {
+		std::sort(topics_links.begin(),topics_links.end());
+	}
+
+	for(const auto& [text, target] : topics_links) {
+		std::string link = markup::make_link(text, target);
+		res << font::unicode_bullet << " " << link << "\n";
+	}
+
+	return res.str();
+}
+
+std::string generate_contents_links(const section& sec)
+{
+	std::stringstream res;
+
+	for(auto& s : sec.sections) {
+		if(is_visible_id(s.id)) {
+			std::string link = markup::make_link(s.title, ".."+s.id);
+			res << font::unicode_bullet << " " << link << "\n";
+		}
+	}
+
+	for(const topic& t : sec.topics) {
+		if(is_visible_id(t.id)) {
+			std::string link = markup::make_link(t.title, t.id);
+			res << font::unicode_bullet << " " << link << "\n";
+		}
+	}
+	return res.str();
+}
+
+bool topic::operator==(const topic& t) const
+{
+	return t.id == id;
+}
+
+bool topic::operator<(const topic& t) const
+{
+	return id < t.id;
+}
+
+bool section::operator==(const section& sec) const
+{
+	return sec.id == id;
+}
+
+bool section::operator<(const section& sec) const
+{
+	return id < sec.id;
+}
+
+void section::add_section(const section& s)
+{
+	sections.emplace_back(s);
+}
+
+void section::add_section(section&& s)
+{
+	sections.emplace_back(std::move(s));
+}
+
+void section::clear()
+{
+	topics.clear();
+	sections.clear();
+}
+
+const topic* find_topic(const section& sec, const std::string& id)
+{
+	topic_list::const_iterator tit =
+		std::find_if(sec.topics.begin(), sec.topics.end(), has_id(id));
+	if(tit != sec.topics.end()) {
+		return &(*tit);
+	}
+	for(const auto& s : sec.sections) {
+		const auto t = find_topic(s, id);
+		if(t != nullptr) {
+			return t;
+		}
+	}
+	return nullptr;
+}
+
+const section* find_section(const section& sec, const std::string& id)
+{
+	const auto sit =
+		std::find_if(sec.sections.begin(), sec.sections.end(), has_id(id));
+	if(sit != sec.sections.end()) {
+		return &*sit;
+	}
+	for(const auto& subsection : sec.sections) {
+		const auto s = find_section(subsection, id);
+		if(s != nullptr) {
+			return s;
+		}
+	}
+	return nullptr;
+}
+
+section* find_section(section& sec, const std::string& id)
+{
+	return const_cast<section*>(find_section(const_cast<const section&>(sec), id));
+}
+
+std::pair<section, section> generate_contents()
+try {
+	const config& help_config = game_config_manager::get()->game_config().child_or_empty("help");
+
+	std::vector<std::string> hidden_sections;
+	std::vector<std::string> hidden_topics;
+
+	section toplevel_section = parse_config(help_config);
+
+	for(const config& section : help_config.child_range("section")) {
+		const std::string id = section["id"];
+
+		// This section is not referenced from the toplevel...
+		if(find_section(toplevel_section, id) == nullptr) {
+			// ...nor is it referenced from any other section.
+			if(!section_is_referenced(id, help_config)) {
+				hidden_sections.push_back(id);
+			}
+		}
+	}
+
+	for(const config& topic : help_config.child_range("topic")) {
+		const std::string id = topic["id"];
+
+		if(find_topic(toplevel_section, id) == nullptr) {
+			if(!topic_is_referenced(id, help_config)) {
+				hidden_topics.push_back(id);
+			}
+		}
+	}
+
+	// Avoid copying the whole help config if nothing is hidden
+	if(hidden_sections.empty() && hidden_topics.empty()) {
+		return {std::move(toplevel_section), section{}};
+	}
+
+	config hidden_config = help_config;
+	hidden_config.clear_children("toplevel");
+
+	// Replace the toplevel tag with a new one containing everything not referenced
+	// by the original. Save these sections and topics so that they can be displayed
+	// later, but hidden when opening the help browser in the usual manner.
+	hidden_config.add_child("toplevel", config{
+		"sections", utils::join(hidden_sections),
+		"topics",   utils::join(hidden_topics)
+	});
+
+	return {std::move(toplevel_section), parse_config(hidden_config)};
+
+} catch(const parse_error& e) {
+	PLAIN_LOG << "Parse error when parsing help text: '" << e.message << "'";
+	return {};
+}
+
+// id starting with '.' are hidden
+std::string hidden_symbol(bool hidden) {
+	return (hidden ? "." : "");
+}
+
+bool is_visible_id(const std::string& id) {
+	return (id.empty() || id[0] != '.');
+}
+
+/**
+ * Return true if the id is valid for user defined topics and
+ * sections. Some IDs are special, such as toplevel and may not be
+ * be defined in the config.
+ */
+bool is_valid_id(const std::string& id) {
+	if(id == "toplevel") {
+		return false;
+	}
+	if(id.compare(0, unit_prefix.length(), unit_prefix) == 0 || id.compare(hidden_symbol().length(), unit_prefix.length(), unit_prefix) == 0) {
+		return false;
+	}
+	if(id.compare(0, ability_prefix.length(), ability_prefix) == 0) {
+		return false;
+	}
+	if(id.compare(0, weaponspecial_prefix.length(), weaponspecial_prefix) == 0) {
+		return false;
+	}
+	if(id == "hidden") {
+		return false;
+	}
+	return true;
+}
+
+} // end namespace help

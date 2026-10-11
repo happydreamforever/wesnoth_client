@@ -1,0 +1,3 @@
+# Preserve the pinned source bytes and SHA256 values on every checkout.
+# This also keeps extensionless shell scripts usable under Windows MSYS2.
+* -text

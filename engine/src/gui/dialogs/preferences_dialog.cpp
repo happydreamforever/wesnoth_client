@@ -1,0 +1,1187 @@
+/*
+	Copyright (C) 2016 - 2025
+	by Charles Dang <exodia339gmail.com>
+	Copyright (C) 2011, 2015 by Iris Morelle <shadowm2006@gmail.com>
+	Part of the Battle for Wesnoth Project https://www.wesnoth.org/
+
+	This program is free software; you can redistribute it and/or modify
+	it under the terms of the GNU General Public License as published by
+	the Free Software Foundation; either version 2 of the License, or
+	(at your option) any later version.
+	This program is distributed in the hope that it will be useful,
+	but WITHOUT ANY WARRANTY.
+
+	See the COPYING file for more details.
+*/
+
+#define GETTEXT_DOMAIN "wesnoth-lib"
+
+#include "gui/dialogs/preferences_dialog.hpp"
+
+#include "display.hpp"
+#include "events.hpp"
+#include "filesystem.hpp"
+#include "formatter.hpp"
+#include "formula/string_utils.hpp"
+#include "game_data.hpp"
+#include "gettext.hpp"
+#include "gui/core/gui_definition.hpp"
+#include "hotkey/hotkey_item.hpp"
+#include "lexical_cast.hpp"
+#include "resources.hpp"
+#include "sound.hpp"
+#include "theme.hpp"
+#include "video.hpp"
+
+// Sub-dialog includes
+#include "gui/dialogs/game_cache_options.hpp"
+#include "gui/dialogs/hotkey_bind.hpp"
+#include "gui/dialogs/log_settings.hpp"
+#include "gui/dialogs/multiplayer/mp_alerts_options.hpp"
+#include "gui/dialogs/select_orb_colors.hpp"
+#include "gui/dialogs/reachmap_options.hpp"
+#include "gui/dialogs/title_screen.hpp"
+
+#include "gui/dialogs/game_version_dialog.hpp"
+#include "gui/dialogs/message.hpp"
+#include "gui/dialogs/transient_message.hpp"
+#include "gui/widgets/button.hpp"
+#include "gui/widgets/menu_button.hpp"
+#include "gui/widgets/multimenu_button.hpp"
+#include "gui/widgets/grid.hpp"
+#include "gui/widgets/image.hpp"
+#include "gui/widgets/label.hpp"
+#include "gui/widgets/slider.hpp"
+#include "gui/widgets/status_label_helper.hpp"
+#include "gui/widgets/stacked_widget.hpp"
+#include "gui/widgets/tab_container.hpp"
+#include "gui/widgets/text_box.hpp"
+#include "gui/widgets/toggle_button.hpp"
+#include "gui/widgets/window.hpp"
+
+#include "serialization/markup.hpp"
+#include "wml_exception.hpp"
+
+#include <functional>
+#include <numeric>
+
+namespace gui2::dialogs
+{
+namespace
+{
+template<typename W>
+void disable_widget_on_toggle(window& window, widget& w, const std::string& id)
+{
+	window.find_widget<W>(id).set_active(dynamic_cast<selectable_item&>(w).get_value_bool());
+}
+
+template<typename W>
+void disable_widget_on_toggle_inverted(window& window, widget& w, const std::string& id)
+{
+	window.find_widget<W>(id).set_active(!dynamic_cast<selectable_item&>(w).get_value_bool());
+}
+
+} // end anon namespace
+
+REGISTER_DIALOG(preferences_dialog)
+
+preferences_dialog::preferences_dialog(const pref_constants::PREFERENCE_VIEW initial_view)
+	: modal_dialog(window_id())
+	, resolutions_() // should be populated by set_resolution_list before use
+	, themes_() // populated by set_theme_list
+	, gui2_themes_() // populated by set_gui2_theme_list
+	, last_selected_item_(0)
+	, current_gui_theme_(0)
+	, is_reload_needed_(false)
+	, accl_speeds_({0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 3, 4, 8, 16})
+	, visible_hotkeys_()
+	, visible_categories_()
+	, initial_index_(pef_view_map[initial_view])
+{
+	initialize_callbacks();
+}
+
+// Helper function to refresh resolution list
+void preferences_dialog::set_resolution_list(menu_button& res_list)
+{
+	resolutions_ = video::get_available_resolutions(true);
+
+	std::vector<config> options;
+	for(const point& res : resolutions_) {
+		config option;
+		option["label"] = formatter() << res.x << font::unicode_multiplication_sign << res.y;
+
+		const int div = std::gcd(res.x, res.y);
+		const int x_ratio = res.x / div;
+		const int y_ratio = res.y / div;
+
+		if(x_ratio <= 10 || y_ratio <= 10) {
+			option["details"] = markup::span_color("#777777", "(", x_ratio, ':', y_ratio, ")");
+		}
+
+		options.push_back(std::move(option));
+	}
+
+	const unsigned current_res = std::distance(resolutions_.begin(), std::find(
+		resolutions_.begin(), resolutions_.end(), video::current_resolution()));
+
+	res_list.set_values(options, current_res);
+}
+
+void preferences_dialog::set_theme_list(menu_button& theme_list)
+{
+	themes_ = theme::get_basic_theme_info();
+
+	std::vector<config> options;
+	std::size_t current_theme = 0;
+	for(std::size_t i = 0; i < themes_.size(); ++i) {
+		options.emplace_back("label", themes_[i].name, "tooltip", themes_[i].description);
+		if(themes_[i].id == prefs::get().theme()) {
+			current_theme = i;
+		}
+	}
+
+	theme_list.set_values(options, current_theme);
+}
+
+void preferences_dialog::set_gui2_theme_list(menu_button& theme_list)
+{
+	std::string current_gui_theme_name = prefs::get().gui2_theme();
+
+	std::vector<config> options;
+	bool theme_found = false;
+	unsigned i = 0;
+	for(auto& gui : guis) {
+		gui2_themes_.emplace_back(gui.first);
+		options.emplace_back("label", gui.second.description());
+		if (current_gui_theme_name == gui.first) {
+			current_gui_theme_ = i;
+			theme_found = true;
+		}
+		if (!theme_found) {
+			i++;
+		}
+	}
+
+	theme_list.set_values(options);
+	theme_list.set_selected(current_gui_theme_);
+}
+
+widget_data preferences_dialog::get_friends_list_row_data(const preferences::acquaintance& entry)
+{
+	widget_data data;
+	widget_item item;
+
+	std::string image = "friend.png";
+	std::string descriptor = _("friend");
+	std::string notes;
+
+	if(entry.get_status() == "ignore") {
+		image = "ignore.png";
+		descriptor = _("ignored");
+	}
+
+	if(!entry.get_notes().empty()) {
+		notes = " " + markup::tag("small", "(", entry.get_notes(), ")");
+	}
+
+	item["use_markup"] = "true";
+
+	item["label"] = "misc/status-" + image;
+	data.emplace("friend_icon", item);
+
+	item["label"] = entry.get_nick() + notes;
+	data.emplace("friend_name", item);
+
+	item["label"] = markup::tag("small", descriptor);
+	data.emplace("friend_status", item);
+
+	return data;
+}
+
+void preferences_dialog::on_friends_list_select(listbox& list, text_box& textbox)
+{
+	const int num_friends = prefs::get().get_acquaintances().size();
+	const int sel = list.get_selected_row();
+
+	if(sel < 0 || sel >= num_friends) {
+		return;
+	}
+
+	std::map<std::string, preferences::acquaintance>::const_iterator who = prefs::get().get_acquaintances().begin();
+	std::advance(who, sel);
+
+	textbox.set_value(who->second.get_nick() + " " + who->second.get_notes());
+}
+
+void preferences_dialog::update_friends_list_controls(listbox& list)
+{
+	const bool list_empty = list.get_item_count() == 0;
+
+	if(!list_empty) {
+		list.select_row(std::min(static_cast<int>(list.get_item_count()) - 1, list.get_selected_row()));
+	}
+
+	find_widget<button>("remove").set_active(!list_empty);
+
+	find_widget<label>("no_friends_notice").set_visible(list_empty);
+}
+
+void preferences_dialog::add_friend_list_entry(const bool is_friend, text_box& textbox)
+{
+	std::string username = textbox.text();
+	if(username.empty()) {
+		gui2::show_transient_message("", _("No username specified"));
+		return;
+	}
+
+	std::string reason;
+
+	std::size_t pos = username.find_first_of(' ');
+	if(pos != std::string::npos) {
+		reason = username.substr(pos + 1);
+		username = username.substr(0, pos);
+	}
+
+	auto [entry, added_new] = prefs::get().add_acquaintance(username, (is_friend ? "friend": "ignore"), reason);
+
+	if(!entry) {
+		gui2::show_transient_message(_("Error"), _("Invalid username"));
+		return;
+	}
+
+	textbox.clear();
+
+	listbox& list = find_widget<listbox>("friends_list");
+
+	//
+	// If this is a new entry, just add a new row. If it's not, we find the relevant
+	// row, remove it, and add a new row with the updated data. Should probably come
+	// up with a more elegant way to do .. the only reason I'm using the remove
+	// -and-replace method is to prevent any issues with the widgets' layout sizes.
+	//
+	if(added_new) {
+		list.add_row(get_friends_list_row_data(*entry));
+	} else {
+		for(unsigned i = 0; i < list.get_item_count(); ++i) {
+			grid* row_grid = list.get_row_grid(i);
+
+			if(row_grid->find_widget<label>("friend_name").get_label() == entry->get_nick()) {
+				list.remove_row(i);
+				list.add_row(get_friends_list_row_data(*entry), i);
+
+				break;
+			}
+		}
+	}
+
+	update_friends_list_controls(list);
+}
+
+void preferences_dialog::remove_friend_list_entry(listbox& friends_list, text_box& textbox)
+{
+	const int selected_row = std::max(0, friends_list.get_selected_row());
+
+	std::map<std::string, preferences::acquaintance>::const_iterator who = prefs::get().get_acquaintances().begin();
+	std::advance(who, selected_row);
+
+	const std::string to_remove = !textbox.text().empty() ? textbox.text() : who->second.get_nick();
+
+	if(to_remove.empty()) {
+		gui2::show_transient_message("", _("No username specified"));
+		return;
+	}
+
+	if(!prefs::get().remove_acquaintance(to_remove)) {
+		gui2::show_transient_error_message(_("Not on friends or ignore lists"));
+		return;
+	}
+
+	textbox.clear();
+
+	listbox& list = find_widget<listbox>("friends_list");
+	list.remove_row(selected_row);
+
+	update_friends_list_controls(list);
+}
+
+void preferences_dialog::apply_pixel_scale()
+{
+	// Update pixel scale preference.
+	slider& ps_slider = find_widget<slider>("pixel_scale_slider");
+	prefs::get().set_pixel_scale(ps_slider.get_value());
+
+	// Update auto pixel scale preference.
+	toggle_button& auto_ps_toggle =
+		find_widget<toggle_button>("auto_pixel_scale");
+	prefs::get().set_auto_pixel_scale(auto_ps_toggle.get_value_bool());
+
+	// Update draw buffers, taking these into account.
+	video::update_buffers();
+
+	// Update game display, if active
+	if(::display* disp = display::get_singleton()) {
+		disp->queue_rerender();
+	}
+
+	// Raise a window resize event so we can react to the change
+	events::raise_resize_event();
+}
+
+template<typename ToggleGet, typename ToggleSet, typename VolumeGet, typename VolumeSet>
+void preferences_dialog::initialize_sound_option_group(
+	const std::string& id_suffix,
+	ToggleGet&& toggle_getter,
+	ToggleSet&& toggle_setter,
+	VolumeGet&& volume_getter,
+	VolumeSet&& volume_setter)
+{
+	const std::string toggle_widget_id = "sound_toggle_" + id_suffix;
+	const std::string volume_widget_id = "sound_volume_" + id_suffix;
+
+	// Set up the volume slider.
+	register_integer(volume_widget_id, true, volume_getter, volume_setter);
+	auto& volume_slider = find_widget<slider>(volume_widget_id);
+
+	// Callback to actually immediately apply the volume effect. field_integer doesn't
+	// have a callback-on-changed mechanism. To add one would either mean adding it to
+	// the base field class or make it a proper class of is own.
+	connect_signal_notify_modified(volume_slider,
+		[=](widget& w, auto&&...) {
+			std::invoke(volume_setter, dynamic_cast<integer_selector&>(w).get_value());
+		});
+
+	const auto toggle_changed =
+		[=, &volume_slider](widget& w) {
+			const bool sound_enabled = dynamic_cast<selectable_item&>(w).get_value_bool();
+			std::invoke(toggle_setter, sound_enabled); // FIXME: we should use this return value
+			volume_slider.set_active(sound_enabled);
+		};
+
+	// Set up the toggle. We utilize field_bool's callback-on-changed mechanism instead
+	// of manually registering the callback. Since we want the effects to apply immediately,
+	// the callback the setter callback is duplicated in the on-change callback. The field
+	// class could possibly use some reworking to make this less redundant, but for now it
+	// works well enough.
+	register_bool(toggle_widget_id, true, toggle_getter, toggle_setter, toggle_changed, true);
+}
+
+/**
+ * Sets up states and callbacks for each of the widgets
+ */
+void preferences_dialog::initialize_callbacks()
+{
+	//
+	// GENERAL PANEL
+	//
+
+	/* SCROLL SPEED */
+	register_integer("scroll_speed", true,
+		[]() {return prefs::get().scroll_speed();},
+		[](int v) {prefs::get().set_scroll_speed(v);});
+
+	/* ACCELERATED SPEED */
+	register_bool("turbo_toggle", true,
+		[]() {return prefs::get().turbo();},
+		[](bool v) {prefs::get().set_turbo(v);});
+
+	const auto accl_load = [this]()->int {
+		return std::distance(accl_speeds_.begin(), std::find(accl_speeds_.begin(), accl_speeds_.end(), prefs::get().turbo_speed()));
+	};
+
+	const auto accl_save = [this](int i) {
+		prefs::get().set_turbo_speed(accl_speeds_[i]);
+	};
+
+	register_integer("turbo_slider", true,
+		accl_load, accl_save);
+
+	// Set the value label transform function.
+	find_widget<slider>("turbo_slider").set_value_labels(
+		// TODO: this should probably be a locale dependent string (use comma/dot depending on language)
+		[this](int pos, int /*max*/)->t_string { return lexical_cast<std::string>(accl_speeds_[pos]); }
+	);
+
+	/* SKIP AI MOVES */
+	register_bool("skip_ai_moves", true,
+		[]() {return prefs::get().skip_ai_moves();},
+		[](bool v) {prefs::get().set_skip_ai_moves(v);});
+
+	/* DISABLE AUTO MOVES */
+	register_bool("disable_auto_moves", true,
+		[]() {return prefs::get().disable_auto_moves();},
+		[](bool v) {prefs::get().set_disable_auto_moves(v);});
+
+	/* TURN DIALOG */
+	register_bool("show_turn_dialog", true,
+		[]() {return prefs::get().turn_dialog();},
+		[](bool v) {prefs::get().set_turn_dialog(v);});
+
+	/* ENABLE PLANNING MODE */
+	register_bool("whiteboard_on_start", true,
+		[]() {return prefs::get().enable_planning_mode_on_start();},
+		[](bool v) {prefs::get().set_enable_planning_mode_on_start(v);});
+
+	/* HIDE ALLY PLANS */
+	register_bool("whiteboard_hide_allies", true,
+		[]() {return prefs::get().hide_whiteboard();},
+		[](bool v) {prefs::get().set_hide_whiteboard(v);});
+
+	/* INTERRUPT ON SIGHTING */
+	register_bool("interrupt_move_when_ally_sighted", true,
+		[]() {return prefs::get().ally_sighted_interrupts();},
+		[](bool v) {prefs::get().set_ally_sighted_interrupts(v);});
+
+	/* SAVE REPLAYS */
+	register_bool("save_replays", true,
+		[]() {return prefs::get().save_replays();},
+		[](bool v) {prefs::get().set_save_replays(v);});
+
+	/* DELETE AUTOSAVES */
+	register_bool("delete_saves", true,
+		[]() {return prefs::get().delete_saves();},
+		[](bool v) {prefs::get().set_delete_saves(v);});
+
+	/* MAX AUTO SAVES */
+	register_integer("max_saves_slider", true,
+		[]() {return prefs::get().auto_save_max();},
+		[](int v) {prefs::get().set_auto_save_max(v);});
+
+	/* CACHE MANAGE */
+	connect_signal_mouse_left_click(find_widget<button>("cachemg"),
+		[](auto&&...) { dialogs::game_cache_options::display(); });
+
+	//
+	// DISPLAY PANEL
+	//
+
+	/* FULLSCREEN TOGGLE */
+	toggle_button& toggle_fullscreen = find_widget<toggle_button>("fullscreen");
+	toggle_fullscreen.set_value(prefs::get().fullscreen());
+#ifdef __ANDROID__
+	toggle_fullscreen.set_active(false);
+#endif
+
+	// We bind a special callback function, so setup_single_toggle() is not used
+	connect_signal_mouse_left_click(toggle_fullscreen,
+		[this](auto&&...) { fullscreen_toggle_callback(); });
+
+	/* SET RESOLUTION */
+	menu_button& res_list = find_widget<menu_button>("resolution_set");
+
+	res_list.set_use_markup(true);
+#ifdef __ANDROID__
+	res_list.set_active(false);
+#else
+	res_list.set_active(!prefs::get().fullscreen());
+#endif
+
+	set_resolution_list(res_list);
+
+	connect_signal_notify_modified(res_list,
+		[this](auto&&...) { handle_res_select(); });
+
+	connect_signal<event::SDL_VIDEO_RESIZE>(
+		[this, &res_list](auto&&...) { set_resolution_list(res_list); });
+
+	// Toggling full-screen via hot-key by-passes fullscreen_toggle_callback()
+	// So watch for the window actually entering/leaving full-screen to refresh
+	// resolution list enablement and full-screen status
+	connect_signal<event::SDL_WINDOW_ENTER_FULLSCREEN>(
+		[this](auto&&...) { fullscreen_entered_callback(); });
+
+	connect_signal<event::SDL_WINDOW_LEAVE_FULLSCREEN>(
+		[this](auto&&...) { fullscreen_left_callback(); });
+
+	/* PIXEL SCALE */
+	register_integer("pixel_scale_slider", true,
+		[]() {return prefs::get().pixel_scale();},
+		[](int v) {prefs::get().set_pixel_scale(v);});
+
+	slider& ps_slider = find_widget<slider>("pixel_scale_slider");
+	ps_slider.set_value_range(1, video::get_max_pixel_scale());
+	connect_signal_mouse_left_release(ps_slider,
+		[this](auto&&...) { apply_pixel_scale(); });
+
+	/* AUTOMATIC PIXEL SCALE */
+	register_bool("auto_pixel_scale", true,
+		[]() {return prefs::get().auto_pixel_scale();},
+		[](bool v) {prefs::get().set_auto_pixel_scale(v);},
+		[&](widget& w) { disable_widget_on_toggle_inverted<slider>(*this, w, "pixel_scale_slider"); }, true);
+
+	if (video::get_max_pixel_scale() <= 1) {
+		find_widget<slider>("pixel_scale_slider").set_active(false);
+		find_widget<toggle_button>("auto_pixel_scale").set_active(false);
+	}
+
+	toggle_button& auto_ps_toggle =
+		find_widget<toggle_button>("auto_pixel_scale");
+	connect_signal_mouse_left_click(auto_ps_toggle,
+		[this](auto&&...) { apply_pixel_scale(); });
+
+	/* SHOW TIPS PANEL ON TITLESCREEN */
+	register_bool("show_tips", true,
+		[]() {return prefs::get().show_tips();},
+		[&](bool v) {
+			// if changed once: different value, reload
+			// if changed twice: double toggle, same value, don't reload
+			is_reload_needed_ = !is_reload_needed_;
+			prefs::get().set_show_tips(v);
+		});
+
+	/* SHOW FLOATING LABELS */
+	register_bool("show_floating_labels", true,
+		[]() {return prefs::get().floating_labels();},
+		[](bool v) {prefs::get().set_floating_labels(v);});
+
+	/* SHOW TEAM COLORS */
+	register_bool("show_ellipses", true,
+		[]() {return prefs::get().show_side_colors();},
+		[](bool v) {prefs::get().set_show_side_colors(v);});
+
+	/* SHOW GRID */
+	register_bool("show_grid", true,
+		[]() {return prefs::get().grid();},
+		[](bool v) {prefs::get().set_grid(v);});
+
+	/* ANIMATE MAP */
+	register_bool("animate_terrains", true,
+		[]() {return prefs::get().animate_map();},
+		[](bool v) {prefs::get().set_animate_map(v);},
+		[&](widget& w) { disable_widget_on_toggle<toggle_button>(*this, w, "animate_water"); }, true);
+
+	/* ANIMATE WATER */
+	register_bool("animate_water", true,
+		[]() {return prefs::get().animate_water();},
+		[](bool v) {prefs::get().set_animate_water(v);});
+
+	/* SHOW UNIT STANDING ANIMS */
+	register_bool("animate_units_standing", true,
+		[]() {return prefs::get().show_standing_animations();},
+		[](bool v) {prefs::get().set_show_standing_animations(v);});
+
+	/* SHOW UNIT IDLE ANIMS */
+	register_bool("animate_units_idle", true,
+		[]() {return prefs::get().idle_anim();},
+		[](bool v) {prefs::get().set_idle_anim(v);},
+		[&](widget& w) { disable_widget_on_toggle<slider>(*this, w, "idle_anim_frequency"); }, true);
+
+	register_integer("idle_anim_frequency", true,
+		[]() {return prefs::get().idle_anim_rate();},
+		[](int v) {prefs::get().set_idle_anim_rate(v);});
+
+	/* FONT SCALING */
+	//register_integer("scaling_slider", true,
+	//	font_scaling, set_font_scaling);
+
+	/* VSYNC */
+	register_bool("vsync", true,
+		[]() {return prefs::get().vsync();},
+		[](bool v) {prefs::get().set_vsync(v);});
+
+	/* SELECT THEME */
+	menu_button& theme_list = find_widget<menu_button>("choose_theme");
+	set_theme_list(theme_list);
+	connect_signal_notify_modified(theme_list,
+		[this](auto&&...) { handle_theme_select(); });
+
+	/* SELECT GUI2 THEME */
+	menu_button& gui2_theme_list = find_widget<menu_button>("choose_gui2_theme");
+	button& apply_btn = find_widget<button>("apply");
+	set_gui2_theme_list(gui2_theme_list);
+	connect_signal_notify_modified(gui2_theme_list, [&](auto&&...) { apply_btn.set_active(true); });
+	apply_btn.set_active(false);
+	connect_signal_mouse_left_click(apply_btn,
+		[this](auto&&...) { handle_gui2_theme_select(); });
+
+	//
+	// SOUND PANEL
+	//
+
+	/* SOUND FX */
+	initialize_sound_option_group("sfx",
+		[]         { return prefs::get().sound(); },
+		[](bool v) { return prefs::get().set_sound(v); },
+		[]         { return prefs::get().sound_volume().as_percent(); },
+		[](int v)  {        prefs::get().set_sound_volume(sound::volume::from_percent(v)); });
+
+	/* MUSIC */
+	initialize_sound_option_group("music",
+		[]         { return prefs::get().music_on(); },
+		[](bool v) { return prefs::get().set_music(v); },
+		[]         { return prefs::get().music_volume().as_percent(); },
+		[](int v)  {        prefs::get().set_music_volume(sound::volume::from_percent(v)); });
+
+	register_bool("sound_toggle_stop_music_in_background", true,
+		[]() {return prefs::get().stop_music_in_background();},
+		[](bool v) {prefs::get().set_stop_music_in_background(v);});
+
+	/* TURN BELL */
+	initialize_sound_option_group("bell",
+		[]         { return prefs::get().turn_bell(); },
+		[](bool v) { return prefs::get().set_turn_bell(v); },
+		[]         { return prefs::get().bell_volume().as_percent(); },
+		[](int v)  {        prefs::get().set_bell_volume(sound::volume::from_percent(v)); });
+
+	/* UI FX */
+	initialize_sound_option_group("uisfx",
+		[]         { return prefs::get().ui_sound_on(); },
+		[](bool v) { return prefs::get().set_ui_sound(v); },
+		[]         { return prefs::get().ui_volume().as_percent(); },
+		[](int v)  {        prefs::get().set_ui_volume(sound::volume::from_percent(v)); });
+
+	//
+	// MULTIPLAYER PANEL
+	//
+
+	/* GENERAL TAB */
+
+	/* CHAT LINES */
+	register_integer("chat_lines", true,
+		[]() {return prefs::get().chat_lines();},
+		[](int v) {prefs::get().set_chat_lines(v);});
+
+	/* CHAT TIMESTAMPPING */
+	register_bool("chat_timestamps", true,
+		[]() {return prefs::get().chat_timestamp();},
+		[](bool v) {prefs::get().set_chat_timestamp(v);});
+
+	/* SAVE PASSWORD */
+	register_bool("remember_password", true,
+		[]() {return prefs::get().remember_password();},
+		[](bool v) {prefs::get().set_remember_password(v);});
+
+	/* WHISPERS FROM FRIENDS ONLY */
+	register_bool("lobby_whisper_friends_only", true,
+		[]() {return prefs::get().lobby_whisper_friends_only();},
+		[](bool v) {prefs::get().set_lobby_whisper_friends_only(v);});
+
+	/* LOBBY JOIN NOTIFICATIONS */
+	lobby_joins_group.add_member(find_widget<toggle_button>("lobby_joins_none", false, true), pref_constants::lobby_joins::show_none);
+	lobby_joins_group.add_member(find_widget<toggle_button>("lobby_joins_friends", false, true), pref_constants::lobby_joins::show_friends);
+	lobby_joins_group.add_member(find_widget<toggle_button>("lobby_joins_all", false, true), pref_constants::lobby_joins::show_all);
+
+	lobby_joins_group.set_member_states(prefs::get().get_lobby_joins());
+
+	lobby_joins_group.on_modified([&](widget&, const pref_constants::lobby_joins val) {
+		prefs::get().set_lobby_joins(val);
+	});
+
+	/* ALERTS */
+	connect_signal_mouse_left_click(find_widget<button>("mp_alerts"),
+		[](auto&&...) { mp_alerts_options::display(); });
+
+	/* SET WESNOTHD PATH */
+	connect_signal_mouse_left_click(find_widget<button>("mp_wesnothd"),
+		[](auto&&...) { prefs::get().show_wesnothd_server_search(); });
+
+
+	/* FRIENDS TAB */
+
+	listbox& friends_list = find_widget<listbox>("friends_list");
+	friends_list.clear();
+
+	for(const auto& entry : prefs::get().get_acquaintances()) {
+		friends_list.add_row(get_friends_list_row_data(entry.second));
+	}
+
+	update_friends_list_controls(friends_list);
+
+	text_box& textbox = find_widget<text_box>("friend_name_box");
+
+	connect_signal_mouse_left_click(find_widget<button>("add_friend"),
+		[&, this](auto&&...) { add_friend_list_entry(true, textbox); });
+
+	connect_signal_mouse_left_click(find_widget<button>("add_ignored"),
+		[&, this](auto&&...) { add_friend_list_entry(false, textbox); });
+
+	connect_signal_mouse_left_click(find_widget<button>("remove"),
+		[&, this](auto&&...) { remove_friend_list_entry(friends_list, textbox); });
+
+	connect_signal_notify_modified(friends_list,
+		[&, this](auto&&...) { on_friends_list_select(friends_list, textbox); });
+
+	//
+	// ADVANCED PANEL
+	//
+
+	listbox& advanced = find_widget<listbox>("advanced_prefs");
+
+	widget_data row_data;
+
+	for(const auto& option : prefs::get().get_advanced_preferences()) {
+		const std::string pref_name = option.field;
+
+		row_data["pref_name"]["label"] = option.name;
+		grid* main_grid = &advanced.add_row(row_data);
+
+		grid& details_grid = main_grid->find_widget<grid>("prefs_setter_grid");
+		details_grid.set_visible(widget::visibility::invisible);
+
+		// The toggle widget for toggle-type options (hidden for other types)
+		toggle_button& toggle_box = main_grid->find_widget<toggle_button>("value_toggle");
+		toggle_box.set_visible(widget::visibility::hidden);
+
+		if(!option.description.empty()) {
+			main_grid->find_widget<styled_widget>("description").set_label(option.description);
+		}
+
+		switch(option.type) {
+			case preferences::option::avd_type::TOGGLE: {
+
+				toggle_box.set_visible(widget::visibility::visible);
+				toggle_box.set_value(preferences_dialog_friend::get(pref_name, option.cfg["default"].to_bool()));
+
+				connect_signal_mouse_left_click(toggle_box,
+					[&, pref_name](auto&&...) { preferences_dialog_friend::set(pref_name, toggle_box.get_value_bool()); });
+
+				gui2::bind_default_status_label(toggle_box, "value");
+				break;
+			}
+
+			case preferences::option::avd_type::SLIDER: {
+				auto setter_widget = build_single_widget_instance<slider>(config {"definition", "minimal"});
+				setter_widget->set_id("setter");
+				// Maximum must be set first or this will assert
+				setter_widget->set_value_range(option.cfg["min"].to_int(), option.cfg["max"].to_int());
+				setter_widget->set_step_size(option.cfg["step"].to_int(1));
+
+				details_grid.swap_child("setter", std::move(setter_widget), true);
+
+				slider& slide = details_grid.find_widget<slider>("setter");
+
+				slide.set_value(preferences_dialog_friend::get(pref_name, option.cfg["default"].to_int()));
+
+				connect_signal_notify_modified(slide,
+					[&, pref_name](auto&&...) { preferences_dialog_friend::set(pref_name, slide.get_value()); });
+
+				gui2::bind_default_status_label(slide, "value");
+				break;
+			}
+
+			case preferences::option::avd_type::COMBO: {
+				std::vector<config> menu_data;
+				std::vector<std::string> option_ids;
+
+				for(const config& choice : option.cfg.child_range("option")) {
+					config menu_item;
+					menu_item["label"] = choice["name"];
+					if(choice.has_attribute("description")) {
+						menu_item["details"] = markup::span_color("#777", choice["description"]);
+					}
+					menu_data.push_back(menu_item);
+					option_ids.push_back(choice["id"]);
+				}
+
+				// Attempt to find an initial selection
+				int selected = std::distance(option_ids.begin(), std::find(option_ids.begin(), option_ids.end(),
+					preferences_dialog_friend::get(pref_name, option.cfg["default"].str())
+				));
+
+				// If the saved option value was invalid, reset selection to 0.
+				if(selected < 0 || selected >= static_cast<int>(option_ids.size())) {
+					selected = 0;
+				}
+
+				auto setter_widget = build_single_widget_instance<menu_button>();
+				setter_widget->set_id("setter");
+
+				details_grid.swap_child("setter", std::move(setter_widget), true);
+
+				menu_button& menu = details_grid.find_widget<menu_button>("setter");
+
+				menu.set_use_markup(true);
+				menu.set_values(menu_data, selected);
+
+				connect_signal_notify_modified(menu,
+					[=](widget& w, auto&&...) { preferences_dialog_friend::set(pref_name, option_ids[dynamic_cast<menu_button&>(w).get_value()]); });
+
+				gui2::bind_default_status_label(menu, "value");
+				break;
+			}
+
+			case preferences::option::avd_type::SPECIAL: {
+				//main_grid->remove_child("setter");
+
+				auto value_widget = build_single_widget_instance<image>();
+				value_widget->set_label("icons/arrows/arrows_blank_right_25.png~CROP(3,3,18,18)");
+
+				main_grid->swap_child("value", std::move(value_widget), true);
+				break;
+			}
+		}
+	}
+
+	connect_signal_notify_modified(advanced,
+		[this, &advanced](auto&&...) { on_advanced_prefs_list_select(advanced); });
+
+	on_advanced_prefs_list_select(advanced);
+
+	//
+	// HOTKEYS PANEL
+	//
+
+	multimenu_button& hotkey_menu = find_widget<multimenu_button>("hotkey_category_menu");
+	connect_signal_notify_modified(hotkey_menu,
+		[this](auto&&...) { hotkey_filter_callback(); });
+
+	listbox& hotkey_list = setup_hotkey_list();
+
+	text_box& filter = find_widget<text_box>("filter");
+	filter.on_modified([this](const auto&) { hotkey_filter_callback(); });
+
+	hotkey_list.set_sorters(
+		// Action column
+		[this](const std::size_t i) { return visible_hotkeys_[i]->description; },
+
+		// Hotkey column
+		[this](const std::size_t i) { return hotkey::get_names(visible_hotkeys_[i]->id); },
+
+		// Scope columns
+		[this](const std::size_t i) { return !visible_hotkeys_[i]->scope[hotkey::SCOPE_GAME]; },
+		[this](const std::size_t i) { return !visible_hotkeys_[i]->scope[hotkey::SCOPE_EDITOR]; },
+		[this](const std::size_t i) { return !visible_hotkeys_[i]->scope[hotkey::SCOPE_MAIN_MENU]; }
+	);
+
+	hotkey_list.set_active_sorter("sort_0", sort_order::type::ascending, true);
+
+	connect_signal_mouse_left_click(find_widget<button>("btn_add_hotkey"),
+		[this, &hotkey_list](auto&&...) { add_hotkey_callback(hotkey_list); });
+
+	connect_signal_mouse_left_click(find_widget<button>("btn_clear_hotkey"),
+		[this, &hotkey_list](auto&&...) { remove_hotkey_callback(hotkey_list); });
+
+	connect_signal_mouse_left_click(find_widget<button>("btn_reset_hotkeys"),
+		[this](auto&&...) { default_hotkey_callback(); });
+}
+
+listbox& preferences_dialog::setup_hotkey_list()
+{
+	widget_data row_data;
+
+	t_string& row_icon   = row_data["img_icon"]["label"];
+	t_string& row_action = row_data["lbl_desc"]["label"];
+	t_string& row_hotkey = row_data["lbl_hotkey"]["label"];
+
+	t_string& row_is_g   = row_data["lbl_is_game"]["label"];
+	t_string& row_is_e   = row_data["lbl_is_editor"]["label"];
+	t_string& row_is_m   = row_data["lbl_is_mainmenu"]["label"];
+
+	listbox& hotkey_list = find_widget<listbox>("list_hotkeys");
+
+	hotkey_list.clear();
+	visible_hotkeys_.clear();
+	visible_categories_.clear();
+
+	//
+	// Main hotkeys list
+	//
+
+	// These translated initials should match those used in data/gui/window/preferences/02_hotkeys.cfg
+	const std::string gh = markup::span_color("#0f0", _("game_hotkeys^G"));
+	const std::string eh = markup::span_color("#0f0", _("editor_hotkeys^E"));
+	const std::string mh = markup::span_color("#0f0", _("mainmenu_hotkeys^M"));
+
+	for(const auto& [id, hotkey_item] : hotkey::get_hotkey_commands()) {
+		if(hotkey_item.hidden) {
+			continue;
+		}
+
+		visible_hotkeys_.push_back(&hotkey_item);
+		visible_categories_.insert(hotkey_item.category);
+
+		if(filesystem::file_exists(game_config::path + "/images/icons/action/" + hotkey_item.id + "_25.png")) {
+			row_icon = "icons/action/" + hotkey_item.id + "_25.png~CROP(3,3,18,18)";
+		} else {
+			row_icon = "";
+		}
+
+		row_action = hotkey_item.description;
+		row_hotkey = hotkey::get_names(hotkey_item.id);
+
+		row_is_g = hotkey_item.scope[hotkey::SCOPE_GAME]      ? gh : "";
+		row_is_e = hotkey_item.scope[hotkey::SCOPE_EDITOR]    ? eh : "";
+		row_is_m = hotkey_item.scope[hotkey::SCOPE_MAIN_MENU] ? mh : "";
+
+		hotkey_list.add_row(row_data);
+	}
+
+	//
+	// Filter options
+	//
+
+	std::vector<config> filter_ops;
+	for(const hotkey::HOTKEY_CATEGORY& cat : visible_categories_) {
+		filter_ops.emplace_back("label", hotkey::get_translatable_category_name(cat), "checkbox", false);
+	}
+
+	find_widget<multimenu_button>("hotkey_category_menu").set_values(filter_ops);
+
+	return hotkey_list;
+}
+
+void preferences_dialog::add_hotkey_callback(listbox& hotkeys)
+{
+	int row_number = hotkeys.get_selected_row();
+	if(row_number < 0) {
+		gui2::show_transient_message("", _("No hotkey selected"));
+		return;
+	}
+
+	const hotkey::hotkey_command& hotkey_item = *visible_hotkeys_[row_number];
+
+	gui2::dialogs::hotkey_bind bind_dlg(hotkey_item.id);
+	bind_dlg.show();
+
+	hotkey::hotkey_ptr newhk = bind_dlg.get_new_binding();
+	hotkey::hotkey_ptr oldhk;
+
+	// only if not cancelled.
+	if(!newhk) {
+		return;
+	}
+
+	for(const hotkey::hotkey_ptr& hk : hotkey::get_hotkeys()) {
+		if(!hk->is_disabled() && newhk->bindings_equal(hk)) {
+			oldhk = hk;
+		}
+	}
+
+	if(oldhk && oldhk->get_command() == hotkey_item.id) {
+		return;
+	}
+
+	if(oldhk && oldhk->get_command() != "null") {
+		const std::string text = VGETTEXT("“<b>$hotkey_sequence|</b>” is in use by “<b>$old_hotkey_action|</b>”.\nDo you wish to reassign it to “<b>$new_hotkey_action|</b>”?", {
+			{"hotkey_sequence",   oldhk->get_name()},
+			{"old_hotkey_action", hotkey::get_hotkey_command(oldhk->get_command()).description},
+			{"new_hotkey_action", hotkey::get_hotkey_command(newhk->get_command()).description}
+		});
+
+		const int res = gui2::show_message(_("Reassign Hotkey"), text, gui2::dialogs::message::yes_no_buttons, true);
+		if(res != gui2::retval::OK) {
+			return;
+		}
+	}
+
+	hotkey::add_hotkey(newhk);
+
+	// We need to recalculate all hotkey names in because we might have removed a hotkey from another command.
+	for(std::size_t i = 0; i < hotkeys.get_item_count(); ++i) {
+		const hotkey::hotkey_command& hotkey_item_row = *visible_hotkeys_[i];
+		hotkeys.get_row_grid(i)->find_widget<label>("lbl_hotkey").set_label(hotkey::get_names(hotkey_item_row.id));
+	}
+}
+
+void preferences_dialog::default_hotkey_callback()
+{
+	gui2::show_transient_message(_("Hotkeys Reset"), _("All hotkeys have been reset to their default values."));
+
+	prefs::get().clear_hotkeys();
+
+	find_widget<text_box>("filter").set_value("");
+
+	// Set up the list again and reselect the default sorting option.
+	listbox& hotkey_list = setup_hotkey_list();
+	hotkey_list.set_active_sorter("sort_0", sort_order::type::ascending, true);
+}
+
+void preferences_dialog::remove_hotkey_callback(listbox& hotkeys)
+{
+	int row_number = hotkeys.get_selected_row();
+	if(row_number < 0) {
+		gui2::show_transient_message("", _("No hotkey selected"));
+		return;
+	}
+
+	const hotkey::hotkey_command& hotkey_item = *visible_hotkeys_[row_number];
+	hotkey::clear_hotkeys(hotkey_item.id);
+	hotkeys.get_row_grid(row_number)->find_widget<label>("lbl_hotkey").set_label(hotkey::get_names(hotkey_item.id));
+}
+
+void preferences_dialog::hotkey_filter_callback()
+{
+	const multimenu_button& hotkey_menu = find_widget<const multimenu_button>("hotkey_category_menu");
+	const text_box& name_filter = find_widget<const text_box>("filter");
+
+	boost::dynamic_bitset<> toggle_states = hotkey_menu.get_toggle_states();
+	boost::dynamic_bitset<> res(visible_hotkeys_.size());
+
+	std::string text = name_filter.get_value();
+
+	// Nothing selected. It means that *all* categories are shown.
+	if(toggle_states.none()) {
+		toggle_states = ~toggle_states;
+	}
+
+	for(std::size_t h = 0; h < visible_hotkeys_.size(); ++h) {
+		// Default to true if there is no filter text
+		bool found = true;
+
+		if(!text.empty()) {
+			const std::string description = visible_hotkeys_[h]->description.str();
+
+			for(const auto& word : utils::split(text, ' ')) {
+				found = translation::ci_search(description, word);
+
+				// No match, we're excluding this hotkey
+				if(!found) {
+					break;
+				}
+			}
+		}
+
+		unsigned cat_index = 0;
+
+		// Filter categories
+		for(const hotkey::HOTKEY_CATEGORY& cat : visible_categories_) {
+			if(visible_hotkeys_[h]->category == cat) {
+				break;
+			} else {
+				++cat_index;
+			}
+		}
+
+		if(cat_index < toggle_states.size() && found) {
+			res[h] = toggle_states[cat_index];
+		} else {
+			res[h] = false;
+		}
+	}
+
+	find_widget<listbox>("list_hotkeys").set_row_shown(res);
+}
+
+void preferences_dialog::on_advanced_prefs_list_select(listbox& list)
+{
+	const int selected_row = list.get_selected_row();
+	const auto& pref = prefs::get().get_advanced_preferences()[selected_row];
+
+	if(pref.type == preferences::option::avd_type::SPECIAL) {
+		if(pref.field == "logging") {
+			gui2::dialogs::log_settings::display();
+		} else if(pref.field == "orb_color") {
+			gui2::dialogs::select_orb_colors::display();
+		} else if(pref.field == "reach_map") {
+			gui2::dialogs::reachmap_options::display();
+		} else {
+			WRN_GUI_L << "Invalid or unimplemented custom advanced prefs option: " << pref.field;
+		}
+
+		// Add more options here as needed
+	}
+
+	const bool has_description = !pref.description.empty();
+
+	if(has_description || (pref.type != preferences::option::avd_type::SPECIAL && pref.type != preferences::option::avd_type::TOGGLE)) {
+		list.get_row_grid(selected_row)->find_widget<widget>("prefs_setter_grid")
+			.set_visible(widget::visibility::visible);
+	}
+
+	if(last_selected_item_ != selected_row) {
+		list.get_row_grid(last_selected_item_)->find_widget<widget>("prefs_setter_grid")
+			.set_visible(widget::visibility::invisible);
+
+		last_selected_item_ = selected_row;
+	}
+}
+
+void preferences_dialog::pre_show()
+{
+	set_always_save_fields(true);
+
+	connect_signal_mouse_left_click(find_widget<button>("about"),
+		[](auto&&...) { game_version::display(); });
+
+	//
+	// Status labels
+	// These need to be set here in pre_show, once the fields are initialized. For some reason, this
+	// is not the case for those in Advanced
+	//
+	gui2::bind_default_status_label(find_widget<slider>("max_saves_slider"));
+	gui2::bind_default_status_label(find_widget<slider>("turbo_slider"));
+	gui2::bind_default_status_label(find_widget<slider>("pixel_scale_slider"));
+}
+
+// Special fullscreen callback
+void preferences_dialog::fullscreen_toggle_callback()
+{
+	const bool ison = find_widget<toggle_button>("fullscreen").get_value_bool();
+	video::set_fullscreen(ison);
+
+	menu_button& res_list = find_widget<menu_button>("resolution_set");
+
+	set_resolution_list(res_list);
+	res_list.set_active(!ison);
+}
+
+void preferences_dialog::fullscreen_entered_callback()
+{
+	find_widget<toggle_button>("fullscreen").set_value(true);
+
+	menu_button& res_list = find_widget<menu_button>("resolution_set");
+
+	set_resolution_list(res_list);
+	res_list.set_active(false);
+}
+
+void preferences_dialog::fullscreen_left_callback()
+{
+	find_widget<toggle_button>("fullscreen").set_value(false);
+
+	menu_button& res_list = find_widget<menu_button>("resolution_set");
+
+	set_resolution_list(res_list);
+	res_list.set_active(true);
+}
+
+void preferences_dialog::handle_res_select()
+{
+	menu_button& res_list = find_widget<menu_button>("resolution_set");
+
+	if(video::set_resolution(resolutions_[res_list.get_value()])) {
+		set_resolution_list(res_list);
+	}
+}
+
+void preferences_dialog::handle_theme_select()
+{
+	menu_button& theme_list = find_widget<menu_button>("choose_theme");
+
+	const auto selection = theme_list.get_value();
+	const auto& theme = themes_.at(selection);
+	auto* display = display::get_singleton();
+
+	prefs::get().set_theme(theme.id);
+	if(display && resources::gamedata && resources::gamedata->get_theme().empty()) {
+		display->set_theme(theme.id);
+	}
+
+}
+
+void preferences_dialog::handle_gui2_theme_select()
+{
+	menu_button& gui2_theme_list = find_widget<menu_button>("choose_gui2_theme");
+	unsigned selected_theme = gui2_theme_list.get_value();
+	if (selected_theme != current_gui_theme_) {
+		current_gui_theme_ = selected_theme;
+		prefs::get().set_gui2_theme(gui2_themes_.at(selected_theme));
+		set_retval(gui2::dialogs::title_screen::RELOAD_UI);
+	}
+}
+
+void preferences_dialog::post_show()
+{
+	prefs::get().save_hotkeys();
+
+	// Save new prefs to disk. This also happens on app close, but doing
+	// it here too ensures nothing is lost in case of, say, a crash.
+	prefs::get().write_preferences();
+
+	// Needed for applying changes to tip panel visiblity on dialog close
+	if (is_reload_needed_) {
+		set_retval(gui2::dialogs::title_screen::RELOAD_UI);
+	}
+}
+
+} // namespace dialogs
