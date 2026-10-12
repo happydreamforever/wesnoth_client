@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "packages": [
+    {
+      "name": "iconv",
+      "archive": "libiconv-1.17.tar.gz",
+      "source_dir": "libiconv-1.17",
+      "configure_options": ["--prefix=/usr", "--libdir=/usr/lib", "--with-pic", "--enable-static", "--disable-shared", "--disable-nls", "--disable-dependency-tracking", "--disable-rpath", "--disable-relocatable"],
+      "license_files": ["COPYING", "COPYING.LIB", "libcharset/COPYING.LIB"]
+    },
+    {
+      "name": "pixman",
+      "archive": "pixman-0.42.2.tar.gz",
+      "source_dir": "pixman-0.42.2",
+      "meson_options": ["--prefix=/usr", "--libdir=lib", "--wrap-mode=nodownload", "-Ddefault_library=static", "-Db_staticpic=true", "-Dbuildtype=release", "-Dtests=disabled", "-Dgtk=disabled", "-Dlibpng=disabled", "-Dopenmp=disabled", "-Dgnu-inline-asm=disabled"],
+      "license_files": ["COPYING"]
+    }
+  ]
+}
