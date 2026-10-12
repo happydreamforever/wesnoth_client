@@ -107,7 +107,11 @@ def archive_files(data, source_dir):
 
 def run(arguments, env=None, cwd=None, capture=False):
     print("RUN: " + shlex.join([str(arg) for arg in arguments]), flush=True)
+    # All build tools are noninteractive. A Windows GUI/process launcher can
+    # leave stdin invalid; libtool still duplicates fd 0 while reading .lo
+    # metadata. Give every child a readable EOF stream instead of inheriting it.
     result = subprocess.run([str(arg) for arg in arguments], env=env, cwd=cwd, check=False,
+                            stdin=subprocess.DEVNULL,
                             stdout=subprocess.PIPE if capture else None,
                             stderr=subprocess.STDOUT if capture else None,
                             text=True, encoding="utf-8", errors="replace")
