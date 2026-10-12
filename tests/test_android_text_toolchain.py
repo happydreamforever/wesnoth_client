@@ -56,11 +56,12 @@ class TextToolchainTests(unittest.TestCase):
         (module / "__init__.py").write_text("")
         (module / "coredata.py").write_text("version = '1.12.0'\n")
         self.python = self.bin / "python3"
-        dispatch = self.root / "python_dispatch.py"
-        dispatch.write_text(textwrap.dedent(f"""
+        self.dispatch = self.root / "python_dispatch.py"
+        self.dispatch.write_text(textwrap.dedent(f"""
             import runpy, sys
             sys.path.insert(0, {str(module.parent)!r})
-            sys.executable = {str(self.python)!r}
+            invoked_python = sys.argv.pop(1)
+            sys.executable = invoked_python
             args = sys.argv[1:]
             while args and args[0] in ('-I', '-B'):
                 args.pop(0)
@@ -73,7 +74,7 @@ class TextToolchainTests(unittest.TestCase):
                 sys.argv = args
                 runpy.run_path(args[0], run_name='__main__')
         """))
-        self.executable(self.python, f'#!/bin/bash\nexec "{sys.executable}" -I -B "{dispatch}" "$@"\n')
+        self.executable(self.python, f'#!/bin/bash\nexec "{sys.executable}" -I -B "{self.dispatch}" "$0" "$@"\n')
         self.executable(self.bin / "meson", f"#!{self.python}\nfrom mesonbuild.coredata import version\nprint(version)\n")
 
         self.call_log = self.root / "compiler.json"
@@ -180,6 +181,95 @@ class TextToolchainTests(unittest.TestCase):
     def test_meson_module_version_mismatch_blocks_build(self):
         self.executable(self.bin / "meson", f"#!{self.python}\nprint('0.1.0')\n")
         self.assert_blocked(self.run_check(), "different versions")
+
+    def assert_binding_details(self, result, interpreter):
+        self.assertIn("Selected Python=" + str(self.python), result.stdout)
+        self.assertIn("Meson launcher=" + str(self.bin / "meson"), result.stdout)
+        self.assertIn("Meson shebang interpreter=" + str(interpreter), result.stdout)
+        self.assertIn("platform=", result.stdout)
+        self.assertIn("Python version=", result.stdout)
+        self.assertIn("Meson module=", result.stdout)
+        self.assertIn("version=1.12.0", result.stdout)
+
+    def test_hardlinked_interpreter_alias_with_different_realpath_is_accepted(self):
+        alias = self.bin / "python3.12.exe"
+        os.link(self.python, alias)
+        self.assertNotEqual(os.path.realpath(alias), os.path.realpath(self.python))
+        self.assertTrue(os.path.samefile(alias, self.python))
+        self.executable(self.bin / "meson", f"#!{alias}\nfrom mesonbuild.coredata import version\nprint(version)\n")
+        result = self.run_check()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assert_binding_details(result, alias)
+        self.assertIn("Meson launcher/interpreter binding verified", result.stdout)
+        self.assertIn("ANDROID TEXT TOOLCHAIN CHECK PASSED", result.stdout)
+        self.assertTrue(self.call_log.exists())
+
+    def test_copied_identical_interpreter_alias_in_same_directory_is_accepted(self):
+        alias = self.bin / "python3.12.exe"
+        shutil.copy2(self.python, alias)
+        self.assertFalse(os.path.samefile(alias, self.python))
+        self.assertEqual(alias.read_bytes(), self.python.read_bytes())
+        self.executable(self.bin / "meson", f"#!{alias}\nfrom mesonbuild.coredata import version\nprint(version)\n")
+        result = self.run_check()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assert_binding_details(result, alias)
+        self.assertIn("ANDROID TEXT TOOLCHAIN CHECK PASSED", result.stdout)
+        self.assertTrue(self.call_log.exists())
+
+    def test_distinct_interpreter_bytes_are_rejected_with_binding_details(self):
+        alias = self.bin / "different-python.exe"
+        self.executable(alias, self.python.read_text() + "\n# A different executable file.\n")
+        self.assertNotEqual(alias.read_bytes(), self.python.read_bytes())
+        self.executable(self.bin / "meson", f"#!{alias}\nfrom mesonbuild.coredata import version\nprint(version)\n")
+        result = self.run_check()
+        self.assert_blocked(result, "different executable files")
+        self.assert_binding_details(result, alias)
+        self.assertFalse(self.call_log.exists())
+        self.assertFalse((self.scratch / "ndk bridge").exists())
+
+    def test_identical_interpreter_copy_with_different_runtime_prefix_is_rejected(self):
+        alias = self.bin / "python3.12.exe"
+        shutil.copy2(self.python, alias)
+        # Keep both executable files byte-identical; alter only the controlled
+        # dispatcher's runtime identity for the alias's child identity query.
+        self.dispatch.write_text(self.dispatch.read_text().replace(
+            "args = sys.argv[1:]",
+            f"if invoked_python == {str(alias)!r} and '-c' in sys.argv:\n"
+            f"    sys.prefix = {str(self.root / 'different-runtime-prefix')!r}\n"
+            "args = sys.argv[1:]"))
+        self.assertEqual(alias.read_bytes(), self.python.read_bytes())
+        self.executable(self.bin / "meson", f"#!{alias}\nfrom mesonbuild.coredata import version\nprint(version)\n")
+        result = self.run_check()
+        self.assert_blocked(result, "Meson interpreter runtime/module identity differs:")
+        self.assertIn("prefix", result.stdout)
+        self.assert_binding_details(result, alias)
+        self.assertFalse(self.call_log.exists())
+
+    def test_identical_interpreter_copy_outside_selected_directory_is_rejected(self):
+        alias = self.root / "different-installation/python3.12.exe"
+        alias.parent.mkdir()
+        shutil.copy2(self.python, alias)
+        self.assertEqual(alias.read_bytes(), self.python.read_bytes())
+        self.executable(self.bin / "meson", f"#!{alias}\nfrom mesonbuild.coredata import version\nprint(version)\n")
+        result = self.run_check()
+        self.assert_blocked(result, "different executable files")
+        self.assert_binding_details(result, alias)
+        self.assertFalse(self.call_log.exists())
+
+    def test_interpreter_stat_error_reports_paths_and_prevents_compilation(self):
+        alias = self.bin / "disappearing-python.exe"
+        os.link(self.python, alias)
+        # The launcher version query succeeds, then its alias disappears before
+        # the binding probe. The selected Python executable remains intact.
+        self.executable(self.bin / "meson", f"#!{alias}\nimport os\n"
+                        f"os.unlink({str(alias)!r})\nprint('1.12.0')\n")
+        result = self.run_check()
+        self.assert_blocked(result, "Could not verify Meson/Python interpreter file identity")
+        self.assert_binding_details(result, alias)
+        self.assertIn("No such file or directory", result.stdout)
+        self.assertTrue(self.python.is_file())
+        self.assertFalse(alias.exists())
+        self.assertFalse(self.call_log.exists())
 
     def test_wrong_ndk_revision_blocks_build(self):
         (self.ndk / "source.properties").write_text("Pkg.Revision = 28.0.0\n")

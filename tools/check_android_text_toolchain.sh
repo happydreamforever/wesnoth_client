@@ -140,27 +140,81 @@ for name in autoconf automake aclocal m4 libtoolize; do check_tool "$name" optio
 
 if [[ -n "${commands[python3]-}" && -n "${commands[meson]-}" ]]; then
     if bounded 15s "${commands[python3]}" -I -B -c '
-import os, pathlib, shlex, shutil, sys
+import json, os, pathlib, shlex, shutil, subprocess, sys
 import mesonbuild, mesonbuild.coredata
 launcher = pathlib.Path(sys.argv[1])
+print("Selected Python=" + sys.executable + "; platform=" + sys.platform + "; Python version=" + sys.version.split()[0], flush=True)
+print("Meson launcher=" + str(launcher), flush=True)
+print("Meson module=" + str(pathlib.Path(mesonbuild.__file__).resolve()) + "; version=" + mesonbuild.coredata.version, flush=True)
 first = launcher.read_text(encoding="utf-8").splitlines()[0]
 if not first.startswith("#!"):
     raise SystemExit("Meson launcher has no inspectable Python shebang")
 parts = shlex.split(first[2:])
+if not parts:
+    raise SystemExit("Meson launcher has an empty Python shebang")
 if pathlib.Path(parts[0]).name == "env":
     if len(parts) != 2 or parts[1].startswith("-"):
         raise SystemExit("Unsupported Meson env shebang")
     interpreter = shutil.which(parts[1])
 else:
     interpreter = parts[0]
-if not interpreter or os.path.realpath(interpreter) != os.path.realpath(sys.executable):
-    raise SystemExit("Meson shebang and selected Python resolve to different interpreters")
+print("Meson shebang interpreter=" + str(interpreter), flush=True)
+if not interpreter:
+    raise SystemExit("Could not resolve Meson shebang interpreter")
+try:
+    same_file = os.path.samefile(interpreter, sys.executable)
+    # MSYS executable suffix aliases need file identity, not path spelling.
+    # Its default symlink mode also creates independent copies. Accept those
+    # only within the same directory, with identical bytes and runtime below.
+    copied_alias = not same_file and os.path.samefile(
+        pathlib.Path(interpreter).parent, pathlib.Path(sys.executable).parent
+    ) and pathlib.Path(interpreter).read_bytes() == pathlib.Path(sys.executable).read_bytes()
+except OSError as exc:
+    raise SystemExit("Could not verify Meson/Python interpreter file identity: " + str(exc))
+if not same_file and not copied_alias:
+    raise SystemExit("Meson shebang and selected Python use different executable files")
+print("Interpreter executable identity=" + ("same file" if same_file else "identical bytes in the same directory"), flush=True)
 if mesonbuild.coredata.version != sys.argv[2]:
     raise SystemExit("Meson executable and selected Python module report different versions")
 if sys.argv[3] == "1" and sys.platform not in ("cygwin", "msys"):
     raise SystemExit("Selected Python is not the MSYS interpreter")
-print("Python=" + sys.executable + "; platform=" + sys.platform)
-print("Meson module=" + str(pathlib.Path(mesonbuild.__file__).resolve()) + "; version=" + mesonbuild.coredata.version)
+runtime_code = """
+import json, os, sys, sysconfig
+import mesonbuild, mesonbuild.coredata
+def identity():
+    return {
+        "platform": sys.platform, "version": sys.version,
+        "implementation": sys.implementation.name,
+        "cache_tag": sys.implementation.cache_tag,
+        "prefix": os.path.realpath(sys.prefix),
+        "base_prefix": os.path.realpath(sys.base_prefix),
+        "exec_prefix": os.path.realpath(sys.exec_prefix),
+        "base_exec_prefix": os.path.realpath(sys.base_exec_prefix),
+        "stdlib": os.path.realpath(sysconfig.get_path("stdlib")),
+        "meson_module": os.path.realpath(mesonbuild.__file__),
+        "meson_version": mesonbuild.coredata.version,
+    }
+"""
+namespace = {}
+exec(runtime_code, namespace)
+selected_identity = namespace["identity"]()
+try:
+    probe = subprocess.run(
+        [interpreter, "-I", "-B", "-c", runtime_code + "\nprint(json.dumps(identity()))"],
+        capture_output=True, text=True, timeout=8,
+    )
+except (OSError, subprocess.TimeoutExpired) as exc:
+    raise SystemExit("Meson interpreter runtime probe could not complete: " + str(exc))
+if probe.returncode:
+    raise SystemExit("Meson interpreter runtime probe failed (exit " + str(probe.returncode) + "): " + probe.stderr[:1200])
+try:
+    launcher_identity = json.loads(probe.stdout)
+except ValueError:
+    raise SystemExit("Meson interpreter runtime probe returned invalid identity JSON")
+if launcher_identity != selected_identity:
+    changed = [key for key in selected_identity if not isinstance(launcher_identity, dict) or launcher_identity.get(key) != selected_identity[key]]
+    raise SystemExit("Meson interpreter runtime/module identity differs: " + ", ".join(changed))
+print("Meson interpreter runtime/module identity verified")
 print("Meson launcher/interpreter binding verified")
 ' "${commands[meson]}" "$meson_version" "$msys"; then
         while IFS= read -r line; do printf '[PASS] %s\n' "$line"; done <<< "$capture"
