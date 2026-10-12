@@ -2,6 +2,7 @@
 [CmdletBinding()]
 param(
     [switch]$Download,
+    [switch]$SdkVerbose,
     [string]$SdkRoot = (Join-Path $env:LOCALAPPDATA 'Android\Sdk'),
     [string]$JavaHome = 'C:\Program Files\Android\Android Studio\jbr',
     [string]$PythonPath = (Join-Path $env:LOCALAPPDATA 'Programs\Python\Python314\python.exe'),
@@ -50,9 +51,11 @@ try {
     $env:ANDROID_HOME = $SdkRoot
     $env:ANDROID_SDK_ROOT = $SdkRoot
     $env:GRADLE_USER_HOME = $GradleUserHome
-    Write-Host 'Android tools setup 2026-10-12.1. Internet access is required for missing packages.'
+    Write-Host 'Android tools setup 2026-10-12.2. Internet access is required for missing packages.'
     Write-Host 'Review any SDK license prompt and answer it yourself. Existing NDK versions are retained.'
-    Invoke-SetupCommand 'Install NDK 26.3.11579264' $manager @("--sdk_root=$SdkRoot", '--install', 'ndk;26.3.11579264')
+    $sdkArguments = @("--sdk_root=$SdkRoot", '--install', 'ndk;26.3.11579264')
+    if ($SdkVerbose) { $sdkArguments += '--verbose' }
+    Invoke-SetupCommand 'Install NDK 26.3.11579264' $manager $sdkArguments
     $ndkProperties = Join-Path $SdkRoot 'ndk\26.3.11579264\source.properties'
     Require-SetupFile $ndkProperties
     if ((Get-Content -LiteralPath $ndkProperties -Raw) -notmatch '(?m)^Pkg\.Revision\s*=\s*26\.3\.11579264\s*$') {

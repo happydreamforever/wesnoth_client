@@ -78,11 +78,13 @@ class PrepareToolsTests(unittest.TestCase):
     def tearDown(self):
         self.temp.cleanup()
 
-    def run_setup(self, download=True, stdin=""):
+    def run_setup(self, download=True, stdin="", sdk_verbose=False):
         self.config_path.write_text(json.dumps(self.config))
         args = {"SdkRoot": str(self.sdk), "JavaHome": str(self.java), "PythonPath": str(self.python), "GradleUserHome": str(self.gradle)}
         if download:
             args["Download"] = True
+        if sdk_verbose:
+            args["SdkVerbose"] = True
         parameters = self.base / "parameters.json"
         parameters.write_text(json.dumps(args))
         quote = lambda value: "'" + str(value).replace("'", "''") + "'"
@@ -178,6 +180,15 @@ exit $setupCode
     def test_gradle_offline_failure_prevents_complete(self):
         self.config["gradle-offline_exit"] = 8
         self.assert_stopped(["verify-stage", "ndk", "scons", "gradle-online", "gradle-offline"])
+
+    def test_sdk_verbose_changes_only_the_single_sdk_invocation(self):
+        self.assertEqual(self.run_setup(sdk_verbose=True), 0, self.output)
+        self.assertEqual(self.actions(), ["verify-stage", "ndk", "scons", "gradle-online", "gradle-offline"])
+        self.assertEqual(self.calls[1]["args"], ["--sdk_root=" + str(self.sdk), "--install", "ndk;26.3.11579264", "--verbose"])
+        for call in self.calls[:1] + self.calls[2:]:
+            self.assertNotIn("--verbose", call["args"])
+        self.assertIn("Android tools setup 2026-10-12.2", self.output)
+        self.assertIn("SETUP COMPLETE:", self.output)
 
     def test_success_uses_selected_arguments_and_preserves_stage(self):
         before = {path.relative_to(self.stage): path.read_bytes() for path in self.stage.rglob("*") if path.is_file()}
