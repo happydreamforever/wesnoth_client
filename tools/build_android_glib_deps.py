@@ -60,8 +60,8 @@ def selected_inputs(repo):
         for name in package["license_files"]:
             M.safe_name(name)
         edits = package.get("source_edits", [])
-        if not isinstance(edits, list) or (edits and package["name"] != "ffi"):
-            raise BuildError("Only the recorded libffi source fix is selected.")
+        if not isinstance(edits, list) or (edits and package["name"] not in ("intl", "ffi")):
+            raise BuildError("Only the recorded gettext/libffi source fixes are selected.")
         for edit in edits:
             if (not isinstance(edit, dict) or set(edit) != {"path", "before", "after"}
                     or not all(isinstance(value, str) and value for value in edit.values())):
@@ -151,7 +151,7 @@ def apply_source_edits(package, files):
         name = "sources/" + package["source_dir"] + "/" + edit["path"]
         before, after = edit["before"].encode(), edit["after"].encode()
         if name not in files or files[name].count(before) != 1:
-            raise BuildError(f"Pinned source does not match its recorded libffi fix: {name}")
+            raise BuildError(f"Pinned source does not match its recorded source fix: {name}")
         files[name] = files[name].replace(before, after, 1)
 
 

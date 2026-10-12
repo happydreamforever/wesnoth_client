@@ -24,6 +24,19 @@
         "COPYING",
         "gettext-runtime/COPYING",
         "gettext-runtime/intl/COPYING.LIB"
+      ],
+      "source_fix": "Local MSYS/native LLVM bridge: drain the archive pipe after its ELF-class byte is read, preventing llvm-ar from writing to a closed pipe; retain class output and read/drain failure status. Bash is the selected configure shell.",
+      "source_edits": [
+        {
+          "path": "gettext-runtime/configure",
+          "before": "      func_elfclass ()\n      {\n        od -A n -t d1 -j 4 -N 1\n      }",
+          "after": "      func_elfclass ()\n      {\n        # Keep llvm-ar's output pipe open until all archive data is consumed.\n        od -A n -t d1 -j 4 -N 1\n        acl_elfclass_status=$?\n        cat > /dev/null\n        acl_elfclass_drain_status=$?\n        test \"$acl_elfclass_status\" -eq 0 || return \"$acl_elfclass_status\"\n        return \"$acl_elfclass_drain_status\"\n      }"
+        },
+        {
+          "path": "gettext-runtime/configure",
+          "before": "      func_elfclass ()\n      {\n        dd bs=1 count=1 skip=4 2>/dev/null | hexdump -e '1/1 \"%3d \"'\n        echo\n      }",
+          "after": "      func_elfclass ()\n      {\n        # This builder selects Bash; isolate pipefail to preserve dd failures.\n        (\n          set -o pipefail\n          dd bs=1 count=1 skip=4 2>/dev/null | hexdump -e '1/1 \"%3d \"'\n        )\n        acl_elfclass_status=$?\n        cat > /dev/null\n        acl_elfclass_drain_status=$?\n        echo\n        test \"$acl_elfclass_status\" -eq 0 || return \"$acl_elfclass_status\"\n        return \"$acl_elfclass_drain_status\"\n      }"
+        }
       ]
     },
     {

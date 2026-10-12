@@ -4,6 +4,10 @@ import importlib.util
 import io
 import os
 from pathlib import Path
+import shlex
+import shutil
+import subprocess
+import sys
 import tarfile
 import tempfile
 import unittest
@@ -281,6 +285,81 @@ class GLibDepsTests(unittest.TestCase):
         guess.unlink()
         with self.assertRaisesRegex(G.BuildError, "no config.guess"):
             G.config_guess(source, package)
+
+    def run_archive_reader(self, function, data, overrides=""):
+        payload = self.repo / "archive member stream"
+        payload.write_bytes(data)
+        output = self.repo / "ELF class output"
+        producer = shlex.join([sys.executable, "-I", "-c",
+                              "import os,sys\n"
+                              "data=open(sys.argv[1],'rb').read()\n"
+                              "try:\n"
+                              " while data:\n"
+                              "  written=os.write(1,data[:65536]); data=data[written:]\n"
+                              "except OSError:\n"
+                              " sys.exit(74)\n", str(payload)])
+        script = (overrides + "\n" + function + "\n" + producer + " | func_elfclass > "
+                  + shlex.quote(str(output)) + "\n"
+                  + 'statuses=("${PIPESTATUS[@]}")\n'
+                  + 'printf "PRODUCER=%s READER=%s\\n" "${statuses[0]}" "${statuses[1]}"\n')
+        result = subprocess.run([shutil.which("bash"), "--noprofile", "--norc", "-c", script],
+                                capture_output=True, text=True, timeout=10)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        return result.stdout.strip(), output.read_text().strip(), result.stderr
+
+    @unittest.skipUnless(shutil.which("bash") and shutil.which("hexdump"), "Requires Bash/od/dd/hexdump")
+    def test_elf_readers_keep_correct_class_and_drain_large_archive_output(self):
+        edits = G.selected_inputs(REPO)[2][0]["source_edits"]
+        for edit in edits:
+            for elf_class in (1, 2):
+                with self.subTest(reader=edit["after"], elf_class=elf_class):
+                    status, output, error = self.run_archive_reader(
+                        edit["after"], b"\x7fELF" + bytes([elf_class]) + b"x" * (2 * 1024 * 1024))
+                    self.assertEqual(status, "PRODUCER=0 READER=0", error)
+                    self.assertEqual(output, str(elf_class))
+
+    @unittest.skipUnless(shutil.which("bash") and shutil.which("hexdump"), "Requires Bash/od/dd/hexdump")
+    def test_original_readers_close_archive_pipe_early_but_corrected_readers_do_not(self):
+        edits = G.selected_inputs(REPO)[2][0]["source_edits"]
+        for edit in edits:
+            with self.subTest(reader=edit["before"]):
+                payload = b"\x7fELF\x02" + b"x" * (2 * 1024 * 1024)
+                old_status, old_output, _ = self.run_archive_reader(edit["before"], payload)
+                new_status, new_output, error = self.run_archive_reader(edit["after"], payload)
+                self.assertEqual(old_status, "PRODUCER=74 READER=0")
+                self.assertEqual(new_status, "PRODUCER=0 READER=0", error)
+                self.assertEqual(old_output, new_output)
+                self.assertEqual(new_output, "2")
+
+    @unittest.skipUnless(shutil.which("bash") and shutil.which("hexdump"), "Requires Bash/od/dd/hexdump")
+    def test_elf_read_failures_are_preserved_after_draining_the_producer(self):
+        edits = G.selected_inputs(REPO)[2][0]["source_edits"]
+        for index, override in ((0, "od() { return 17; }"), (1, "dd() { return 17; }"),
+                                (1, "hexdump() { cat > /dev/null; return 17; }")):
+            with self.subTest(override=override):
+                status, output, error = self.run_archive_reader(
+                    edits[index]["after"], b"\x7fELF\x02" + b"x" * (2 * 1024 * 1024), override)
+                self.assertEqual(status, "PRODUCER=0 READER=17", error)
+                self.assertEqual(output, "")
+
+    @unittest.skipUnless(shutil.which("bash") and shutil.which("hexdump"), "Requires Bash/od/dd/hexdump")
+    def test_empty_truncated_and_other_elf_classes_are_not_accepted_as_64_bit(self):
+        edits = G.selected_inputs(REPO)[2][0]["source_edits"]
+        for edit in edits:
+            for payload in (b"", b"\x7fELF", b"\x7fELF\x00", b"\x7fELF\x01", b"\x7fELF\xff"):
+                with self.subTest(reader=edit["after"], payload=payload):
+                    _, output, _ = self.run_archive_reader(edit["after"], payload)
+                    self.assertNotEqual(output, "2")
+
+    def test_gettext_consumer_edits_require_both_exact_pristine_anchors(self):
+        package = G.selected_inputs(REPO)[2][0]
+        relative = "sources/gettext-0.21.1/gettext-runtime/configure"
+        original = "\n".join(edit["before"] for edit in package["source_edits"]).encode()
+        files = {relative: original}
+        G.apply_source_edits(package, files)
+        self.assertEqual(files[relative], "\n".join(edit["after"] for edit in package["source_edits"]).encode())
+        with self.assertRaisesRegex(G.BuildError, "does not match"):
+            G.apply_source_edits(package, files)
 
 
 if __name__ == "__main__":
