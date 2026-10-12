@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "version": "4.11.0",
+  "filename": "scons-4.11.0-py3-none-any.whl",
+  "url": "https://files.pythonhosted.org/packages/fc/ac/a4445bbbd58a5fa6a5c8b3b0458ffbee04e4acaff87677058eab9c6af682/scons-4.11.0-py3-none-any.whl",
+  "bytes": 4123742,
+  "sha256": "2edc077aaeafc43377ba46ce1fa3e7b40edea59c62db9ef7e39e07dc88b754fa",
+  "checksum_source": "https://pypi.org/project/SCons/4.11.0/#files",
+  "purpose": "Project-private pure Python SCons package. Keep the verified wheel for offline preparation; do not install into global Python or MSYS2 package directories."
+}

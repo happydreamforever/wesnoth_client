@@ -1,0 +1,109 @@
+// Resolve the selected project's Java dependencies without compiling or packaging.
+// Invoke with --init-script and :wesnothResolveAndroidDependencies. Repeat with
+// --offline to verify these same files can be resolved from the local cache.
+import groovy.json.JsonSlurper
+import java.security.MessageDigest
+import java.util.zip.ZipFile
+import org.gradle.api.artifacts.component.ModuleComponentIdentifier
+
+def taskName = 'wesnothResolveAndroidDependencies'
+def selectedAapt2 = 'com.android.tools.build:aapt2:8.7.3-12006047:windows@jar'
+
+gradle.projectsEvaluated {
+    def root = gradle.rootProject
+    def markerFile = new File(root.projectDir, '../../.wesnoth-android-stage.json').canonicalFile
+    if (!markerFile.isFile()) {
+        throw new GradleException('Run this cache task only against the prepared Wesnoth Android source project.')
+    }
+    def marker = new JsonSlurper().parse(markerFile)
+    def profile = marker.profile
+    if (marker.upstream_commit != '75c84d2ed344b954d1fd308e588dfe13aef53b20' ||
+            profile.wesnoth_version != '1.19.26' || profile.abi != 'x86_64' ||
+            profile.gradle_version != '8.9' || profile.agp_version != '8.7.3' ||
+            gradle.gradleVersion != '8.9') {
+        throw new GradleException('The dependency cache task requires the recorded Wesnoth 1.19.26 / Gradle 8.9 / AGP 8.7.3 profile.')
+    }
+    def app = root.findProject(':app')
+    if (app == null || !app.plugins.hasPlugin('com.android.application')) {
+        throw new GradleException('The prepared project must contain its Android application module :app.')
+    }
+    if (app.extensions.getByName('android').defaultConfig.applicationId != 'org.wesnoth.Wesnoth') {
+        throw new GradleException('Unexpected application ID in the prepared Android project.')
+    }
+
+    root.tasks.register(taskName) {
+        group = 'wesnoth preparation'
+        description = 'Resolve debug Java classpaths and the selected Windows AAPT2 artifact; no APK or native build.'
+        doLast {
+            def resolvedFiles = new LinkedHashSet<File>()
+            def requiredModules = ['androidx.core:core:1.16.0', 'androidx.documentfile:documentfile:1.1.0'] as Set
+            def modules = new TreeSet<String>()
+            ['debugCompileClasspath', 'debugRuntimeClasspath'].each { name ->
+                def configuration = app.configurations.findByName(name)
+                if (configuration == null || !configuration.canBeResolved) {
+                    throw new GradleException("Missing resolvable Android configuration: ${name}")
+                }
+                // resolve() downloads artifact bytes. A dependency-tree report
+                // alone does not establish that the JAR/AAR files are cached.
+                def files = configuration.resolve()
+                if (files.isEmpty()) {
+                    throw new GradleException("Android configuration resolved no files: ${name}")
+                }
+                resolvedFiles.addAll(files)
+                configuration.incoming.artifacts.artifacts.each { artifact ->
+                    def id = artifact.id.componentIdentifier
+                    if (id instanceof ModuleComponentIdentifier) {
+                        modules.add("${id.group}:${id.module}:${id.version}".toString())
+                    }
+                }
+                logger.lifecycle("RESOLVED ${app.path}:${name}: ${files.size()} artifact files")
+            }
+            if (!modules.containsAll(requiredModules)) {
+                throw new GradleException("Expected AndroidX modules were not resolved: ${requiredModules - modules}")
+            }
+
+            // AGP 8.7.3 publishes this matching AAPT2 build. Request the Windows
+            // classifier explicitly even when verification runs on Linux.
+            // See its official aapt2-proto version in the AGP 8.7.3 POM.
+            def aapt2Configuration = app.configurations.detachedConfiguration(app.dependencies.create(selectedAapt2))
+            aapt2Configuration.transitive = false
+            def aapt2Files = aapt2Configuration.resolve()
+            if (aapt2Files.size() != 1) {
+                throw new GradleException('Expected one selected Windows AAPT2 artifact.')
+            }
+            def aapt2File = aapt2Files.first()
+            new ZipFile(aapt2File).withCloseable { archive ->
+                def executable = archive.getEntry('aapt2.exe')
+                if (executable == null || executable.size <= 0) {
+                    throw new GradleException('The selected Windows AAPT2 JAR does not contain a nonempty aapt2.exe.')
+                }
+            }
+            resolvedFiles.addAll(aapt2Files)
+
+            resolvedFiles.sort { it.name }.each { file ->
+                if (!file.isFile() || file.length() == 0) {
+                    throw new GradleException("Resolved artifact is missing or empty: ${file.name}")
+                }
+                def digest = MessageDigest.getInstance('SHA-256')
+                file.withInputStream { stream ->
+                    byte[] buffer = new byte[65536]
+                    int count
+                    while ((count = stream.read(buffer)) != -1) {
+                        digest.update(buffer, 0, count)
+                    }
+                }
+                logger.lifecycle("ARTIFACT ${file.name} bytes=${file.length()} sha256=${digest.digest().encodeHex()}")
+            }
+            logger.lifecycle("CACHE RESOLUTION PASSED: offline=${gradle.startParameter.offline}; debug Java files and Windows AAPT2 verified.")
+            logger.lifecycle('AGP was loaded during project configuration. Native libraries, APK compilation, runtime and the complete offline build remain unverified.')
+        }
+    }
+
+    // This invocation is intentionally scoped to cache resolution. Do not let
+    // an added assemble/build/native task execute alongside the preparation.
+    gradle.taskGraph.whenReady { graph ->
+        if (graph.allTasks*.path != [':' + taskName]) {
+            throw new GradleException("This init script permits only :${taskName}; no compile, package or native tasks.")
+        }
+    }
+}

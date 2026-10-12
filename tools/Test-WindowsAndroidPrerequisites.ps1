@@ -106,7 +106,7 @@ try {
     if ($profile.schema_version -ne 1 -or $profile.abi -ne 'x86_64' -or $profile.min_sdk -ne 23) { throw 'Unexpected Android build profile.' }
     $NdkVersion = [string]$profile.ndk_version; $GradleVersion = [string]$profile.gradle_version
     $AgpVersion = [string]$profile.agp_version; $SconsVersion = [string]$profile.scons_version
-    Write-Result INFO ('Android prerequisites 2026-10-12.2; collected ' + (Get-Date -Format o))
+    Write-Result INFO ('Android prerequisites 2026-10-12.3; collected ' + (Get-Date -Format o))
     Write-Result INFO "Client=$repoRoot; MSYS2=$MsysRoot; SDK=$SdkRoot"
     Write-Result INFO "Target=x86_64; minimum Android API=23; device verified separately as API28."
     Write-Result INFO "Selected NDK=$NdkVersion; Gradle=$GradleVersion; AGP=$AgpVersion; SCons=$SconsVersion."
@@ -196,22 +196,34 @@ for tool in make patch tar gzip bzip2 xz autoconf automake libtoolize pkg-config
 done
 if test -x /usr/bin/python3; then
   /usr/bin/python3 -I -c 'import sys; print("MSYS_PYTHON " + sys.version.split()[0])'
-  /usr/bin/python3 -I -c 'import SCons; print("SCONS_VERSION " + SCons.__version__)' 2>/dev/null || printf 'SCONS_MISSING\n'
 else printf 'MSYS_PYTHON_MISSING\n'; fi
 '@
             $result = Invoke-Probe $bash @('--noprofile', '--norc', '-c', $script)
             if ($result.Code -ne 0) { Write-Result BLOCKED "MSYS2 probe failed: exit=$($result.Code)" }
             if ([regex]::Matches($result.Text, '(?m)^TOOL_(?:PRESENT|MISSING) ').Count -ne 15 -or
-                $result.Text -notmatch '(?m)^MSYS_PYTHON[ _]' -or
-                $result.Text -notmatch '(?m)^(?:SCONS_VERSION |SCONS_MISSING|MSYS_PYTHON_MISSING)') {
+                $result.Text -notmatch '(?m)^MSYS_PYTHON[ _]') {
                 Write-Result BLOCKED 'MSYS2 probe output is incomplete; exit zero alone does not prove success.'
             }
             foreach ($line in ($result.Text -split "`r?`n")) {
-                if ($line -match '^(TOOL_MISSING|SCONS_MISSING|MSYS_PYTHON_MISSING)') { Write-Result BLOCKED $line }
-                elseif ($line -match '^SCONS_VERSION (.+)$') {
-                    if ($Matches[1] -eq $SconsVersion) { Write-Result PASS $line }
-                    else { Write-Result BLOCKED "$line; selected=$SconsVersion" }
-                } elseif ($line) { Write-Result INFO $line }
+                if ($line -match '^(TOOL_MISSING|MSYS_PYTHON_MISSING)') { Write-Result BLOCKED $line }
+                elseif ($line) { Write-Result INFO $line }
+            }
+            $runner = Join-Path $PSScriptRoot 'prepare_scons.py'
+            if (Require-File 'Project SCons runner' $runner) {
+                # Pass the Windows path as an argv value, never interpolated shell code.
+                # The runner verifies its private package before emitting the version marker.
+                $command = @'
+export PATH=/usr/bin:/ucrt64/bin:/mingw64/bin
+runner=$(/usr/bin/cygpath -u "$1") || exit $?
+exec /usr/bin/python3 -I "$runner" version
+'@
+                $result = Invoke-Probe $bash @('--noprofile', '--norc', '-c', $command, 'wesnoth-scons-check', $runner)
+                $expected = '(?m)^SCONS_VERSION ' + [regex]::Escape($SconsVersion) + '\r?$'
+                if ($result.Code -eq 0 -and $result.Text -match $expected) {
+                    Write-Result PASS "Project-private SCons $SconsVersion verified and runnable with MSYS2 Python."
+                } else {
+                    Write-Result BLOCKED "Project-private SCons check failed; selected=$SconsVersion; exit=$($result.Code); $($result.Text)"
+                }
             }
             Write-Result INFO 'Tool paths are presence checks; native dependency cross-compilation is not tested.'
         }

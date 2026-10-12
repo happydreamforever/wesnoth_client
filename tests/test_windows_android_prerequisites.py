@@ -46,14 +46,20 @@ class PrerequisitesTests(unittest.TestCase):
         self.exe(self.java / "bin/java.exe", "import sys; print('openjdk version \"21.0.9\"', file=sys.stderr)")
         self.exe(self.java / "bin/javac.exe", "print('javac 21.0.9')")
         self.bash = self.msys / "usr/bin/bash.exe"
-        self.exe(self.bash, '''import sys
+        self.exe(self.bash, '''import subprocess, sys
 assert sys.argv[1:4] == ['--noprofile', '--norc', '-c']
-assert '"$tool"' in sys.argv[4] and 'print("SCONS_VERSION "' in sys.argv[4]
+if len(sys.argv) == 7:
+    assert sys.argv[5] == 'wesnoth-scons-check'
+    assert '/usr/bin/cygpath -u "$1"' in sys.argv[4]
+    assert '/usr/bin/python3 -I "$runner" version' in sys.argv[4]
+    raise SystemExit(subprocess.run([sys.executable, '-I', sys.argv[6], 'version']).returncode)
+assert len(sys.argv) == 5 and '"$tool"' in sys.argv[4]
 for name in 'make patch tar gzip bzip2 xz autoconf automake libtoolize pkg-config perl meson ninja gcc g++'.split():
     print('TOOL_PRESENT ' + name + ' /usr/bin/' + name)
 print('MSYS_PYTHON 3.12.13')
-print('SCONS_VERSION 4.11.0')
 ''')
+        self.scons = self.repo / 'tools/prepare_scons.py'
+        self.put(self.scons, "import sys\nassert sys.argv[1:] == ['version']\nprint('SCONS_VERSION 4.11.0')\n")
         version = self.profile["gradle_version"]
         self.put(self.gradle / f"wrapper/dists/gradle-{version}-bin/fixture/gradle-{version}/lib/gradle-launcher-{version}.jar")
         for group, name, version, extension in (
@@ -136,7 +142,8 @@ function Write-ReportFile([string]$Path, [string[]]$Lines) {
         self.assertIn("transitive dependencies, cache checksums and offline resolution remain unverified", report)
         self.assertIn("BLOCKED entries=0", report)
         self.assertIn("javac: javac 21.0.9", report)
-        self.assertIn("2026-10-12.2", report)
+        self.assertIn("2026-10-12.3", report)
+        self.assertIn("Project-private SCons 4.11.0 verified and runnable with MSYS2 Python", report)
 
     def test_local_source_change_blocks_without_modifying_it(self):
         source = self.repo / "engine/SConstruct"
@@ -169,6 +176,35 @@ function Write-ReportFile([string]$Path, [string[]]$Lines) {
         self.assertEqual(code, 2, report)
         self.assertIn("Source manifest SHA256 differs", report)
         self.assertNotIn("SOURCE DIFFERENCE:", report)
+
+    def test_missing_private_scons_runner_is_blocked(self):
+        self.scons.unlink()
+        code, report = self.run_probe()
+        self.assertEqual(code, 2, report)
+        self.assertIn("Project SCons runner missing or empty:", report)
+        self.assertIn("Check complete=True; BLOCKED entries=1", report)
+
+    def test_wrong_private_scons_version_is_blocked(self):
+        self.put(self.scons, "print('SCONS_VERSION 4.10.0')\n")
+        code, report = self.run_probe()
+        self.assertEqual(code, 2, report)
+        self.assertIn("Project-private SCons check failed; selected=4.11.0; exit=0", report)
+        self.assertIn("SCONS_VERSION 4.10.0", report)
+        self.assertIn("Check complete=True; BLOCKED entries=1", report)
+
+    def test_silent_private_scons_exit_zero_is_blocked(self):
+        self.put(self.scons, "pass\n")
+        code, report = self.run_probe()
+        self.assertEqual(code, 2, report)
+        self.assertIn("Project-private SCons check failed; selected=4.11.0; exit=0", report)
+        self.assertIn("Check complete=True; BLOCKED entries=1", report)
+
+    def test_private_scons_marker_with_failed_exit_is_blocked(self):
+        self.put(self.scons, "print('SCONS_VERSION 4.11.0')\nraise SystemExit(2)\n")
+        code, report = self.run_probe()
+        self.assertEqual(code, 2, report)
+        self.assertIn("Project-private SCons check failed; selected=4.11.0; exit=2", report)
+        self.assertIn("Check complete=True; BLOCKED entries=1", report)
 
     def test_transient_save_errors_do_not_affect_prerequisites(self):
         self.inject_save_errors("$script:fixtureSaveAttempts -lt 3")
