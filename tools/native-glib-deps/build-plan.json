@@ -1,0 +1,90 @@
+{
+  "schema_version": 1,
+  "packages": [
+    {
+      "name": "intl",
+      "archive": "gettext-0.21.1.tar.gz",
+      "source_dir": "gettext-0.21.1",
+      "configure_subdir": "gettext-runtime",
+      "configure_options": [
+        "--prefix=/usr",
+        "--libdir=/usr/lib",
+        "--with-pic",
+        "--enable-static",
+        "--disable-shared",
+        "--disable-dependency-tracking",
+        "--disable-rpath",
+        "--disable-relocatable",
+        "--disable-java",
+        "--disable-csharp",
+        "--disable-libasprintf",
+        "--with-included-gettext"
+      ],
+      "license_files": [
+        "COPYING",
+        "gettext-runtime/COPYING",
+        "gettext-runtime/intl/COPYING.LIB"
+      ]
+    },
+    {
+      "name": "pcre2",
+      "archive": "pcre2-10.42.tar.bz2",
+      "source_dir": "pcre2-10.42",
+      "configure_subdir": "",
+      "configure_options": [
+        "--prefix=/usr",
+        "--libdir=/usr/lib",
+        "--with-pic",
+        "--enable-static",
+        "--disable-shared",
+        "--disable-dependency-tracking",
+        "--enable-pcre2-8",
+        "--disable-pcre2-16",
+        "--disable-pcre2-32",
+        "--enable-unicode",
+        "--disable-jit",
+        "--disable-pcre2grep-libz",
+        "--disable-pcre2grep-libbz2",
+        "--disable-pcre2test-libreadline",
+        "--disable-pcre2test-libedit"
+      ],
+      "license_files": [
+        "LICENCE",
+        "COPYING"
+      ]
+    },
+    {
+      "name": "ffi",
+      "archive": "libffi-3.4.4.tar.gz",
+      "source_dir": "libffi-3.4.4",
+      "configure_subdir": "",
+      "configure_options": [
+        "--prefix=/usr",
+        "--libdir=/usr/lib",
+        "--with-pic",
+        "--enable-static",
+        "--disable-shared",
+        "--disable-dependency-tracking",
+        "--disable-docs",
+        "--disable-multi-os-directory",
+        "--enable-builddir=."
+      ],
+      "license_files": [
+        "LICENSE"
+      ],
+      "source_fix": "libffi upstream cbfb9b436ab13e4b4aba867d061e11d7f89a351c: Forward declare open_temp_exec_file (also present in pinned Wesnoth Android patch)",
+      "source_edits": [
+        {
+          "path": "include/ffi_common.h",
+          "before": "int ffi_tramp_is_present (void *closure) FFI_HIDDEN;\n\n",
+          "after": "int ffi_tramp_is_present (void *closure) FFI_HIDDEN;\n\n/* Return a file descriptor of a temporary zero-sized file in a\n   writable and executable filesystem. */\nint open_temp_exec_file(void) FFI_HIDDEN;\n\n"
+        },
+        {
+          "path": "src/tramp.c",
+          "before": "#define _GNU_SOURCE 1\n#endif\n#include <stdio.h>",
+          "after": "#define _GNU_SOURCE 1\n#endif\n\n#include <ffi.h>\n#include <ffi_common.h>\n\n#include <stdio.h>"
+        }
+      ]
+    }
+  ]
+}

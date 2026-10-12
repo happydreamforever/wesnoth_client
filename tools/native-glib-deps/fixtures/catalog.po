@@ -1,0 +1,14 @@
+# Synthetic probe catalog; not game translations. Output charset ISO-8859-1.
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=ISO-8859-1\n"
+"Language: fr\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "%d unit"
+msgid_plural "%d units"
+msgstr[0] "%d soldat"
+msgstr[1] "%d soldats"
+
+msgid "Ready"
+msgstr "Pr\352t"
