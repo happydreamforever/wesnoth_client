@@ -1,0 +1,81 @@
+{
+  "schema_version": 1,
+  "packages": [
+    {
+      "name": "png",
+      "archive": "libpng-1.6.39.tar.xz",
+      "source_dir": "libpng-1.6.39",
+      "license_files": ["LICENSE"],
+      "cmake_options": ["PNG_SHARED=OFF", "PNG_STATIC=ON", "PNG_EXECUTABLES=OFF", "PNG_TESTS=OFF", "ZLIB_LIBRARY:STRING=z", "M_LIBRARY:STRING=m"]
+    },
+    {
+      "name": "webp",
+      "archive": "libwebp-1.4.0.tar.gz",
+      "source_dir": "libwebp-1.4.0",
+      "license_files": ["COPYING", "PATENTS"],
+      "cmake_options": [
+        "BUILD_SHARED_LIBS=OFF", "WEBP_BUILD_ANIM_UTILS=OFF", "WEBP_BUILD_CWEBP=OFF",
+        "WEBP_BUILD_DWEBP=OFF", "WEBP_BUILD_GIF2WEBP=OFF", "WEBP_BUILD_IMG2WEBP=OFF",
+        "WEBP_BUILD_VWEBP=OFF", "WEBP_BUILD_WEBPINFO=OFF", "WEBP_BUILD_WEBPMUX=OFF",
+        "WEBP_BUILD_EXTRAS=OFF", "WEBP_BUILD_LIBWEBPMUX=ON", "WEBP_BUILD_WEBP_JS=OFF"
+      ]
+    },
+    {
+      "name": "ogg",
+      "archive": "libogg-1.3.5.tar.xz",
+      "source_dir": "libogg-1.3.5",
+      "license_files": ["COPYING"],
+      "cmake_options": ["BUILD_SHARED_LIBS=OFF", "BUILD_TESTING=OFF", "INSTALL_DOCS=OFF", "INSTALL_PKG_CONFIG_MODULE=ON", "INSTALL_CMAKE_PACKAGE_MODULE=ON"]
+    },
+    {
+      "name": "vorbis",
+      "archive": "libvorbis-1.3.7.tar.xz",
+      "source_dir": "libvorbis-1.3.7",
+      "license_files": ["COPYING"],
+      "cmake_options": ["BUILD_SHARED_LIBS=OFF", "BUILD_TESTING=OFF", "INSTALL_CMAKE_PACKAGE_MODULE=ON", "CMAKE_FIND_PACKAGE_PREFER_CONFIG=ON", "Ogg_DIR=@PREFIX@/lib/cmake/Ogg"]
+    },
+    {
+      "name": "sdl3",
+      "archive": "SDL3-3.4.2.tar.gz",
+      "source_dir": "SDL3-3.4.2",
+      "license_files": ["LICENSE.txt"],
+      "cmake_options": [
+        "SDL_SHARED=ON", "SDL_STATIC=OFF", "SDL_TEST_LIBRARY=OFF", "SDL_TESTS=OFF",
+        "SDL_EXAMPLES=OFF", "SDL_ANDROID_JAR=OFF", "SDL_INSTALL=ON", "SDL_INSTALL_DOCS=OFF",
+        "SDL_HIDAPI=OFF", "SDL_CAMERA=OFF", "SDL_VULKAN=OFF"
+      ]
+    },
+    {
+      "name": "sdl3_image",
+      "archive": "SDL3_image-3.4.0.tar.gz",
+      "source_dir": "SDL3_image-3.4.0",
+      "license_files": ["LICENSE.txt", "src/stb_image.h", "src/tiny_jpeg.h", "src/nanosvg.h", "src/nanosvgrast.h", "src/qoi.h"],
+      "cmake_options": [
+        "BUILD_SHARED_LIBS=ON", "SDLIMAGE_INSTALL=ON", "SDLIMAGE_INSTALL_CPACK=OFF",
+        "SDLIMAGE_VENDORED=OFF", "SDLIMAGE_DEPS_SHARED=OFF", "SDLIMAGE_STRICT=ON",
+        "SDLIMAGE_SAMPLES=OFF", "SDLIMAGE_TESTS=OFF", "SDLIMAGE_AVIF=OFF", "SDLIMAGE_JXL=OFF",
+        "SDLIMAGE_TIF=OFF", "SDLIMAGE_BACKEND_STB=ON", "SDLIMAGE_JPG=ON", "SDLIMAGE_JPG_SAVE=ON",
+        "SDLIMAGE_PNG=ON", "SDLIMAGE_PNG_LIBPNG=ON", "SDLIMAGE_PNG_SAVE=ON",
+        "SDLIMAGE_WEBP=ON", "SDLIMAGE_WEBP_SAVE=OFF",
+        "webp_LINK_LIBRARIES=@PREFIX@/lib/libsharpyuv.a;m",
+        "webpdemux_LINK_LIBRARIES=@PREFIX@/lib/libwebp.a;@PREFIX@/lib/libsharpyuv.a;m",
+        "webpmux_LINK_LIBRARIES=@PREFIX@/lib/libwebp.a;@PREFIX@/lib/libsharpyuv.a;m"
+      ]
+    },
+    {
+      "name": "sdl3_mixer",
+      "archive": "SDL3_mixer-3.2.0.tar.gz",
+      "source_dir": "SDL3_mixer-3.2.0",
+      "license_files": ["LICENSE.txt"],
+      "cmake_options": [
+        "BUILD_SHARED_LIBS=ON", "SDLMIXER_INSTALL=ON", "SDLMIXER_INSTALL_CPACK=OFF",
+        "SDLMIXER_VENDORED=OFF", "SDLMIXER_DEPS_SHARED=OFF", "SDLMIXER_STRICT=ON",
+        "SDLMIXER_TESTS=OFF", "SDLMIXER_EXAMPLES=OFF", "SDLMIXER_FLAC=OFF", "SDLMIXER_GME=OFF",
+        "SDLMIXER_MOD=OFF", "SDLMIXER_MP3=OFF", "SDLMIXER_MIDI=OFF", "SDLMIXER_OPUS=OFF",
+        "SDLMIXER_WAVPACK=OFF", "SDLMIXER_VORBIS_STB=OFF", "SDLMIXER_VORBIS_TREMOR=OFF",
+        "SDLMIXER_VORBIS_VORBISFILE=ON", "SDLMIXER_WAVE=ON",
+        "CMAKE_FIND_PACKAGE_PREFER_CONFIG=ON", "Vorbis_DIR=@PREFIX@/lib/cmake/Vorbis", "Ogg_DIR=@PREFIX@/lib/cmake/Ogg"
+      ]
+    }
+  ]
+}
