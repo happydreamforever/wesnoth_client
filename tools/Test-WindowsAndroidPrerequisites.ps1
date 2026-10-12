@@ -12,13 +12,56 @@ $repoRoot = Split-Path $PSScriptRoot -Parent
 $engine = Join-Path $repoRoot 'engine'
 $blocked = 0
 $finished = $false
-$report = $null
+$reportLines = New-Object 'System.Collections.Generic.List[string]'
 
 function Write-Result([string]$Level, [string]$Message) {
     if ($Level -eq 'BLOCKED') { $script:blocked++ }
     $line = '[{0}] {1}' -f $Level, $Message
+    $script:reportLines.Add($line)
     Write-Host $line
-    if ($script:report) { Add-Content -LiteralPath $script:report -Value $line -Encoding UTF8 }
+}
+function Write-ReportFile([string]$Path, [string[]]$Lines) {
+    # One handle for the complete report: no repeated open/append sharing races.
+    # The per-run GUID prevents overwriting an earlier run's report.
+    $stream = $null; $writer = $null
+    try {
+        $null = [IO.Directory]::CreateDirectory((Split-Path $Path -Parent))
+        $stream = [IO.File]::Open($Path, [IO.FileMode]::Create, [IO.FileAccess]::Write, [IO.FileShare]::Read)
+        $encoding = New-Object System.Text.UTF8Encoding($true)
+        $writer = New-Object System.IO.StreamWriter($stream, $encoding)
+        foreach ($line in $Lines) { $writer.WriteLine($line) }
+        $writer.Flush()
+    } finally {
+        try { if ($null -ne $writer) { $writer.Dispose() } }
+        finally { if ($null -ne $stream) { $stream.Dispose() } }
+    }
+}
+function Save-Report {
+    $name = 'android-prerequisites-' + (Get-Date -Format 'yyyyMMdd-HHmmss-fff') + '-' + [guid]::NewGuid().ToString('N') + '.txt'
+    foreach ($destination in @('primary', 'fallback')) {
+        try {
+            if ($destination -eq 'primary') { $root = Join-Path $repoRoot 'diagnostics' }
+            else { $root = Join-Path ([IO.Path]::GetTempPath()) 'wesnoth-diagnostics' }
+            $candidate = Join-Path $root $name
+        } catch {
+            Write-Result WARN ("Cannot resolve $destination report destination: " + $_.Exception.Message)
+            continue
+        }
+        Write-Result INFO "Report destination: $candidate"
+        for ($attempt = 1; $attempt -le 3; $attempt++) {
+            try {
+                Write-ReportFile -Path $candidate -Lines ($script:reportLines.ToArray())
+                Write-Host "Report saved to: $candidate"
+                return $true
+            } catch {
+                Write-Result WARN ("Report write attempt $attempt/3 failed: " + $_.Exception.Message)
+                if ($attempt -lt 3) { [Threading.Thread]::Sleep(150 * $attempt) }
+            }
+        }
+        Write-Result WARN "Report destination unavailable: $root"
+    }
+    Write-Result ERROR 'No complete report was saved. Copy the complete console output; report saving failed separately from prerequisite checks.'
+    return $false
 }
 function Test-Nonempty([string]$Path) {
     return ((Test-Path -LiteralPath $Path -PathType Leaf) -and (Get-Item -LiteralPath $Path -Force).Length -gt 0)
@@ -59,14 +102,11 @@ function Invoke-Section([string]$Name, [scriptblock]$Action) {
     try { & $Action } catch { Write-Result BLOCKED ($Name + ': ' + $_.Exception.Message) }
 }
 try {
-    $logRoot = Join-Path $repoRoot 'diagnostics'
-    New-Item -ItemType Directory -Path $logRoot -Force | Out-Null
-    $report = Join-Path $logRoot ('android-prerequisites-' + (Get-Date -Format 'yyyyMMdd-HHmmss-fff') + '.txt')
     $profile = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'android-build-profile.json') -Raw | ConvertFrom-Json
     if ($profile.schema_version -ne 1 -or $profile.abi -ne 'x86_64' -or $profile.min_sdk -ne 23) { throw 'Unexpected Android build profile.' }
     $NdkVersion = [string]$profile.ndk_version; $GradleVersion = [string]$profile.gradle_version
     $AgpVersion = [string]$profile.agp_version; $SconsVersion = [string]$profile.scons_version
-    Write-Result INFO ('Android prerequisites 2026-10-12.1; collected ' + (Get-Date -Format o))
+    Write-Result INFO ('Android prerequisites 2026-10-12.2; collected ' + (Get-Date -Format o))
     Write-Result INFO "Client=$repoRoot; MSYS2=$MsysRoot; SDK=$SdkRoot"
     Write-Result INFO "Target=x86_64; minimum Android API=23; device verified separately as API28."
     Write-Result INFO "Selected NDK=$NdkVersion; Gradle=$GradleVersion; AGP=$AgpVersion; SCons=$SconsVersion."
@@ -252,7 +292,11 @@ else printf 'MSYS_PYTHON_MISSING\n'; fi
 } finally {
     Write-Result INFO "Check complete=$finished; BLOCKED entries=$blocked."
     Write-Result INFO 'Windows Android build integration is still pending. This helper does not produce or validate an APK.'
-    if ($report) { Write-Host "Report saved to: $report" }
+    $saved = $false
+    try { $saved = Save-Report }
+    catch { Write-Result ERROR ('No complete report was saved: report saving failed separately from prerequisite checks. ' + $_.Exception.Message) }
+    # Exit from finally also covers pipeline cancellation that skips statements after it.
+    if (-not $saved) { exit 3 }
+    if (-not $finished -or $blocked -gt 0) { exit 2 }
+    exit 0
 }
-if (-not $finished -or $blocked -gt 0) { exit 2 }
-exit 0

@@ -2,6 +2,8 @@
 
 Uses committed engine source; needs no ignored dependency downloads. These tests
 do not validate native Windows executables, real dependency archives or APK builds.
+Report-write exceptions are injected in temporary script copies; they test control
+flow and persistence, not Windows file-sharing behavior.
 """
 import argparse
 import hashlib
@@ -83,15 +85,46 @@ print('SCONS_VERSION 4.11.0')
         path.chmod(0o755)
 
     def run_probe(self):
-        env = dict(os.environ, OS="Windows_NT", USERPROFILE=str(self.base), LOCALAPPDATA=str(self.base))
+        temporary = self.base / "temp"
+        temporary.mkdir(exist_ok=True)
+        env = dict(os.environ, OS="Windows_NT", USERPROFILE=str(self.base), LOCALAPPDATA=str(self.base),
+                   TEMP=str(temporary), TMPDIR=str(temporary))
         result = subprocess.run([
             PWSH, "-NoLogo", "-NoProfile", "-File", str(self.repo / "tools/Test-WindowsAndroidPrerequisites.ps1"),
             "-MsysRoot", str(self.msys), "-SdkRoot", str(self.sdk), "-JavaHome", str(self.java), "-GradleUserHome", str(self.gradle),
         ], text=True, capture_output=True, env=env, timeout=60)
-        report = next((self.repo / "diagnostics").glob("android-prerequisites-*.txt")).read_text(encoding="utf-8-sig")
+        self.last_output = result.stdout + result.stderr
+        saved = [line.removeprefix("Report saved to: ") for line in result.stdout.splitlines() if line.startswith("Report saved to: ")]
+        self.assertLessEqual(len(saved), 1, self.last_output)
+        self.saved_path = Path(saved[0]) if saved else None
+        report = self.saved_path.read_text(encoding="utf-8-sig") if self.saved_path else ""
         self.assertNotIn("DO_NOT_REPORT_PRIVATE_SENTINEL", result.stdout + result.stderr + report)
-        self.assertIn("does not produce or validate an APK", report)
+        self.assertIn("does not produce or validate an APK", self.last_output)
+        if self.saved_path:
+            self.assertIn("does not produce or validate an APK", report)
         return result.returncode, report
+
+    def inject_save_errors(self, condition, partial=False):
+        """Override only the temp fixture's save operation, leaving checks unchanged."""
+        path = self.repo / "tools/Test-WindowsAndroidPrerequisites.ps1"
+        source = path.read_text()
+        source = source.replace("function Write-ReportFile(", "function Write-ReportFileActual(", 1)
+        wrapper = '''
+$script:fixtureSaveAttempts = 0
+function Write-ReportFile([string]$Path, [string[]]$Lines) {
+    $script:fixtureSaveAttempts++
+    if (CONDITION) {
+        PARTIAL
+        throw [IO.IOException]::new('Injected report sharing violation')
+    }
+    Write-ReportFileActual -Path $Path -Lines $Lines
+}
+'''.replace("CONDITION", condition).replace("PARTIAL", """
+        $null = [IO.Directory]::CreateDirectory((Split-Path $Path -Parent))
+        [IO.File]::WriteAllText($Path, 'partial fixture output')
+""" if partial else "")
+        source = source.replace("function Test-Nonempty(", wrapper + "\nfunction Test-Nonempty(", 1)
+        path.write_text(source)
 
     def test_present_inputs_are_not_claimed_to_be_a_build(self):
         script = self.repo / "engine/packaging/android/build-sources"
@@ -102,6 +135,8 @@ print('SCONS_VERSION 4.11.0')
         self.assertIn("matching size/SHA256=23/23", report)
         self.assertIn("transitive dependencies, cache checksums and offline resolution remain unverified", report)
         self.assertIn("BLOCKED entries=0", report)
+        self.assertIn("javac: javac 21.0.9", report)
+        self.assertIn("2026-10-12.2", report)
 
     def test_local_source_change_blocks_without_modifying_it(self):
         source = self.repo / "engine/SConstruct"
@@ -134,6 +169,63 @@ print('SCONS_VERSION 4.11.0')
         self.assertEqual(code, 2, report)
         self.assertIn("Source manifest SHA256 differs", report)
         self.assertNotIn("SOURCE DIFFERENCE:", report)
+
+    def test_transient_save_errors_do_not_affect_prerequisites(self):
+        self.inject_save_errors("$script:fixtureSaveAttempts -lt 3")
+        code, report = self.run_probe()
+        self.assertEqual(code, 0, self.last_output)
+        self.assertEqual(self.saved_path.parent, self.repo / "diagnostics")
+        self.assertEqual(report.count("Injected report sharing violation"), 2)
+        self.assertIn("Check complete=True; BLOCKED entries=0", report)
+        self.assertIn("matching size/SHA256=23/23", report)
+        self.assertNotIn("[BLOCKED]", report)
+
+    def test_unavailable_diagnostics_directory_uses_fallback(self):
+        self.put(self.repo / "diagnostics", "Existing unrelated file; preserve it.")
+        code, report = self.run_probe()
+        self.assertEqual(code, 0, self.last_output)
+        self.assertEqual(self.saved_path.parent, self.base / "temp/wesnoth-diagnostics")
+        self.assertEqual((self.repo / "diagnostics").read_text(), "Existing unrelated file; preserve it.")
+        self.assertIn("Check complete=True; BLOCKED entries=0", report)
+        self.assertIn("matching size/SHA256=23/23", report)
+        self.assertEqual(report.count("Report write attempt"), 3)
+        self.assertNotIn("[BLOCKED]", report)
+        self.assertNotIn("Report saved to: " + str(self.repo / "diagnostics"), self.last_output)
+
+    def test_fallback_preserves_missing_prerequisite_exit(self):
+        (self.bin / "clang.exe").unlink()
+        self.inject_save_errors("(Split-Path $Path -Parent) -eq (Join-Path $repoRoot 'diagnostics')")
+        code, report = self.run_probe()
+        self.assertEqual(code, 2, self.last_output)
+        self.assertEqual(self.saved_path.parent, self.base / "temp/wesnoth-diagnostics")
+        self.assertIn("Check complete=True; BLOCKED entries=1", report)
+        self.assertIn("matching size/SHA256=23/23", report)
+        self.assertEqual(report.count("Injected report sharing violation"), 3)
+
+    def test_persistent_save_failure_has_distinct_exit_and_no_saved_claim(self):
+        self.inject_save_errors("$true", partial=True)
+        code, report = self.run_probe()
+        self.assertEqual(code, 3, self.last_output)
+        self.assertIsNone(self.saved_path)
+        self.assertEqual(report, "")
+        self.assertIn("No complete report was saved", self.last_output)
+        self.assertIn("Check complete=True; BLOCKED entries=0", self.last_output)
+        self.assertIn("matching size/SHA256=23/23", self.last_output)
+        self.assertEqual(self.last_output.count("Injected report sharing violation"), 6)
+        self.assertNotIn("[BLOCKED]", self.last_output)
+        partials = list(self.base.rglob("android-prerequisites-*.txt"))
+        self.assertEqual(len(partials), 2)
+        self.assertTrue(all(path.read_text() == "partial fixture output" for path in partials))
+
+    def test_early_return_saves_partial_report_with_incomplete_exit(self):
+        path = self.repo / "tools/Test-WindowsAndroidPrerequisites.ps1"
+        source = path.read_text()
+        path.write_text(source.replace("    Invoke-Section 'JDK selected for Gradle' {", "    return\n    Invoke-Section 'JDK selected for Gradle' {", 1))
+        code, report = self.run_probe()
+        self.assertEqual(code, 2, self.last_output)
+        self.assertIn("All 1591 restored source files match", report)
+        self.assertIn("Check complete=False; BLOCKED entries=0", report)
+        self.assertNotIn("Native archive integrity", report)
 
 
 if __name__ == "__main__":
