@@ -1,5 +1,6 @@
 """Offline rendering receipts, prerequisite binding and source/prefix protection."""
 import configparser
+import contextlib
 import importlib.util
 import io
 import json
@@ -9,6 +10,7 @@ import shlex
 import shutil
 import subprocess
 import struct
+import sys
 import tarfile
 import tempfile
 import unittest
@@ -284,6 +286,148 @@ class RenderingTests(unittest.TestCase):
             env = R.isolated_environment()
         for name in ("cairo_cv_warn_maybe", "ac_cv_func_bad", "LIBS", "PKG_CONFIG"):
             self.assertNotIn(name, env)
+
+    def configure_fixture(self, mode):
+        self.prepare()
+        self.write("prefix/include/local.h", b"preserve installed header")
+        private = self.root / "build/cairo"
+        private.mkdir(parents=True)
+        script = self.repo / "fake-configure.py"
+        script.write_text(r'''import json, os, pathlib, sys
+private = pathlib.Path.cwd()
+counter = private / "launches.json"
+launches = json.loads(counter.read_text()) if counter.exists() else []
+launches.append({"tmp": os.environ["TMPDIR"], "eof": sys.stdin.buffer.read() == b"",
+                 "sentinel": os.environ.get("WORKFLOW_SENTINEL"), "TMP": os.environ.get("TMP"), "TEMP": os.environ.get("TEMP")})
+counter.write_text(json.dumps(launches))
+number = len(launches)
+mode = sys.argv[1]
+pathlib.Path(os.environ["TMPDIR"], "retained.tmp").write_text("temporary diagnostic " + str(number))
+if mode != "linked-snapshot":
+    (private / "config.log").write_text("config log " + str(number))
+    (private / "config.status").write_bytes(b"" if number == 1 else b"partial status")
+print("stdout step " + str(number), flush=True)
+print("stderr step " + str(number), file=sys.stderr, flush=True)
+if mode == "success" or mode == "transient" and number == 2:
+    raise SystemExit(0)
+if mode in ("always", "transient", "busy-only", "linked-snapshot"):
+    print("/source/cairo/configure: line 37058: cannot create temp file for here-document: Device or resource busy", file=sys.stderr)
+if mode in ("always", "transient", "write-only", "different-busy", "linked-snapshot"):
+    print("configure: error: write failure creating ./config.status", file=sys.stderr)
+if mode == "different-busy":
+    print("/source/cairo/configure: line 37058: cannot create temp file for here-document: Permission denied", file=sys.stderr)
+if mode == "compiler":
+    print("configure: error: C compiler cannot create executables", file=sys.stderr)
+raise SystemExit(1)
+''', encoding="utf-8")
+        env = dict(os.environ, TMPDIR="unchanged inherited TMPDIR", TMP="unchanged TMP", TEMP="unchanged TEMP", WORKFLOW_SENTINEL="keep")
+        return [sys.executable, "-B", script, mode], env, private
+
+    def test_cairo_busy_retry_keeps_logs_uses_distinct_temp_and_preserves_inputs(self):
+        command, env, private = self.configure_fixture("transient")
+        original_env = dict(env)
+        source_before = R.M.inventory(self.root, "sources")
+        prefix_before = R.M.inventory(self.root)
+        with patch.object(R.time, "sleep") as sleep, contextlib.redirect_stdout(io.StringIO()) as console:
+            R.run_cairo_configure(command, env, self.root)
+        sleep.assert_called_once_with(1)
+        self.assertEqual(env, original_env)
+        self.assertEqual(R.M.inventory(self.root, "sources"), source_before)
+        self.assertEqual(R.M.inventory(self.root), prefix_before)
+        launches = json.loads((private / "launches.json").read_text())
+        self.assertEqual(len(launches), 2)
+        self.assertEqual(len({item["tmp"] for item in launches}), 2)
+        for number, item in enumerate(launches, 1):
+            self.assertTrue(item["eof"])
+            self.assertEqual(item["sentinel"], "keep")
+            self.assertEqual((item["TMP"], item["TEMP"]), ("unchanged TMP", "unchanged TEMP"))
+            temp = Path(item["tmp"])
+            self.assertTrue(temp.is_relative_to(self.root / "build/cairo-configure-attempts"))
+            self.assertEqual((temp / "retained.tmp").read_text(), "temporary diagnostic " + str(number))
+            log = (temp.parent / "configure.log").read_text()
+            self.assertIn("stdout step " + str(number), log)
+            self.assertIn("stderr step " + str(number), log)
+            self.assertIn("stdout step " + str(number), console.getvalue())
+        failed = Path(launches[0]["tmp"]).parent
+        self.assertEqual((failed / "config.log").read_text(), "config log 1")
+        self.assertEqual((failed / "config.status").read_bytes(), b"")
+        self.prepare()  # New diagnostics do not change the source/toolchain marker.
+
+    def test_cairo_repeated_busy_failure_stops_after_three_attempts(self):
+        command, env, private = self.configure_fixture("always")
+        with patch.object(R.time, "sleep") as sleep, contextlib.redirect_stdout(io.StringIO()), self.assertRaisesRegex(R.BuildError, "Cairo configure failed"):
+            R.run_cairo_configure(command, env, self.root)
+        self.assertEqual([call.args for call in sleep.call_args_list], [(1,), (2,)])
+        launches = json.loads((private / "launches.json").read_text())
+        self.assertEqual(len(launches), 3)
+        self.assertEqual(len({item["tmp"] for item in launches}), 3)
+        for item in launches:
+            self.assertTrue((Path(item["tmp"]).parent / "config.log").is_file())
+        self.assertFalse((self.root / "receipt.json").exists())
+
+    def test_cairo_other_failures_or_incomplete_signature_are_not_retried(self):
+        command, env, private = self.configure_fixture("compiler")
+        for mode in ("compiler", "busy-only", "write-only", "different-busy"):
+            counter = private / "launches.json"
+            if counter.exists():
+                counter.unlink()
+            with self.subTest(mode=mode), patch.object(R.time, "sleep") as sleep, contextlib.redirect_stdout(io.StringIO()), self.assertRaises(R.BuildError):
+                R.run_cairo_configure([*command[:-1], mode], env, self.root)
+            sleep.assert_not_called()
+            self.assertEqual(len(json.loads(counter.read_text())), 1)
+
+    def test_cairo_success_does_not_retry_and_existing_diagnostics_are_preserved(self):
+        command, env, private = self.configure_fixture("success")
+        old = self.write("build/cairo-configure-attempts/old-attempt/configure.log", b"old evidence")
+        with patch.object(R.time, "sleep") as sleep, contextlib.redirect_stdout(io.StringIO()):
+            R.run_cairo_configure(command, env, self.root)
+        sleep.assert_not_called()
+        self.assertEqual(len(json.loads((private / "launches.json").read_text())), 1)
+        self.assertEqual(old.read_bytes(), b"old evidence")
+
+    def test_cairo_attempt_directory_and_snapshot_links_cannot_escape_stage(self):
+        command, env, private = self.configure_fixture("linked-snapshot")
+        outside = self.repo / "outside"
+        outside.mkdir()
+        attempts = self.root / "build/cairo-configure-attempts"
+        attempts.symlink_to(outside, target_is_directory=True)
+        with self.assertRaises(R.BuildError):
+            R.run_cairo_configure(command, env, self.root)
+        self.assertEqual(list(outside.iterdir()), [])
+        self.assertFalse((private / "launches.json").exists())
+        attempts.unlink()
+        target = outside / "user.txt"
+        target.write_bytes(b"keep user data")
+        (private / "config.log").symlink_to(target)
+        with patch.object(R.time, "sleep") as sleep, contextlib.redirect_stdout(io.StringIO()), self.assertRaises(R.BuildError):
+            R.run_cairo_configure(command, env, self.root)
+        sleep.assert_not_called()
+        self.assertEqual(target.read_bytes(), b"keep user data")
+        self.assertEqual(len(json.loads((private / "launches.json").read_text())), 1)
+
+    @unittest.skipUnless(shutil.which("bash"), "Bash is required for large here-document execution")
+    def test_real_bash_large_quoted_and_expanded_heredocs_use_private_temp(self):
+        self.prepare()
+        private = self.root / "build/cairo"
+        private.mkdir(parents=True)
+        literal = ("quoted " + "x" * 96 + "\n") * 1500
+        raw = ("expanded ${WESNOTH_HEREDOC_VALUE}\n") * 3000
+        expanded = raw.replace("${WESNOTH_HEREDOC_VALUE}", "native temp input")
+        script = self.repo / "large-heredocs.sh"
+        script.write_text("set -eu\ncat >quoted.txt <<'END_QUOTED'\n" + literal + "END_QUOTED\n"
+                          "cat >expanded.txt <<END_EXPANDED\n" + raw + "END_EXPANDED\n"
+                          "printf '%s' \"$TMPDIR\" > selected-temp.txt\n"
+                          "printf '%s\\n' 'BASH LARGE HEREDOC PASS'\n", encoding="utf-8")
+        env = dict(os.environ, TMPDIR="unusable inherited temp path", WESNOTH_HEREDOC_VALUE="native temp input")
+        with patch.object(R.time, "sleep") as sleep, contextlib.redirect_stdout(io.StringIO()) as console:
+            R.run_cairo_configure([shutil.which("bash"), "--noprofile", "--norc", script], env, self.root)
+        sleep.assert_not_called()
+        self.assertEqual((private / "quoted.txt").read_text(), literal)
+        self.assertEqual((private / "expanded.txt").read_text(), expanded)
+        temp = Path((private / "selected-temp.txt").read_text())
+        self.assertTrue(temp.is_relative_to(self.root / "build/cairo-configure-attempts"))
+        self.assertIn("BASH LARGE HEREDOC PASS", console.getvalue())
+        self.assertIn("BASH LARGE HEREDOC PASS", (temp.parent / "configure.log").read_text())
 
     @unittest.skipUnless(shutil.which("pkg-config"), "pkg-config is required for a real relocation fixture")
     def test_pkgconfig_resolves_transitive_iconv_from_spaced_prefix(self):

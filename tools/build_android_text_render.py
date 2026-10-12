@@ -9,8 +9,11 @@ import os
 from pathlib import Path
 import re
 import shlex
+import subprocess
 import sys
 import tarfile
+import tempfile
+import time
 
 REPO = Path(__file__).resolve().parents[1]
 def load_helper(name, filename):
@@ -334,6 +337,53 @@ def verify_receipt(repo):
     print("ANDROID TEXT RENDER ARTIFACTS VERIFIED", flush=True)
     return receipt
 
+def run_cairo_configure(command, env, root):
+    """Retain diagnostics and retry only Cairo's observed Bash temp-file failure."""
+    private = B.managed_path(root, "build/cairo")
+    attempts = B.managed_path(root, "build/cairo-configure-attempts")
+    attempts.mkdir(parents=True, exist_ok=True)
+    for number in range(1, 4):
+        attempt = Path(tempfile.mkdtemp(prefix="attempt-", dir=attempts))
+        temp = attempt / "tmp"
+        temp.mkdir()
+        attempt_env = dict(env, TMPDIR=str(temp))
+        log = attempt / "configure.log"
+        print(f"Cairo configure attempt {number}/3; retained log: {log}; TMPDIR: {temp}", flush=True)
+        print("RUN: " + shlex.join([str(arg) for arg in command]), flush=True)
+        busy, write_failed = False, False
+        with log.open("x", encoding="utf-8", newline="\n") as output:
+            process = subprocess.Popen([str(arg) for arg in command], cwd=private, env=attempt_env,
+                                       stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                       text=True, encoding="utf-8", errors="replace", bufsize=1)
+            try:
+                for line in process.stdout:
+                    print(line, end="", flush=True)
+                    output.write(line)
+                    output.flush()
+                    message = line.rstrip("\r\n")
+                    busy |= re.fullmatch(r".+: line [0-9]+: cannot create temp file for here-document: Device or resource busy", message) is not None
+                    write_failed |= message == "configure: error: write failure creating ./config.status"
+                status = process.wait()
+            finally:
+                process.stdout.close()
+                if process.poll() is None:
+                    process.kill()
+                    process.wait()
+        if status == 0:
+            return
+        for name in ("config.log", "config.status"):
+            source = B.managed_path(root, "build/cairo/" + name)
+            if source.exists():
+                if not source.is_file():
+                    raise BuildError(f"Cairo diagnostic is not a regular file; nothing copied: {source}")
+                with (attempt / name).open("xb") as snapshot:
+                    snapshot.write(source.read_bytes())
+        if not (busy and write_failed) or number == 3:
+            raise BuildError(f"Cairo configure failed with exit {status}. Logs and temporary files retained in {attempts}.")
+        print(f"Observed Cairo here-document busy temporary-file failure; retrying configure in {number}s with a fresh TMPDIR.", flush=True)
+        time.sleep(number)
+
+
 def build(repo, args):
     profile, inputs, packages, pins = selected_inputs(repo)
     prior = prior_inputs(repo)
@@ -389,8 +439,12 @@ def build(repo, args):
             triplet = T.run([tools["bash"], config_guess(source, source)], env, capture=True).strip()
             if not re.fullmatch(r"[A-Za-z0-9_.+-]+", triplet):
                 raise BuildError("Unexpected config.guess build-machine identity.")
-            T.run([tools["bash"], source / "configure", "--host=x86_64-linux-android", "--build=" + triplet,
-                   *package["configure_options"]], env, private)
+            command = [tools["bash"], source / "configure", "--host=x86_64-linux-android", "--build=" + triplet,
+                       *package["configure_options"]]
+            if name == "cairo":
+                run_cairo_configure(command, env, root)
+            else:
+                T.run(command, env, private)
             subdir, target = ("lib", "libexpat.la") if name == "expat" else ("src", "libcairo.la")
             T.run([tools["make"], "-C", private / subdir, "-j", str(args.jobs), target], env)
             if name == "expat":
