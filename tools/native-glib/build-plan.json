@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "package": {
+    "name": "glib",
+    "archive": "glib-2.82.1.tar.xz",
+    "source_dir": "glib-2.82.1",
+    "meson_options": ["--prefix=/usr", "--libdir=lib", "--wrap-mode=nodownload", "-Ddefault_library=static", "-Db_staticpic=true", "-Dbuildtype=release", "-Doptimization=2", "-Dtests=false", "-Dinstalled_tests=false", "-Dintrospection=disabled", "-Ddocumentation=false", "-Dman-pages=disabled", "-Dman=false", "-Dnls=disabled", "-Dselinux=disabled", "-Dxattr=false", "-Dlibmount=disabled", "-Dsysprof=disabled", "-Dlibelf=disabled", "-Ddtrace=disabled", "-Dsystemtap=disabled", "-Dglib_debug=disabled"],
+    "targets": ["glib/libglib-2.0.a", "gobject/libgobject-2.0.a", "gio/libgio-2.0.a", "gmodule/libgmodule-2.0.a", "gthread/libgthread-2.0.a"],
+    "license_files": ["COPYING", "LICENSES/Apache-2.0.txt", "LICENSES/CC0-1.0.txt", "LICENSES/GPL-2.0-or-later.txt", "LICENSES/LGPL-2.1-only.txt", "LICENSES/LGPL-2.1-or-later.txt", "LICENSES/LLVM-exception.txt", "LICENSES/LicenseRef-old-glib-tests.txt", "LICENSES/MIT.txt", "LICENSES/MPL-1.1.txt"],
+    "zlib_backend": "Android NDK r26d API23 system libz; no host package or vendored zlib"
+  }
+}
