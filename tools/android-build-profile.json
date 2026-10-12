@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "wesnoth_version": "1.19.26",
+  "abi": "x86_64",
+  "min_sdk": 23,
+  "compile_sdk": 35,
+  "target_sdk": 35,
+  "build_tools": "34.0.0",
+  "ndk_version": "26.3.11579264",
+  "gradle_version": "8.9",
+  "gradle_sha256": "d725d707bfabd4dfdc958c624003b3c80accc03f7037b5122c4b1d0ef15cecab",
+  "agp_version": "8.7.3",
+  "scons_version": "4.11.0",
+  "java_major": 21
+}
