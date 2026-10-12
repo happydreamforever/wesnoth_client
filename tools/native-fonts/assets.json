@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "game_data_version": "1.19.26",
+  "files": {
+    "fonts/Lato-Regular.ttf": {
+      "bytes": 657212,
+      "sha256": "6f6940be0835c3ddec9199e5fc42be4cbc61ebcfd58c623fdf719366253f1780"
+    },
+    "fonts/DejaVuSans.ttf": {
+      "bytes": 757076,
+      "sha256": "7da195a74c55bef988d0d48f9508bd5d849425c1770dba5d7bfc6ce9ed848954"
+    },
+    "fonts/COPYING": {
+      "bytes": 18502,
+      "sha256": "7b1eb46464ea8d875bf545311304b1d33e29b5f07ebd5e490844da10e9ccbb9a"
+    }
+  }
+}
