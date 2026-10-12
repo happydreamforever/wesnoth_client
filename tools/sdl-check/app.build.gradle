@@ -1,0 +1,33 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'org.wesnoth.offlinecheck'
+    compileSdk @COMPILE_SDK@
+    buildToolsVersion '@BUILD_TOOLS@'
+    ndkVersion '@NDK_VERSION@'
+
+    defaultConfig {
+        applicationId 'org.wesnoth.offlinecheck'
+        minSdk @MIN_SDK@
+        targetSdk @TARGET_SDK@
+        versionCode 1
+        versionName '1.0'
+        ndk { abiFilters 'x86_64' }
+    }
+
+    buildTypes {
+        debug { debuggable true }
+    }
+
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+            keepDebugSymbols += ['**/*.so']
+        }
+    }
+}
+
+// Native files are supplied by the verified offline CMake build. No downloads
+// or alternate native build tasks are attached to this isolated check app.
