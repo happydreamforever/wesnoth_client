@@ -1,0 +1,107 @@
+{
+  "schema_version": 1,
+  "packages": [
+    {
+      "name": "expat",
+      "archive": "expat-2.5.0.tar.xz",
+      "source_dir": "expat-2.5.0",
+      "license_files": [
+        "COPYING"
+      ],
+      "configure_options": [
+        "--prefix=/usr",
+        "--libdir=/usr/lib",
+        "--disable-shared",
+        "--enable-static",
+        "--with-pic",
+        "--without-docbook",
+        "--without-examples",
+        "--without-tests",
+        "--without-xmlwf"
+      ]
+    },
+    {
+      "name": "fontconfig",
+      "archive": "fontconfig-2.17.1.tar.xz",
+      "source_dir": "fontconfig-2.17.1",
+      "license_files": [
+        "COPYING"
+      ],
+      "meson_options": [
+        "--prefix=/usr",
+        "--libdir=lib",
+        "--wrap-mode=nodownload",
+        "-Ddefault_library=static",
+        "-Db_staticpic=true",
+        "-Dbuildtype=release",
+        "-Doptimization=2",
+        "-Ddoc=disabled",
+        "-Ddoc-txt=disabled",
+        "-Ddoc-man=disabled",
+        "-Ddoc-pdf=disabled",
+        "-Ddoc-html=disabled",
+        "-Dtests=disabled",
+        "-Dtools=disabled",
+        "-Dcache-build=disabled",
+        "-Dnls=disabled",
+        "-Dfontations=disabled",
+        "-Dxml-backend=expat",
+        "-Diconv=enabled",
+        "-Ddefault-fonts-dirs=[]",
+        "-Dadditional-fonts-dirs=[]"
+      ],
+      "source_edits": [
+        {
+          "path": "meson.build",
+          "before": "    conf.set('LIBICONV_PLUG', 1)\n",
+          "after": "    # Android API23 uses external GNU libiconv 1.17; retain its public name mappings.\n",
+          "reason": "Local correction for the verified external GNU libiconv 1.17 archive. LIBICONV_PLUG suppresses iconv.h mappings to libiconv_* and instead requests system iconv symbols unavailable at Android API23. Do not enable libc replacement mode in this consumer."
+        }
+      ]
+    },
+    {
+      "name": "cairo",
+      "archive": "cairo-1.16.0.tar.xz",
+      "source_dir": "cairo-1.16.0",
+      "license_files": [
+        "COPYING",
+        "COPYING-LGPL-2.1",
+        "COPYING-MPL-1.1"
+      ],
+      "configure_options": [
+        "--prefix=/usr",
+        "--libdir=/usr/lib",
+        "--enable-static",
+        "--disable-shared",
+        "--with-pic",
+        "--enable-ft",
+        "--enable-fc",
+        "--disable-png",
+        "--disable-xlib",
+        "--disable-xlib-xrender",
+        "--disable-xcb",
+        "--disable-xcb-shm",
+        "--disable-gl",
+        "--disable-glesv2",
+        "--disable-glesv3",
+        "--disable-egl",
+        "--disable-glx",
+        "--disable-wgl",
+        "--disable-quartz",
+        "--disable-quartz-font",
+        "--disable-win32",
+        "--disable-win32-font",
+        "--disable-pdf",
+        "--disable-ps",
+        "--disable-svg",
+        "--disable-script",
+        "--disable-interpreter",
+        "--disable-trace",
+        "--disable-gobject",
+        "--disable-gtk-doc",
+        "--disable-full-testing",
+        "--disable-symbol-lookup"
+      ]
+    }
+  ]
+}
