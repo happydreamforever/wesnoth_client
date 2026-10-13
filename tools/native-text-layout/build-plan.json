@@ -1,0 +1,113 @@
+{
+  "schema_version": 1,
+  "packages": [
+    {
+      "name": "fribidi",
+      "archive": "fribidi-1.0.17.tar.xz",
+      "source_dir": "fribidi-1.0.17",
+      "license_files": [
+        "COPYING",
+        "gen.tab/unidata/ReadMe.txt"
+      ],
+      "targets": [
+        "lib/libfribidi.a"
+      ],
+      "meson_options": [
+        "--prefix=/usr",
+        "--libdir=lib",
+        "--wrap-mode=nodownload",
+        "-Ddefault_library=static",
+        "-Db_staticpic=true",
+        "-Dbuildtype=release",
+        "-Doptimization=2",
+        "-Ddocs=false",
+        "-Dbin=false",
+        "-Dtests=false"
+      ],
+      "omitted_generated_files": {
+        "lib/fribidi-unicode-version.h": {
+          "sha256": "233250a4cc5aca756ed03416051f1e8d7082258794ed2139319c4d3b1a783d0e",
+          "bytes": 330
+        },
+        "lib/bidi-type.tab.i": {
+          "sha256": "6e57cb7129fdc9f9a6959e6345108a082b72d06ac59f8eea43ccc33e137fca30",
+          "bytes": 279751
+        },
+        "lib/joining-type.tab.i": {
+          "sha256": "351fcfb07c2a1b440a2761c03c740229ef3d7eeb9fa0ea6ec4db2b92ce0b5110",
+          "bytes": 193669
+        },
+        "lib/arabic-shaping.tab.i": {
+          "sha256": "5fe503532309a12beb9969f76fcded949a5ce93945c287cce1a6a49ad0589830",
+          "bytes": 6743
+        },
+        "lib/mirroring.tab.i": {
+          "sha256": "3131d917b1daf47491c80aba34501c59e69e07888603f0593e5e1b72a7700e1c",
+          "bytes": 40697
+        },
+        "lib/brackets.tab.i": {
+          "sha256": "f82d2807310ca6db49a6f7d4d7f003ca7499b67ad31392e3816877e6de7d02ba",
+          "bytes": 38780
+        },
+        "lib/brackets-type.tab.i": {
+          "sha256": "5f2b2dbabc3b4d6c26038eff0c4e0f79fa6255644b954a4efc5b63176a4c179b",
+          "bytes": 22390
+        }
+      }
+    },
+    {
+      "name": "pango",
+      "archive": "pango-1.50.14.tar.xz",
+      "source_dir": "pango-1.50.14",
+      "license_files": [
+        "COPYING"
+      ],
+      "targets": [
+        "pango/libpango-1.0.a",
+        "pango/libpangoft2-1.0.a",
+        "pango/libpangocairo-1.0.a"
+      ],
+      "meson_options": [
+        "--prefix=/usr",
+        "--libdir=lib",
+        "--wrap-mode=nodownload",
+        "-Ddefault_library=static",
+        "-Db_staticpic=true",
+        "-Dbuildtype=release",
+        "-Doptimization=2",
+        "-Dgtk_doc=false",
+        "-Dintrospection=disabled",
+        "-Dinstall-tests=false",
+        "-Dlibthai=disabled",
+        "-Dxft=disabled",
+        "-Dsysprof=disabled",
+        "-Dfontconfig=enabled",
+        "-Dfreetype=enabled",
+        "-Dcairo=enabled"
+      ],
+      "omitted_generated_files": {
+        "docs/Pango/func.VERSION_CHECK.html": {
+          "bytes": 5509,
+          "sha256": "b2dd43706ba83cbcb7507205c1aa4d08240c7ea4e72b6affbc245a37b2f15a74"
+        },
+        "docs/Pango/func.version_check.html": {
+          "bytes": 7530,
+          "sha256": "49e4a5d5151504d1636c381c5ec55b86c5b0aacef5b311d5b6d8d2c326ab3d09"
+        }
+      }
+    }
+  ],
+  "host_generator": {
+    "archive": "glib-2.82.1.tar.xz",
+    "source_dir": "glib-2.82.1",
+    "path": "gobject/glib-mkenums.in",
+    "bytes": 31426,
+    "sha256": "dcc4d88bcb3a32174c282dce96124ec96c867d2ec7a85a816a02223c1667e017",
+    "license": "LICENSES/GPL-2.0-or-later.txt"
+  },
+  "notes": [
+    "FriBidi release-generated Unicode14 tables/header are omitted only after exact hash checks; Meson regenerates from bundled Unicode18 inputs with native host C generators. Hand-authored arabic-misc.tab.i is retained.",
+    "Two unused generated Pango documentation pages collide on Windows; omit both after hash checks. No source code is omitted.",
+    "GLib host enum generator is owned by this stage, never installed into the previous GLib prefix. Only explicit static library targets are compiled; optional documentation, installed tests, introspection, LibThai, Xft and downloads are disabled."
+  ]
+}
