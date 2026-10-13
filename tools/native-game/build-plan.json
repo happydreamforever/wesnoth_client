@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "kind": "wesnoth-android-game-plan",
+  "package_name": "org.wesnoth.offline",
+  "version_name": "1.19.26",
+  "version_code": 1192600,
+  "activity": "org.wesnoth.offline.OfflineInitActivity",
+  "game_activity": "org.wesnoth.offline.OfflineGameActivity",
+  "abi": "x86_64",
+  "min_sdk": 23,
+  "target_sdk": 35,
+  "sdl_version": "3.4.2",
+  "strip_mode": "--strip-debug",
+  "native_libraries": [
+    "libmain.so",
+    "libSDL3.so",
+    "libSDL3_image.so",
+    "libSDL3_mixer.so",
+    "libc++_shared.so"
+  ],
+  "manifest_asset": "gamedata-files.jsonl",
+  "manifest_sha256": "d805fd055b263a5b09cd19576dc9df83c64e47bbcf7821cbb6550b686a74e53c",
+  "data_files": 26748,
+  "data_bytes": 726207542,
+  "obb_name": "main.1192600.org.wesnoth.offline.obb",
+  "sdl_archive": {
+    "name": "SDL3-3.4.2.tar.gz",
+    "bytes": 15575883,
+    "sha256": "ef39a2e3f9a8a78296c40da701967dd1b0d0d6e267e483863ce70f8a03b4050c"
+  }
+}
