@@ -1,7 +1,7 @@
 """Network source safety, native artifacts, generator reuse and receipt binding."""
 import importlib.util
 import io
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 import tarfile
 import tempfile
 import unittest
@@ -30,8 +30,9 @@ def fixture(repo):
     root = repo / 'build/android-network'
     plan_path = repo / 'tools/native-network/build-plan.json'; plan = N.B.read_json(plan_path)
     headers = {}
-    for index in range(153):
-        name = 'openssl/fixture' + str(index) + '.h'; content = ('header ' + str(index)).encode()
+    names = plan['public_header_paths']['openssl'] + plan['public_header_paths']['curl']
+    for index, name in enumerate(names):
+        content = ('header ' + str(index)).encode()
         write(root, 'prefix/include/' + name, content); headers[name] = N.pin(content)
     plan['public_headers'] = N.inventory_pin(headers)
     plan['licenses'] = {'openssl-LICENSE.txt': N.pin(b'complete OpenSSL license'), 'curl-COPYING': N.pin(b'complete curl license')}
@@ -73,6 +74,64 @@ class NetworkTests(unittest.TestCase):
         self.assertNotIn('tools/build_android_boost.py', inputs)
         self.assertNotIn('tools/build_android_icu.py', inputs)
 
+    def test_public_header_plan_retains_original_hashes(self):
+        plan = N.selected_inputs(REPO)[2]
+        self.assertEqual(plan['openssl_headers'], {'count': 141, 'sha256': 'd44dedfaad6ed6bc1deb66ab04e36a13676a8869617f5377f2cc9b89455e1579'})
+        self.assertEqual(plan['public_headers'], {'count': 153, 'sha256': 'cef1e52818ac64d2e22ddf4785fb6ff310087fadef2e7f3ac49e9ae70965f83e'})
+        self.assertEqual({name: len(paths) for name, paths in plan['public_header_paths'].items()}, {'openssl': 141, 'curl': 12})
+        self.assertEqual(plan['prefix_file_count'], 164)
+
+    def test_header_list_rejects_traversal_duplicates_wrong_case_and_omissions(self):
+        path = self.repo / 'tools/native-network/build-plan.json'; original = path.read_bytes()
+        for replacement in ('openssl/../outside.h', 'openssl/__DECC_INCLUDE_EPILOGUE.H', 'curl/aes.h', 'openssl/asn1.h', None):
+            with self.subTest(replacement=replacement):
+                plan = N.B.read_json(path); paths = plan['public_header_paths']['openssl']
+                if replacement is None: paths.pop(0)
+                else: paths[0] = replacement
+                paths.sort(); path.write_bytes(N.B.json_bytes(plan))
+                try:
+                    with self.assertRaisesRegex(N.BuildError, 'header paths'): N.selected_inputs(self.repo)
+                finally: path.write_bytes(original)
+
+    def test_explicit_headers_ignore_host_glob_rules_and_preserve_vms_sources(self):
+        names = N.selected_inputs(self.repo)[2]['public_header_paths']['openssl']
+        uppercase = ['openssl/__DECC_INCLUDE_EPILOGUE.H', 'openssl/__DECC_INCLUDE_PROLOGUE.H']
+        all_names = names + uppercase
+        posix = [name for name in all_names if PurePosixPath(name).match('*.h')]
+        windows = [name for name in all_names if PureWindowsPath(name).match('*.h')]
+        self.assertEqual(posix, names)
+        self.assertEqual(len(windows), 143)
+        self.assertEqual(set(windows) - set(posix), set(uppercase))
+        with tempfile.TemporaryDirectory(prefix='network explicit headers ') as tmp:
+            include = Path(tmp); records = {}
+            for name in all_names:
+                path = include / name; path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(('source ' + name).encode()); records[name] = N.B.fingerprint(path)
+            expected = N.inventory_pin({name: records[name] for name in names})
+            # The production selector must not enumerate suffixes, regardless
+            # of whether Python would apply Windows or POSIX glob semantics.
+            with patch.object(Path, 'glob', side_effect=AssertionError('unexpected glob')), \
+                 patch.object(Path, 'rglob', side_effect=AssertionError('unexpected recursive glob')):
+                actual = N.verify_public_headers(include, names, expected, 'Fixture headers')
+            self.assertEqual(actual, {name: records[name] for name in names})
+            self.assertEqual({name: N.B.fingerprint(include / name) for name in all_names}, records)
+
+    def test_explicit_missing_and_tampered_headers_still_rejected(self):
+        with tempfile.TemporaryDirectory(prefix='network missing header ') as tmp:
+            include = Path(tmp); path = include / 'openssl/aes.h'; path.parent.mkdir(); path.write_bytes(b'original')
+            expected = N.inventory_pin({'openssl/aes.h': N.B.fingerprint(path)})
+            path.write_bytes(b'changed')
+            with self.assertRaisesRegex(N.BuildError, 'differ'): N.verify_public_headers(include, ['openssl/aes.h'], expected, 'Fixture headers')
+            path.unlink()
+            with self.assertRaisesRegex(N.BuildError, 'missing'): N.verify_public_headers(include, ['openssl/aes.h'], expected, 'Fixture headers')
+
+    def test_unexpected_uppercase_header_in_prefix_is_rejected(self):
+        plan = N.selected_inputs(self.repo)[2]
+        path = self.root / 'prefix/include/openssl/__DECC_INCLUDE_EPILOGUE.H'
+        path.write_bytes(b'unexpected VMS-only header'); self.addCleanup(path.unlink)
+        with self.assertRaisesRegex(N.BuildError, 'Unexpected network prefix'): N.validate_prefix(self.root, plan)
+        self.assertEqual(path.read_bytes(), b'unexpected VMS-only header')
+
     def test_archive_traversal_link_duplicate_and_case_collision(self):
         for names, kind in [(['openssl-3.4.1/../outside'], tarfile.REGTYPE),
                             (['openssl-3.4.1/crypto/link'], tarfile.SYMTYPE),
@@ -102,7 +161,7 @@ class NetworkTests(unittest.TestCase):
 
     def test_header_license_and_metadata_rejected(self):
         plan = N.selected_inputs(self.repo)[2]
-        for relative, message in [('prefix/include/openssl/fixture0.h', 'headers'),
+        for relative, message in [('prefix/include/openssl/aes.h', 'headers'),
                                   ('prefix/share/licenses/wesnoth-network/curl-COPYING', 'license'),
                                   ('prefix/lib/pkgconfig/libcurl.pc', 'metadata')]:
             path = self.root / relative; old = path.read_bytes()
@@ -157,6 +216,8 @@ class NetworkTests(unittest.TestCase):
         path = self.repo / 'tools/native-network/configure-openssl.sh'; self.change(path, path.read_bytes() + b'\n# changed')
         self.assertNotEqual(original, N.generation_binding(self.repo, plan))
         changed = dict(plan, openssl_generated=plan['openssl_generated'] + ['unexpected.c'])
+        self.assertNotEqual(N.generation_binding(self.repo, plan), N.generation_binding(self.repo, changed))
+        changed = dict(plan, public_header_paths={'openssl': ['openssl/changed.h'], 'curl': []})
         self.assertNotEqual(N.generation_binding(self.repo, plan), N.generation_binding(self.repo, changed))
 
     def test_generation_missing_or_modified_state_refused(self):

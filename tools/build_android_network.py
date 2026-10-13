@@ -50,6 +50,15 @@ def selected_inputs(repo):
             or plan.get('public_headers', {}).get('count') != 153 or plan.get('prefix_file_count') != 164
             or len(plan.get('openssl_generated', [])) != 47):
         raise BuildError('Network recipe must retain the pinned libraries and generator route.')
+    header_paths = plan.get('public_header_paths', {})
+    if not isinstance(header_paths, dict) or set(header_paths) != {'openssl', 'curl'}:
+        raise BuildError('Network recipe requires explicit OpenSSL/curl public header paths.')
+    for component, count in (('openssl', 141), ('curl', 12)):
+        names = header_paths[component]
+        if (not isinstance(names, list) or len(names) != count
+                or any(not isinstance(name, str) or not re.fullmatch(component + r'/[A-Za-z0-9_-]+[.]h', name) for name in names)
+                or names != sorted(set(names)) or len({name.casefold() for name in names}) != count):
+            raise BuildError('Unsafe, duplicate or incomplete explicit network header paths.')
     for target, graph in plan['openssl_graph'].items():
         for field in ('sources', 'includes', 'defines'):
             names = graph[field]
@@ -177,11 +186,20 @@ def pkg_config_files():
     return result
 
 
+def verify_public_headers(include_root, names, expected, description):
+    # An explicit release list has identical semantics on Windows and POSIX.
+    # glob('*.h') additionally includes OpenSSL's two VMS-only .H files on Windows.
+    headers = {name: B.fingerprint(B.require_file(B.managed_path(include_root, name), description))
+               for name in names}
+    if inventory_pin(headers) != expected:
+        raise BuildError(description + ' differ from the pinned generated/development headers.')
+    return headers
+
+
 def validate_prefix(root, plan):
     prefix = root / 'prefix'
-    headers = {p.relative_to(prefix / 'include').as_posix(): B.fingerprint(p) for p in sorted((prefix / 'include').rglob('*.h'))}
-    if inventory_pin(headers) != plan['public_headers']:
-        raise BuildError('Installed network headers differ from the pinned generated/development headers.')
+    names = plan['public_header_paths']['openssl'] + plan['public_header_paths']['curl']
+    verify_public_headers(prefix / 'include', names, plan['public_headers'], 'Installed network headers')
     for name, data in pkg_config_files().items():
         if B.require_file(prefix / 'lib/pkgconfig' / name, 'Network metadata').read_bytes() != data:
             raise BuildError('Network development metadata differs or is not relocatable.')
@@ -230,7 +248,7 @@ def verify_receipt(repo):
 def generation_binding(repo, plan):
     return {'scripts': {name: B.fingerprint(repo / 'tools/native-network' / name)
                         for name in ('configure-openssl.sh', 'export-openssl.pl')},
-            'recipe': {name: plan[name] for name in ('configure_patch', 'openssl_graph', 'openssl_headers', 'openssl_generated')},
+            'recipe': {name: plan[name] for name in ('configure_patch', 'openssl_graph', 'openssl_headers', 'openssl_generated', 'public_header_paths')},
             'macro_flags': ['--target=x86_64-linux-android23', '-dM', '-E', '-x', 'c'],
             'ndk_revision': '26.3.11579264'}
 
@@ -245,9 +263,8 @@ def verify_generated(repo, root, plan):
         raise BuildError('OpenSSL generation area/recipe changed or interrupted. Preserve it before retrying.')
     if B.fingerprint(work / 'Configure') != plan['configure_patch']['after'] or B.read_json(work / 'portable-library-graph.json') != plan['openssl_graph']:
         raise BuildError('Existing OpenSSL patched Configure/source graph differs.')
-    headers = {p.relative_to(work / 'include').as_posix(): B.fingerprint(p) for p in sorted((work / 'include/openssl').glob('*.h'))}
-    if inventory_pin(headers) != plan['openssl_headers']:
-        raise BuildError('Existing generated OpenSSL public headers differ.')
+    verify_public_headers(work / 'include', plan['public_header_paths']['openssl'], plan['openssl_headers'],
+                          'Existing generated OpenSSL public headers')
     return True
 
 
@@ -290,8 +307,8 @@ def generate_openssl(repo, root, args, env, plan, ndk_tools):
     if (work / 'generated-targets.txt').read_text(encoding='utf-8').splitlines() != plan['openssl_generated']:
         raise BuildError('OpenSSL generated target list differs.')
     for name in plan['openssl_generated']: B.require_file(work / name, 'Generated OpenSSL input')
-    generated_headers = {p.relative_to(work / 'include').as_posix(): B.fingerprint(p) for p in sorted((work / 'include/openssl').glob('*.h'))}
-    if inventory_pin(generated_headers) != plan['openssl_headers']: raise BuildError('OpenSSL generated headers differ between recipe/platforms.')
+    verify_public_headers(work / 'include', plan['public_header_paths']['openssl'], plan['openssl_headers'],
+                          'OpenSSL generated public headers')
     state.write_bytes(B.json_bytes({'inputs': generation_binding(repo, plan), 'files': M.inventory(root, 'work')}))
     return work
 
