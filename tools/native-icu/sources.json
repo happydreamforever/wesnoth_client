@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "kind": "wesnoth-android-icu-sources",
+  "note": "A separate source pin for the ICU milestone, matching the installed Windows server ICU release. The original 23-archive manifest and completed native receipts remain unchanged. SHA256 and size match the official GitHub release asset metadata; no release signature is claimed.",
+  "archives": [
+    {
+      "package": "icu4c",
+      "version": "78.3",
+      "name": "icu4c-78.3-sources.tgz",
+      "source_dir": "icu",
+      "url": "https://github.com/unicode-org/icu/releases/download/release-78.3/icu4c-78.3-sources.tgz",
+      "bytes": 27977255,
+      "sha256": "3a2e7a47604ba702f345878308e6fefeca612ee895cf4a5f222e7955fabfe0c0"
+    }
+  ]
+}
