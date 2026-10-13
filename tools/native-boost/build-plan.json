@@ -1,0 +1,159 @@
+{
+  "bzip2_header": {
+    "bytes": 6240,
+    "sha256": "6ac62e811669598ee30c9e1c379b9e627f6ff17a5a3dc1e0b4fa8b8ea75e580d"
+  },
+  "bzip2_sources": [
+    "blocksort.c",
+    "huffman.c",
+    "crctable.c",
+    "randtable.c",
+    "compress.c",
+    "decompress.c",
+    "bzlib.c"
+  ],
+  "features": {
+    "context": "x86_64-sysv-elf-gas-fcontext",
+    "iostreams": [
+      "zlib",
+      "bzip2"
+    ],
+    "locale": "icu-only",
+    "process": "v2",
+    "thread": "pthread"
+  },
+  "kind": "wesnoth-android-boost-plan",
+  "libraries": {
+    "atomic": [
+      "src/lock_pool.cpp",
+      "src/find_address_sse2.cpp",
+      "src/find_address_sse41.cpp"
+    ],
+    "charconv": [
+      "src/from_chars.cpp",
+      "src/to_chars.cpp"
+    ],
+    "chrono": [
+      "src/chrono.cpp",
+      "src/process_cpu_clocks.cpp",
+      "src/thread_clock.cpp"
+    ],
+    "context": [
+      "src/asm/make_x86_64_sysv_elf_gas.S",
+      "src/asm/jump_x86_64_sysv_elf_gas.S",
+      "src/asm/ontop_x86_64_sysv_elf_gas.S",
+      "src/fcontext.cpp",
+      "src/posix/stack_traits.cpp"
+    ],
+    "coroutine": [
+      "src/posix/stack_traits.cpp",
+      "src/detail/coroutine_context.cpp",
+      "src/exceptions.cpp"
+    ],
+    "filesystem": [
+      "src/codecvt_error_category.cpp",
+      "src/exception.cpp",
+      "src/operations.cpp",
+      "src/directory.cpp",
+      "src/path.cpp",
+      "src/path_traits.cpp",
+      "src/portability.cpp",
+      "src/unique_path.cpp",
+      "src/utf8_codecvt_facet.cpp"
+    ],
+    "iostreams": [
+      "src/file_descriptor.cpp",
+      "src/mapped_file.cpp",
+      "src/zlib.cpp",
+      "src/gzip.cpp",
+      "src/bzip2.cpp"
+    ],
+    "locale": [
+      "src/encoding/codepage.cpp",
+      "src/shared/date_time.cpp",
+      "src/shared/format.cpp",
+      "src/shared/formatting.cpp",
+      "src/shared/generator.cpp",
+      "src/shared/iconv_codecvt.cpp",
+      "src/shared/ids.cpp",
+      "src/shared/localization_backend.cpp",
+      "src/shared/message.cpp",
+      "src/shared/mo_lambda.cpp",
+      "src/util/codecvt_converter.cpp",
+      "src/util/default_locale.cpp",
+      "src/util/encoding.cpp",
+      "src/util/info.cpp",
+      "src/util/locale_data.cpp",
+      "src/icu/boundary.cpp",
+      "src/icu/codecvt.cpp",
+      "src/icu/collator.cpp",
+      "src/icu/conversion.cpp",
+      "src/icu/date_time.cpp",
+      "src/icu/formatter.cpp",
+      "src/icu/formatters_cache.cpp",
+      "src/icu/icu_backend.cpp",
+      "src/icu/numeric.cpp"
+    ],
+    "process": [
+      "src/detail/environment_posix.cpp",
+      "src/detail/environment_win.cpp",
+      "src/detail/last_error.cpp",
+      "src/detail/process_handle_windows.cpp",
+      "src/detail/throw_error.cpp",
+      "src/detail/utf8.cpp",
+      "src/ext/cmd.cpp",
+      "src/ext/cwd.cpp",
+      "src/ext/env.cpp",
+      "src/ext/exe.cpp",
+      "src/ext/proc_info.cpp",
+      "src/posix/close_handles.cpp",
+      "src/windows/default_launcher.cpp",
+      "src/environment.cpp",
+      "src/error.cpp",
+      "src/pid.cpp",
+      "src/shell.cpp"
+    ],
+    "program_options": [
+      "src/cmdline.cpp",
+      "src/config_file.cpp",
+      "src/convert.cpp",
+      "src/options_description.cpp",
+      "src/parsers.cpp",
+      "src/positional_options.cpp",
+      "src/split.cpp",
+      "src/utf8_codecvt_facet.cpp",
+      "src/value_semantic.cpp",
+      "src/variables_map.cpp",
+      "src/winmain.cpp"
+    ],
+    "random": [
+      "src/random_device.cpp"
+    ],
+    "thread": [
+      "src/pthread/thread.cpp",
+      "src/pthread/once.cpp",
+      "src/future.cpp"
+    ]
+  },
+  "licenses": {
+    "boost": {
+      "bytes": 1338,
+      "sha256": "c9bff75738922193e67fa726fa225535870d2aa1059f91452c411736284ad566"
+    },
+    "bzip2": {
+      "bytes": 1896,
+      "sha256": "c6dbbf828498be844a89eaa3b84adbab3199e342eb5cb2ed2f0d4ba7ec0f38a3"
+    }
+  },
+  "public_headers": {
+    "count": 16010,
+    "sha256": "4e01742686f7076913b9aab61eb220f08c37522a082f1e4883c912e1b016e3fb"
+  },
+  "recipe": "cmake-selected-upstream-sources",
+  "schema_version": 1,
+  "source_inventory": {
+    "count": 16347,
+    "sha256": "d05aaa528432926e631b407c63318ede723775d3fbcaa0f4fd96cbb366797b72"
+  },
+  "version": "1.88.0"
+}
