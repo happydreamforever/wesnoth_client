@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "kind": "wesnoth-android-icu-plan",
+  "archive": "icu4c-78.3-sources.tgz",
+  "source_dir": "icu",
+  "version": "78.3",
+  "unicode_version": "17.0",
+  "recipe": "cmake-upstream-source-lists-linked-data",
+  "sources": {
+    "source/common/sources.txt": {
+      "bytes": 2782,
+      "sha256": "c9b33a6ae1fb56b39eff6d364404582768e21ae2262674a6b65b5a11380e7405"
+    },
+    "source/i18n/sources.txt": {
+      "bytes": 4242,
+      "sha256": "692f9f8714cf04f77296b5b27aa8d683dd0ec029ba5c8223c6c8c9212ddc72cc"
+    },
+    "source/data/in/icudt78l.dat": {
+      "bytes": 33107232,
+      "sha256": "d5cf2a40dccbe471781ec7af85693bff542ff12f0b670c9630c4e72d60714b8b"
+    },
+    "LICENSE": {
+      "bytes": 27718,
+      "sha256": "e55522d81edc687a341a4411e0776e54ca654e90147f354a90458aaced4116af"
+    }
+  },
+  "source_counts": {
+    "common": 202,
+    "i18n": 254
+  },
+  "static_libraries": [
+    "libicudata.a",
+    "libicuuc.a",
+    "libicui18n.a"
+  ],
+  "data_symbol": "icudt78_dat",
+  "data_alignment": 16,
+  "note": "Compile exactly the upstream common/i18n sources.txt lists; retain all public APIs including deprecated Normalizer for Boost.Locale. Embed the complete pinned little-endian release data via the NDK Clang integrated assembler; no host ICU generator, runtime file, network, system ICU or source mutation.",
+  "public_headers": {
+    "count": 203,
+    "sha256": "79266830943876147a5fd029bf8937ebd4aadaad429da8d5e88b3aaaf5edc304"
+  }
+}
