@@ -342,12 +342,14 @@ def build(repo, args):
     work = generate_openssl(repo, root, args, env, plan, ndk_tools)
     output = root / 'build'
     configure = M.cmake_arguments(args, ndk_tools, prefix, repo / 'tools/native-network', output) + ['-DOPENSSL_SOURCE=' + work.as_posix(), '-DCURL_SOURCE=' + (root / 'sources/curl-8.1.1').as_posix()]
+    # Retain compiler depfiles while Ninja still tracks included headers.
+    # This skips the deletion that hit a Windows file-sharing violation.
     M.run(configure + ['-DNETWORK_WITH_CURL=OFF'], env)
-    M.run([args.cmake, '--build', output, '--parallel', str(args.jobs)], env)
+    M.run([args.cmake, '--build', output, '--parallel', str(args.jobs), '--', '-d', 'keepdepfile'], env)
     M.run([args.cmake, '--install', output], env)
     save_prefix_state(root)
     M.run(configure + ['-DNETWORK_WITH_CURL=ON'], env)
-    M.run([args.cmake, '--build', output, '--parallel', str(args.jobs)], env)
+    M.run([args.cmake, '--build', output, '--parallel', str(args.jobs), '--', '-d', 'keepdepfile'], env)
     M.run([args.cmake, '--install', output], env)
     for name, content in pkg_config_files().items(): (prefix / 'lib/pkgconfig' / name).write_bytes(content)
     runtime = B.require_file(repo / 'build/android-fonts/prefix/lib/libc++_shared.so', 'Verified fonts runtime')

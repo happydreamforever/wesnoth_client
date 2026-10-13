@@ -1,4 +1,5 @@
 """Network source safety, native artifacts, generator reuse and receipt binding."""
+from contextlib import ExitStack
 import importlib.util
 import io
 from pathlib import Path, PurePosixPath, PureWindowsPath
@@ -246,6 +247,94 @@ class NetworkTests(unittest.TestCase):
                 with self.assertRaisesRegex(N.BuildError, 'generation area'): N.build(repo, args)
             self.assertEqual(receipt.read_bytes(), b'previous completed receipt')
             self.assertEqual((work / 'user-file').read_bytes(), b'preserve changed source')
+
+    def run_build_phases(self, failing_phase=None):
+        """Exercise build orchestration around an existing owned generation.
+
+        Compiler processes are simulated; real prefix, generation and receipt
+        validators run against the ELF/header fixture. Partial native output
+        and its depfile must survive both successful and failed invocations.
+        """
+        from types import SimpleNamespace
+        with tempfile.TemporaryDirectory(prefix='network build phases ') as tmp:
+            repo = Path(tmp) / 'repo'; repo.mkdir(); root, _ = fixture(repo)
+            profile, inputs, plan, pins = N.selected_inputs(repo)
+            plan['source_inventories'] = {name: N.inventory_pin({}) for name in N.ARCHIVES.values()}
+            marker = {'schema_version': 1, 'kind': N.KIND, 'profile': profile, 'archives': pins, 'source_files': {}}
+            (root / N.MARKER).write_bytes(N.B.json_bytes(marker))
+            work = root / 'work/openssl-3.4.1'; (work / 'include/openssl').mkdir(parents=True)
+            (work / 'Configure').write_bytes(b'fixture patched Configure')
+            plan['configure_patch']['after'] = N.B.fingerprint(work / 'Configure')
+            records = {}
+            for name in plan['public_header_paths']['openssl']:
+                path = work / 'include' / name
+                path.write_bytes((root / 'prefix/include' / name).read_bytes())
+                records[name] = N.B.fingerprint(path)
+            plan['openssl_headers'] = N.inventory_pin(records)
+            (work / 'portable-library-graph.json').write_bytes(N.B.json_bytes(plan['openssl_graph']))
+            generation = {'inputs': N.generation_binding(repo, plan), 'files': N.M.inventory(root, 'work')}
+            (root / '.generated-state.json').write_bytes(N.B.json_bytes(generation))
+            output = root / 'build'; output.mkdir()
+            protected = {'build/partial.o': b'previous object bytes',
+                         'build/partial.o.d': b'partial.o: original-source.c included-header.h\n',
+                         '.generated-state.json': (root / '.generated-state.json').read_bytes()}
+            for name, content in protected.items(): (root / name).write_bytes(content)
+            (output / 'probe.map').write_text('\n'.join(name + '(fixture.o)' for name in N.REQUIRED_ARCHIVES))
+            runtime = repo / 'build/android-fonts' / N.F.ARTIFACTS[1]
+            args = SimpleNamespace(ndk=repo / 'unused ndk', cmake=repo / 'native tools/cmake',
+                                   ninja=repo / 'native tools/ninja', jobs=3)
+            ndk = {'runtime': runtime, 'cmake_toolchain': repo / 'unused ndk/android.toolchain.cmake'}
+            calls, phases = [], []
+
+            def run(arguments, env):
+                argv = [str(value) for value in arguments]; calls.append(argv)
+                self.assertEqual(argv[0], str(args.cmake), 'generation must be reused, with no Bash/Make rerun')
+                if '--build' in argv:
+                    phase = sum(event == 'build' for event in phases) + 1
+                    phases.append('build')
+                    self.assertEqual(argv, [str(args.cmake), '--build', str(output), '--parallel', '3', '--', '-d', 'keepdepfile'])
+                    if phase == failing_phase: raise N.BuildError('simulated native build failure')
+                elif '--install' in argv: phases.append('install')
+                elif '-DNETWORK_WITH_CURL=OFF' in argv: phases.append('configure-openssl')
+                elif '-DNETWORK_WITH_CURL=ON' in argv: phases.append('configure-curl')
+                else: self.fail('Unexpected native command: ' + repr(argv))
+                return ''
+
+            with ExitStack() as stack:
+                for owner, name, options in [
+                    (N, 'selected_inputs', {'return_value': (profile, inputs, plan, pins)}),
+                    (N.M, 'archive_data', {'return_value': b'fixture archive'}),
+                    (N, 'archive_files', {'return_value': {}}),
+                    (N.B, 'ndk_paths', {'return_value': ndk}),
+                    (N.B, 'check_tools', {'return_value': {'host': 'fixture'}}),
+                    (N.M, 'run', {'side_effect': run}),
+                ]: stack.enter_context(patch.object(owner, name, **options))
+                if failing_phase is None:
+                    result = N.build(repo, args)
+                    self.assertEqual(result['device_executed'], False)
+                    self.assertTrue((root / 'receipt.json').is_file())
+                else:
+                    with self.assertRaisesRegex(N.BuildError, 'simulated native build failure'): N.build(repo, args)
+                    self.assertFalse((root / 'receipt.json').exists(), 'a failed build must not leave a success receipt')
+            self.assertEqual(N.M.inventory(root, 'work'), generation['files'])
+            for name, content in protected.items(): self.assertEqual((root / name).read_bytes(), content, name)
+            self.assertEqual(N.generation_binding(repo, plan), generation['inputs'])
+            return phases
+
+    def test_both_native_build_phases_keep_depfiles_and_reuse_generation(self):
+        self.assertEqual(self.run_build_phases(), ['configure-openssl', 'build', 'install', 'configure-curl', 'build', 'install'])
+
+    def test_failed_first_build_preserves_partial_files_and_stops_before_install(self):
+        self.assertEqual(self.run_build_phases(failing_phase=1), ['configure-openssl', 'build'])
+
+    def test_failed_second_build_stops_before_final_install_and_receipt(self):
+        self.assertEqual(self.run_build_phases(failing_phase=2), ['configure-openssl', 'build', 'install', 'configure-curl', 'build'])
+
+    def test_build_script_change_does_not_invalidate_generation_binding(self):
+        plan = N.selected_inputs(self.repo)[2]; original = N.generation_binding(self.repo, plan)
+        path = self.repo / 'tools/build_android_network.py'
+        self.change(path, path.read_bytes() + b'\n# native build invocation adjustment\n')
+        self.assertEqual(N.generation_binding(self.repo, plan), original)
 
     def test_generation_reuse_never_runs_configure(self):
         from types import SimpleNamespace
