@@ -4,7 +4,7 @@ param(
     [ValidatePattern('^[A-Za-z0-9][A-Za-z0-9._:-]*$')][string]$Serial = '127.0.0.1:5555',
     [string]$AdbPath = (Join-Path $env:LOCALAPPDATA 'Android\Sdk\platform-tools\adb.exe'),
     [string]$PythonPath = (Join-Path $env:LOCALAPPDATA 'Programs\Python\Python314\python.exe'),
-    [string]$DataRoot = (Join-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) 'gamedata-1.19.26')
+    [string]$DataRoot = ''
 )
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path $PSScriptRoot -Parent
@@ -72,6 +72,11 @@ function Invoke-SelectedAdb([string[]]$Arguments) {
 }
 try {
     if ($env:OS -ne 'Windows_NT') { throw 'Run this helper on the Windows computer with LDPlayer open.' }
+    # Windows PowerShell can bind defaults before PSScriptRoot is available.
+    # Resolve the optional sibling path in the script body and keep overrides.
+    if ([string]::IsNullOrEmpty($DataRoot)) {
+        $DataRoot = Join-Path (Split-Path $repoRoot -Parent) 'gamedata-1.19.26'
+    }
     $verifier = Join-Path $PSScriptRoot 'build_android_text_render.py'
     foreach ($file in @($PythonPath, $AdbPath, $verifier)) {
         if (-not (Test-Path -LiteralPath $file -PathType Leaf) -or (Get-Item -LiteralPath $file -Force).Length -eq 0) {

@@ -142,7 +142,7 @@ class TextRenderWrapperTests(unittest.TestCase):
         self.config = {"calls": str(self.base / "calls.jsonl"), "receipt": str(self.receipt), "runtime_output": SUCCESS}
         self.config_path = self.base / "fixture.json"
 
-    def run_wrapper(self, build=False, archive=None, serial="127.0.0.1:5555", data_default=False):
+    def run_wrapper(self, build=False, archive=None, serial="127.0.0.1:5555", data_default=False, direct=False):
         font_before = {name: (self.data / name).read_bytes() for name in FONT_FILES if (self.data / name).is_file()}
         self.config_path.write_text(json.dumps(self.config))
         Path(self.config["calls"]).unlink(missing_ok=True)
@@ -157,8 +157,11 @@ class TextRenderWrapperTests(unittest.TestCase):
         after = self.base / "after.json"
         capture = "@{ PATH=$env:PATH; MSYSTEM=$env:MSYSTEM; BASH_ENV=$env:BASH_ENV; ENV=$env:ENV } | ConvertTo-Json | Set-Content -LiteralPath "
         launcher = self.base / "launcher.ps1"
+        invocation = ps_string(script)
+        if direct:
+            invocation = ps_string(PWSH) + " -NoLogo -NoProfile -File " + invocation
         launcher.write_text("$ErrorActionPreference='Stop'\n" + capture + ps_string(before)
-                            + "\n$result=2\ntry { & " + ps_string(script) + " "
+                            + "\n$result=2\ntry { & " + invocation + " "
                             + " ".join(args[i] + " " + ps_string(args[i + 1]) for i in range(0, len(args), 2))
                             + "\n$result=$LASTEXITCODE } catch { Write-Host $_.Exception.Message }\n"
                             + capture + ps_string(after) + "\nexit $result\n")
@@ -166,7 +169,7 @@ class TextRenderWrapperTests(unittest.TestCase):
                    TEXT_RENDER_FIXTURE=str(self.config_path), MSYSTEM="PARENT_UNCHANGED",
                    BASH_ENV="parent startup hook", ENV="parent other hook")
         result = subprocess.run([PWSH, "-NoLogo", "-NoProfile", "-File", str(launcher)],
-                                capture_output=True, text=True, env=env, timeout=25)
+                                capture_output=True, text=True, env=env, cwd=self.base, timeout=25)
         self.output = result.stdout + result.stderr
         calls = Path(self.config["calls"])
         self.calls = [json.loads(line) for line in calls.read_text().splitlines()] if calls.exists() else []
@@ -278,6 +281,44 @@ class TextRenderWrapperTests(unittest.TestCase):
         self.assertEqual(self.run_wrapper(data_default=True), 0, self.output)
         pushes = [call["args"][7] for call in self.calls if call["tool"] == "adb.exe" and len(call["args"]) > 6 and call["args"][6] == "push"]
         self.assertEqual(pushes, [str(self.artifact)] + [str(self.data / name) for name in FONT_FILES])
+
+    def test_direct_file_default_game_data_is_independent_of_current_directory(self):
+        self.assertEqual(self.run_wrapper(data_default=True, direct=True), 0, self.output)
+        pushes = [call["args"][7] for call in self.calls if call["tool"] == "adb.exe" and len(call["args"]) > 6 and call["args"][6] == "push"]
+        self.assertEqual(pushes, [str(self.artifact)] + [str(self.data / name) for name in FONT_FILES])
+        self.assertTrue(all(call["cwd"] == str(self.repo) for call in self.calls))
+        self.assertIn("ANDROID TEXT RENDER TEST PASSED", self.output)
+
+    def test_explicit_game_data_path_is_preserved(self):
+        alternate = self.base / "explicit data with spaces"
+        shutil.copytree(self.data, alternate)
+        self.data = alternate
+        self.assertEqual(self.run_wrapper(direct=True), 0, self.output)
+        pushes = [call["args"][7] for call in self.calls if call["tool"] == "adb.exe" and len(call["args"]) > 6 and call["args"][6] == "push"]
+        self.assertEqual(pushes, [str(self.artifact)] + [str(alternate / name) for name in FONT_FILES])
+
+    def test_parameter_binding_does_not_require_script_root(self):
+        # Windows PowerShell 5.1 returned an empty PSScriptRoot while binding
+        # the default under -File. Isolate that binding context on any host;
+        # the full direct-file fixture separately checks body initialization.
+        launcher = self.base / "bind without script root.ps1"
+        launcher.write_text(
+            "$ErrorActionPreference='Stop'\n"
+            "$tokens=$null; $errors=$null\n"
+            "$ast=[System.Management.Automation.Language.Parser]::ParseFile("
+            + ps_string(self.repo / "tools" / TEST) + ", [ref]$tokens, [ref]$errors)\n"
+            "if ($errors.Count) { throw 'Helper failed to parse.' }\n"
+            "$binding=[scriptblock]::Create($ast.ParamBlock.Extent.Text + "
+            "\"`nif (-not [string]::IsNullOrEmpty(`$DataRoot)) { throw 'Unexpected default.' }"
+            "`n'PARAMETER BINDING PASSED'\")\n"
+            "$PSScriptRoot=''\n"
+            "& $binding -AdbPath 'unused adb' -PythonPath 'unused python'\n")
+        result = subprocess.run([PWSH, "-NoLogo", "-NoProfile", "-File", str(launcher)],
+                                capture_output=True, text=True, cwd=self.base, timeout=10)
+        output = result.stdout + result.stderr
+        self.assertEqual(result.returncode, 0, output)
+        self.assertIn("PARAMETER BINDING PASSED", output)
+        self.assertFalse(Path(self.config["calls"]).exists())
 
     def test_each_changed_font_or_notice_stops_before_adb(self):
         for name in FONT_FILES:
