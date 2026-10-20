@@ -171,7 +171,8 @@ class AccountClientResponseTests(unittest.TestCase):
         self.assertTrue(result.stderr == b"", "Response probe unexpectedly wrote stderr.")
         output = json.loads(result.stdout)
         self.assertEqual(set(output), {"ok", "error_code", "has_token",
-                                      "has_profile", "level", "elapsed_ms"})
+                                      "has_profile", "level", "elapsed_ms", "area_count", "team_count",
+                                      "has_next", "has_team", "member_count", "team_level"})
         for secret in (request.get("password"), request.get("token")):
             if secret:
                 self.assertTrue(secret.encode("utf-8") not in result.stdout + result.stderr,
@@ -191,7 +192,7 @@ class AccountClientResponseTests(unittest.TestCase):
         self.assertIsNone(state["error"], "Disposable peer failed.")
         self.assertIsNotNone(state["request"], "Peer did not receive a verified account request.")
         self.assertEqual(set(state["request"]), {"v", "id", "op", "body"}
-                         | ({"token"} if request["operation"] in ("me", "logout") else set()))
+                         | ({"token"} if request["operation"] not in ("register", "login") else set()))
         return output, state["request"]
 
     def rejects(self, change):
@@ -204,6 +205,222 @@ class AccountClientResponseTests(unittest.TestCase):
         self.assertEqual(output["error_code"], "protocol")
         self.assertFalse(output["has_token"])
         self.assertFalse(output["has_profile"])
+
+    @staticmethod
+    def team_request(operation, **fields):
+        return {"operation": operation, "token": "b" * 43, **fields}
+
+    @classmethod
+    def team_detail(cls):
+        return {"id": "abcdef01-1234-4321-8765-0123456789ab", "name": "Test Team",
+                "area_id": "area-1", "area_name": "Area One",
+                "captain_id": cls.account()["id"], "level": 1, "experience": 0,
+                "rating": 1000, "capacity": 8,
+                "members": [{"id": cls.account()["id"], "username": "ResponseUser",
+                             "unit_type": "Spearman", "level": 1}]}
+
+    @staticmethod
+    def team_reply(data, status=200):
+        return lambda request: {"v": 1, "id": request["id"], "ok": True,
+                                "status": status, "data": data}
+
+    def team_rejects(self, operation, data, **fields):
+        output, _ = self.exercise(self.team_reply(data, 201 if operation == "create_team" else 200),
+                                  self.team_request(operation, **fields))
+        self.assertFalse(output["ok"])
+        self.assertEqual(output["error_code"], "protocol")
+        self.assertFalse(output["has_team"])
+        self.assertFalse(output["has_token"])
+
+    def test_team_operations_shape_and_exact_request_bodies(self):
+        team = self.team_detail()
+        summary = {key: value for key, value in team.items()
+                   if key not in ("capacity", "members", "area_name")}
+        summary["member_count"] = 1
+        cases = [
+            ("areas", {}, {"after": ""}, {"areas": [{"id": "area-1", "name": "Area One"}], "next": ""}),
+            ("teams", {"area_id": "area-1"}, {"area_id": "area-1", "after": ""}, {"teams": [summary], "next": ""}),
+            ("my_team", {}, {}, {"team": None}),
+            ("my_team", {}, {}, {"team": team}),
+            ("create_team", {"name": "Test Team", "area_id": "area-1"},
+             {"name": "Test Team", "area_id": "area-1"}, {"team": team}),
+            ("team_detail", {"team_id": team["id"]}, {"team_id": team["id"]}, {"team": team}),
+        ]
+        for operation, fields, body, data in cases:
+            with self.subTest(operation=operation, no_team=data.get("team", True) is None):
+                output, received = self.exercise(
+                    self.team_reply(data, 201 if operation == "create_team" else 200),
+                    self.team_request(operation, **fields))
+                self.assertTrue(output["ok"])
+                self.assertEqual(received["body"], body)
+                self.assertTrue(received["token"] == "b" * 43)
+                self.assertFalse(output["has_token"])
+                self.assertFalse(output["has_profile"])
+                self.assertEqual(output["has_team"], data.get("team") is not None)
+                self.assertEqual(output["member_count"], 1 if data.get("team") else 0)
+
+    def test_team_pagination_maximum_next_and_empty_final_page(self):
+        page = [{"id": "area-" + str(i).zfill(3), "name": "Area " + str(i)} for i in range(20)]
+        output, _ = self.exercise(self.team_reply({"areas": page, "next": page[-1]["id"]}),
+                                  self.team_request("areas"))
+        self.assertTrue(output["ok"])
+        self.assertEqual(output["area_count"], 20)
+        self.assertTrue(output["has_next"])
+        output, received = self.exercise(self.team_reply({"areas": [], "next": ""}),
+                                        self.team_request("areas", after=page[-1]["id"]))
+        self.assertTrue(output["ok"])
+        self.assertEqual(received["body"]["after"], page[-1]["id"])
+        self.assertFalse(output["has_next"])
+
+    def test_invalid_pages_rejected_including_duplicated_reordered_and_stale_cursor(self):
+        page = [{"id": "area-" + str(i).zfill(3), "name": "Area " + str(i)} for i in range(21)]
+        for data, after in [
+            ({"areas": page, "next": ""}, ""),
+            ({"areas": page[:1] * 2, "next": ""}, ""),
+            ({"areas": list(reversed(page[:2])), "next": ""}, ""),
+            ({"areas": page[:1], "next": "area-000"}, ""),
+            ({"areas": page[:20], "next": "wrong"}, ""),
+            ({"areas": page[:20], "next": "x" * 65}, ""),
+            ({"areas": [], "next": "bad/"}, ""),
+            ({"areas": page[:1], "next": ""}, "area-000"),
+            ({"areas": page[:1], "next": "", "extra": 1}, ""),
+            ({"areas": [{"id": "area-1", "name": "<b>Area</b>"}], "next": ""}, ""),
+            ({"areas": [{"id": "area-1", "name": "Area\nOther"}], "next": ""}, ""),
+            ({"areas": [{"id": "area-1", "name": "Area ", "extra": 1}], "next": ""}, ""),
+        ]:
+            self.team_rejects("areas", data, after=after)
+
+    def test_team_detail_rejects_malformed_rosters_and_unbounded_numbers(self):
+        import copy
+        changes = [
+            lambda team: team.update(capacity=9),
+            lambda team: team.update(capacity=True),
+            lambda team: team.update(members=[]),
+            lambda team: team.update(members=team["members"] * 9),
+            lambda team: team.update(members=team["members"] * 2),
+            lambda team: team.update(captain_id="abcdef01-1234-4321-8765-0123456789ab"),
+            lambda team: team.update(level=0),
+            lambda team: team.update(experience=-1),
+            lambda team: team.update(experience=2147483648),
+            lambda team: team.update(rating=-2147483649),
+            lambda team: team.update(id="invalid"),
+            lambda team: team.update(area_id="area/1"),
+            lambda team: team.update(area_name="Area <1>"),
+            lambda team: team.update(name="Test Team\nFake"),
+            lambda team: team.update(private_requests=["secret"]),
+            lambda team: team["members"][0].update(username="<b>Bad</b>"),
+            lambda team: team["members"][0].update(unit_type="Spearman\nOther"),
+            lambda team: team["members"][0].update(level=4),
+            lambda team: team["members"][0].update(id="bad"),
+            lambda team: team["members"][0].update(password_hash="hidden"),
+        ]
+        for change in changes:
+            team = copy.deepcopy(self.team_detail())
+            change(team)
+            self.team_rejects("my_team", {"team": team})
+        self.team_rejects("team_detail", {"team": None}, team_id=self.team_detail()["id"])
+        self.team_rejects("team_detail", {"team": self.team_detail()},
+                          team_id="eeeeeeee-1234-4321-8765-0123456789ab")
+        self.team_rejects("create_team", {"team": self.team_detail()},
+                          name="Wrong Team", area_id="area-1")
+
+    def test_team_list_page_shape_area_scope_and_bounds(self):
+        import copy
+        team = self.team_detail()
+        base = {key: value for key, value in team.items()
+                if key not in ("capacity", "members", "area_name")}
+        base["member_count"] = 1
+        page = []
+        for i in range(20):
+            entry = copy.deepcopy(base)
+            entry["id"] = f"{i:08x}-1234-4321-8765-0123456789ab"
+            page.append(entry)
+        output, _ = self.exercise(self.team_reply({"teams": page, "next": page[-1]["id"]}),
+                                  self.team_request("teams", area_id="area-1"))
+        self.assertTrue(output["ok"])
+        self.assertEqual(output["team_count"], 20)
+        self.assertTrue(output["has_next"])
+        changes = [lambda item: item.update(area_id="other-area"),
+                   lambda item: item.update(member_count=0),
+                   lambda item: item.update(member_count=9),
+                   lambda item: item.update(member_count=True),
+                   lambda item: item.update(level=-1),
+                   lambda item: item.update(rating=2147483648),
+                   lambda item: item.update(captain_id="bad"),
+                   lambda item: item.update(name="Bad <markup>"),
+                   lambda item: item.update(members=[])]
+        for change in changes:
+            entry = copy.deepcopy(base)
+            change(entry)
+            self.team_rejects("teams", {"teams": [entry], "next": ""}, area_id="area-1")
+        for entries in (page + [base], [base, base], list(reversed(page))):
+            self.team_rejects("teams", {"teams": entries, "next": ""}, area_id="area-1")
+        self.team_rejects("teams", {"teams": [base], "next": ""},
+                          area_id="area-1", after=base["id"])
+
+    def test_full_roster_and_numeric_boundaries_accepted(self):
+        team = self.team_detail()
+        team.update(level=2147483647, experience=2147483647, rating=-2147483648)
+        for i in range(7):
+            team["members"].append({"id": f"{i:08x}-1234-4321-8765-0123456789ab",
+                                    "username": "Other" + str(i), "unit_type": "Spearman", "level": 3})
+        output, _ = self.exercise(self.team_reply({"team": team}), self.team_request("my_team"))
+        self.assertTrue(output["ok"])
+        self.assertEqual(output["member_count"], 8)
+        self.assertEqual(output["team_level"], 2147483647)
+
+    def test_team_error_does_not_mean_expired_login_except_401(self):
+        for status, code, expected in [(403, "forbidden", "forbidden"),
+                                       (403, "suspended", "forbidden"),
+                                       (401, "forbidden", "invalid_session"),
+                                       (409, "already_member", "already_member"),
+                                       (409, "conflict", "conflict"),
+                                       (404, "not_found", "not_found"),
+                                       (400, "busy", "busy"),
+                                       (503, "unrecognized", "team_failed"),
+                                       (503, "invalid_session", "team_failed")]:
+            def responder(request):
+                return {"v": 1, "id": request["id"], "ok": False, "status": status,
+                        "data": {"code": code, "message": "server-secret-must-not-be-reflected"}}
+            output, _ = self.exercise(responder, self.team_request("my_team"))
+            self.assertFalse(output["ok"])
+            self.assertEqual(output["error_code"], expected)
+
+    def test_invalid_team_requests_rejected_before_connect(self):
+        requests = [
+            self.team_request("areas", after="bad/"),
+            self.team_request("areas", after="a" * 65),
+            self.team_request("areas", name="Unused"),
+            self.team_request("areas", username="Unused"),
+            self.team_request("my_team", team_id=self.team_detail()["id"]),
+            self.team_request("my_team", after="area-1"),
+            self.team_request("teams"),
+            self.team_request("teams", area_id="../area"),
+            self.team_request("team_detail", team_id="not-a-uuid"),
+            self.team_request("create_team", area_id="area-1", name="x"),
+            self.team_request("create_team", area_id="area-1", name="A" * 41),
+            self.team_request("create_team", area_id="area-1", name=" Bad"),
+            self.team_request("create_team", area_id="area-1", name="Bad "),
+            self.team_request("create_team", area_id="area-1", name="<b>Bad</b>"),
+            {**self.team_request("my_team"), "token": "bad"},
+            {**self.login_request(), "name": "Unused"},
+        ]
+        for request in requests:
+            with self.peer() as (port, state):
+                output = self.invoke(self.profile(port), request)
+            self.assertFalse(output["ok"])
+            self.assertEqual(output["error_code"], "invalid_input")
+            self.assertEqual(state["connections"], 0)
+            self.assertIsNone(state["error"])
+
+    def test_team_creation_cancel_and_malformed_ack_never_retry(self):
+        request = self.team_request("create_team", area_id="area-1", name="Test Team")
+        request["cancel_after_ms"] = 700
+        output, _ = self.exercise(request=request, stall=True)
+        self.assertFalse(output["ok"])
+        self.assertEqual(output["error_code"], "cancelled")
+        self.assertLess(output["elapsed_ms"], 3000)
+        self.team_rejects("create_team", {"team": {}}, area_id="area-1", name="Test Team")
 
     def test_positive_login_and_unicode_password_cross_language_wire(self):
         request = self.login_request()

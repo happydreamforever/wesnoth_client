@@ -211,7 +211,7 @@ bool request(const alliance::TrustedProfile& profile, account::Request& input,
 void show_failure(const account::Reply& reply)
 {
     if(reply.error_code == "invalid_session" || reply.error_code == "unauthorized" ||
-       reply.error_code == "forbidden" || reply.error_code == "session_expired" ||
+       reply.error_code == "session_expired" ||
        reply.error_code == "account_unavailable") {
         current_session().clear();
     }
@@ -343,6 +343,228 @@ void refresh(const alliance::TrustedProfile& profile)
     message(profile_text(current_session().profile));
 }
 
+// Reuse the existing edit_text layout without registering fields or history.
+class TeamNameDialog final : public gui2::dialogs::modal_dialog {
+public:
+    explicit TeamNameDialog(std::string& name) : modal_dialog("edit_text"), name_(name)
+    {
+        set_allow_plugin_skip(false);
+    }
+private:
+    const std::string& window_id() const override
+    {
+        static const std::string id("edit_text");
+        return id;
+    }
+    void pre_show() override
+    {
+        auto& title = find_widget<gui2::label>("title");
+        title.set_use_markup(false);
+        title.set_label("Create a team");
+        auto& label = find_widget<gui2::label>("label");
+        label.set_use_markup(false);
+        label.set_label("Name (3–40 characters):\nLetters, digits, spaces, _ or -");
+        auto& input = find_widget<gui2::text_box>("text");
+        input.set_max_input_length(40);
+        input.set_value(name_);
+        keyboard_capture(&input);
+        add_to_tab_order(&input);
+        find_widget<gui2::button>("ok").set_label("Continue");
+    }
+    void post_show() override
+    {
+        auto& input = find_widget<gui2::text_box>("text");
+        if(get_retval() == gui2::retval::OK) name_ = input.get_value();
+        input.set_value("");
+    }
+    std::string& name_;
+};
+
+bool team_request(const alliance::TrustedProfile& profile, account::Request input,
+                  const std::string& action, account::Reply& output)
+{
+    input.token = current_session().token;
+    if(!request(profile, input, action, output)) return false;
+    if(!output.ok) {
+        show_failure(output);
+        return false;
+    }
+    return true;
+}
+
+int select(const std::string& title, const std::string& description,
+           const std::vector<std::string>& items)
+{
+    gui2::dialogs::simple_item_selector menu(title, description, items, false, false);
+    menu.set_allow_plugin_skip(false);
+    menu.set_selected_index(0);
+    menu.set_ok_label("Open");
+    menu.set_cancel_label("Back");
+    return menu.show() ? menu.selected_index() : -1;
+}
+
+// Each page is fetched afresh. Only cursors are kept for Previous page, and all
+// server-provided display strings have already passed the strict text schema.
+bool choose_area(const alliance::TrustedProfile& profile, account::Area& selected)
+{
+    std::vector<std::string> cursors{std::string{}};
+    while(!current_session().token.empty()) {
+        account::Request input;
+        input.operation = "areas";
+        input.after = cursors.back();
+        account::Reply output;
+        if(!team_request(profile, input, "Loading areas…", output)) return false;
+        std::vector<std::string> rows;
+        for(const auto& area : output.areas) rows.push_back(area.name);
+        const int previous = cursors.size() > 1 ? static_cast<int>(rows.size()) : -1;
+        if(previous >= 0) rows.push_back("Previous page");
+        const int more = output.next.empty() ? -1 : static_cast<int>(rows.size());
+        if(more >= 0) rows.push_back("More areas");
+        if(rows.empty()) {
+            message("No enabled areas are available. Ask the Windows administrator to create an area.");
+            return false;
+        }
+        const int choice = select("Choose an area", "Teams are grouped by area.", rows);
+        if(choice < 0) return false;
+        if(choice == previous) { cursors.pop_back(); continue; }
+        if(choice == more) { cursors.push_back(output.next); continue; }
+        if(static_cast<std::size_t>(choice) < output.areas.size()) {
+            selected = output.areas[choice];
+            return true;
+        }
+    }
+    return false;
+}
+
+std::string team_text(const account::Team& team)
+{
+    std::string text = "Team: " + team.name + "\nTeam ID: " + team.id +
+        "\nArea: " + team.area_name + "\nArea ID: " + team.area_id +
+        "\n\nTeam level: " + std::to_string(team.level) +
+        "\nTeam experience: " + std::to_string(team.experience) +
+        "\nRating: " + std::to_string(team.rating) +
+        "\nMembers: " + std::to_string(team.members.size()) + "/" + std::to_string(team.capacity) +
+        "\n\nRoster:";
+    for(const auto& member : team.members) {
+        text += "\n" + member.username;
+        if(member.id == team.captain_id) text += " (captain)";
+        text += " — " + member.unit_type + ", leader level " + std::to_string(member.level);
+    }
+    text += "\n\nTeam experience is separate from personal leader experience.\n"
+            "Joining teams and team battles will be added in a later update.";
+    return text;
+}
+
+void my_team(const alliance::TrustedProfile& profile)
+{
+    account::Request input;
+    input.operation = "my_team";
+    account::Reply output;
+    if(!team_request(profile, input, "Loading your team…", output)) return;
+    message(output.team ? team_text(*output.team) :
+        "You do not belong to a team yet. Choose Create team to become its captain.\n"
+        "Joining another team will be added in a later update.");
+}
+
+void browse_teams(const alliance::TrustedProfile& profile, const account::Area& area)
+{
+    std::vector<std::string> cursors{std::string{}};
+    while(!current_session().token.empty()) {
+        account::Request input;
+        input.operation = "teams";
+        input.area_id = area.id;
+        input.after = cursors.back();
+        account::Reply output;
+        if(!team_request(profile, input, "Loading teams…", output)) return;
+        std::vector<std::string> rows;
+        for(const auto& team : output.teams) {
+            rows.push_back(team.name + " — team level " + std::to_string(team.level) +
+                           ", " + std::to_string(team.member_count) + "/8 members");
+        }
+        const int previous = cursors.size() > 1 ? static_cast<int>(rows.size()) : -1;
+        if(previous >= 0) rows.push_back("Previous page");
+        const int more = output.next.empty() ? -1 : static_cast<int>(rows.size());
+        if(more >= 0) rows.push_back("More teams");
+        if(rows.empty()) {
+            message("There are no active teams in " + area.name + " yet.");
+            return;
+        }
+        const int choice = select("Teams in " + area.name,
+            "Open a team to view its captain and leaders.", rows);
+        if(choice < 0) return;
+        if(choice == previous) { cursors.pop_back(); continue; }
+        if(choice == more) { cursors.push_back(output.next); continue; }
+        if(static_cast<std::size_t>(choice) >= output.teams.size()) continue;
+        account::Request detail;
+        detail.operation = "team_detail";
+        detail.team_id = output.teams[choice].id;
+        account::Reply loaded;
+        if(team_request(profile, detail, "Loading the team roster…", loaded) && loaded.team)
+            message(team_text(*loaded.team));
+    }
+}
+
+void browse_areas(const alliance::TrustedProfile& profile)
+{
+    while(!current_session().token.empty()) {
+        account::Area area;
+        if(!choose_area(profile, area)) return;
+        browse_teams(profile, area);
+    }
+}
+
+void create_team(const alliance::TrustedProfile& profile)
+{
+    account::Area area;
+    if(!choose_area(profile, area)) return;
+    account::Request input;
+    input.operation = "create_team";
+    input.area_id = area.id;
+    TeamNameDialog dialog(input.name);
+    if(!dialog.show()) return;
+    const auto start = input.name.find_first_not_of(" ");
+    if(start == std::string::npos) input.name.clear();
+    else input.name = input.name.substr(start, input.name.find_last_not_of(" ") - start + 1);
+    if(!account::team_name_valid(input.name)) {
+        message("Use 3–40 ASCII letters, digits, spaces, underscores or hyphens. "
+                "Start the team name with a letter or digit.");
+        return;
+    }
+    if(select("Confirm new team", "Team: " + input.name + "\nArea: " + area.name +
+              "\n\nYou will become captain. A team can have up to 8 members.\n"
+              "Joining teams and team battles are not available yet.", {"Create this team"}) != 0) return;
+    input.token = current_session().token;
+    account::Reply output;
+    if(!request(profile, input, "Creating your team…", output)) {
+        message("Team creation may have reached the server. Open My team to check before trying to create a team again.");
+        return;
+    }
+    if(!output.ok) {
+        show_failure(output);
+        if(output.error_code == "timeout" || output.error_code == "cancelled" ||
+           output.error_code == "unavailable" || output.error_code == "service_unavailable" ||
+           output.error_code == "protocol" || output.error_code == "team_failed" ||
+           output.error_code == "request_failed") {
+            message("Team creation may have reached the server. Open My team to check before trying to create a team again.");
+        }
+        return;
+    }
+    if(output.team) message("Your team was created. You are its captain.\n\n" + team_text(*output.team));
+}
+
+void teams(const alliance::TrustedProfile& profile)
+{
+    while(!current_session().token.empty()) {
+        const int action = select("Alliance teams",
+            "Build your team in an area. Team battles and joining will follow in a later update.",
+            {"Browse areas and teams", "Create team", "My team"});
+        if(action < 0) return;
+        if(action == 0) browse_areas(profile);
+        else if(action == 1) create_team(profile);
+        else if(action == 2) my_team(profile);
+    }
+}
+
 void logout(const alliance::TrustedProfile& profile)
 {
     account::Request input;
@@ -390,7 +612,7 @@ void show_account_dialog()
                 logged_in ? "Logged in as " + session.profile.username
                           : "Grow your personal leader.\nCreate a player account or log in.",
                 logged_in
-                    ? std::vector<std::string>{"View personal leader", "Log out"}
+                    ? std::vector<std::string>{"View personal leader", "Teams", "Log out"}
                     : std::vector<std::string>{"Create player account", "Log in"});
             menu.set_allow_plugin_skip(false);
             menu.set_selected_index(0);
@@ -400,7 +622,8 @@ void show_account_dialog()
             const int action = menu.selected_index();
             if(logged_in) {
                 if(action == 0) refresh(profile);
-                else if(action == 1) logout(profile);
+                else if(action == 1) teams(profile);
+                else if(action == 2) logout(profile);
             } else {
                 if(action == 0) register_player(profile);
                 else if(action == 1) login(profile);
