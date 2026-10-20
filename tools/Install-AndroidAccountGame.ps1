@@ -6,7 +6,8 @@ param(
     [string]$AdbPath = (Join-Path $env:LOCALAPPDATA 'Android\Sdk\platform-tools\adb.exe'),
     [string]$JavaHome = 'C:\Program Files\Android\Android Studio\jbr',
     [string]$PythonPath = (Join-Path $env:LOCALAPPDATA 'Programs\Python\Python314\python.exe'),
-    [string]$ProfilePath = ''
+    [string]$ProfilePath = '',
+    [switch]$KeepSavedProfile
 )
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path $PSScriptRoot -Parent
@@ -108,6 +109,7 @@ function Selected-Adb([string[]]$Arguments, [int]$TimeoutMilliseconds = 60000, [
 }
 try {
     if ($env:OS -ne 'Windows_NT') { throw 'Run this helper on Windows with the existing LDPlayer instance open.' }
+    if ($KeepSavedProfile -and $ProfilePath) { throw 'Use KeepSavedProfile without ProfilePath. The existing trusted server will not be replaced.' }
     $diagnostics = Join-Path $repoRoot 'diagnostics'
     $null = New-Item -ItemType Directory -Path $diagnostics -Force
     $log = Join-Path $diagnostics ('android-account-install-' + (Get-Date -Format 'yyyyMMdd-HHmmss-fff') + '-' + $runId + '.txt')
@@ -126,12 +128,14 @@ try {
     $apkRecord = $receipt.artifacts.'app/build/outputs/apk/debug/app-debug.apk'
     if ((Get-FileHash -LiteralPath $apk -Algorithm SHA256).Hash.ToLowerInvariant() -cne $apkRecord.sha256 -or
         (Get-Item -LiteralPath $apk).Length -ne $apkRecord.bytes) { throw 'APK changed after verification.' }
-    if (-not $ProfilePath) { $ProfilePath = Join-Path (Split-Path $repoRoot -Parent) 'wesnoth_server\runtime\alliance-transport\public-profile.json' }
-    # A separate validator checks exact public fields and the certificate pin without printing its contents.
-    $publicCopy = Join-Path $diagnostics ('public-alliance-profile-' + $runId + '.json')
-    $profileCheck = Invoke-Captured $PythonPath @('-I', '-B', (Join-Path $PSScriptRoot 'validate_android_account_profile.py'), $ProfilePath, '--copy-to', $publicCopy) 30000
-    if ($profileCheck.Code -ne 0 -or $profileCheck.Stdout -notmatch '(?m)^PUBLIC ALLIANCE PROFILE VERIFIED\r?$') { throw 'Select the public-profile.json from the Windows identity helper; no private runtime file is accepted.' }
-    $profileHash = (Get-FileHash -LiteralPath $publicCopy -Algorithm SHA256).Hash.ToLowerInvariant()
+    if (-not $KeepSavedProfile) {
+        if (-not $ProfilePath) { $ProfilePath = Join-Path (Split-Path $repoRoot -Parent) 'wesnoth_server\runtime\alliance-transport\public-profile.json' }
+        # A separate validator checks exact public fields and the certificate pin without printing its contents.
+        $publicCopy = Join-Path $diagnostics ('public-alliance-profile-' + $runId + '.json')
+        $profileCheck = Invoke-Captured $PythonPath @('-I', '-B', (Join-Path $PSScriptRoot 'validate_android_account_profile.py'), $ProfilePath, '--copy-to', $publicCopy) 30000
+        if ($profileCheck.Code -ne 0 -or $profileCheck.Stdout -notmatch '(?m)^PUBLIC ALLIANCE PROFILE VERIFIED\r?$') { throw 'Select the public-profile.json from the Windows identity helper; no private runtime file is accepted.' }
+        $profileHash = (Get-FileHash -LiteralPath $publicCopy -Algorithm SHA256).Hash.ToLowerInvariant()
+    }
     if ($Serial -match '^127\.0\.0\.1:[0-9]+$') {
         $connected = Invoke-Adb @('connect', $Serial)
         if ($connected.Code -ne 0) { throw 'ADB connection failed.' }
@@ -142,13 +146,28 @@ try {
     }
     $installed = Selected-Adb @('shell', 'pm', 'path', $package)
     if ($installed.Stdout -notmatch '^package:/') { throw 'The existing tested Wesnoth app is not installed. Stop and send the log.' }
+    if ($KeepSavedProfile) {
+        $packageDetails = Selected-Adb @('shell', 'dumpsys', 'package', $package) 60000 $true
+        $versions = [regex]::Matches($packageDetails.Stdout, '(?m)^\s*versionCode=([0-9]+)(?:\s|$)')
+        if ($versions.Count -ne 1 -or $versions[0].Groups[1].Value -notin @('1192601', '1192602')) {
+            throw 'Expected the installed Alliance account game version 1192601 or 1192602. No app update was attempted.'
+        }
+    }
     $install = Selected-Adb @('install', '-r', $apk) 300000
     if ($install.Stdout -notmatch '(?m)^Success\r?$') { throw 'Android did not confirm the app update. No uninstall or data reset was attempted.' }
-    $remote = '/sdcard/Download/wesnoth-alliance-public-profile-' + $runId + '.json'
-    $null = Selected-Adb @('shell', 'mkdir', '-p', '/sdcard/Download')
-    $null = Selected-Adb @('push', $publicCopy, $remote)
-    $uploaded = Selected-Adb @('shell', 'sha256sum', $remote)
-    if ($uploaded.Stdout -cnotmatch ('^' + $profileHash + '\s+' + [regex]::Escape($remote) + '$')) { throw 'The transferred PUBLIC profile hash differs. Do not import it.' }
+    if ($KeepSavedProfile) {
+        $packageDetails = Selected-Adb @('shell', 'dumpsys', 'package', $package) 60000 $true
+        $versions = [regex]::Matches($packageDetails.Stdout, '(?m)^\s*versionCode=([0-9]+)(?:\s|$)')
+        if ($versions.Count -ne 1 -or $versions[0].Groups[1].Value -cne '1192602') {
+            throw 'Android did not report the expected updated version 1192602. Send this log.'
+        }
+    } else {
+        $remote = '/sdcard/Download/wesnoth-alliance-public-profile-' + $runId + '.json'
+        $null = Selected-Adb @('shell', 'mkdir', '-p', '/sdcard/Download')
+        $null = Selected-Adb @('push', $publicCopy, $remote)
+        $uploaded = Selected-Adb @('shell', 'sha256sum', $remote)
+        if ($uploaded.Stdout -cnotmatch ('^' + $profileHash + '\s+' + [regex]::Escape($remote) + '$')) { throw 'The transferred PUBLIC profile hash differs. Do not import it.' }
+    }
     $null = Selected-Adb @('shell', 'am', 'force-stop', $package)
     $launch = Selected-Adb @('shell', 'am', 'start', '-W', '-n', ($package + '/.AccountSetupActivity'), '--es', 'wesnoth_run_id', $runId)
     if ($launch.Stdout -notmatch '(?m)^Status:\s*ok\r?$' -or $launch.Text -match '(?m)^Error:') { throw 'Android did not confirm setup activity startup.' }
@@ -162,9 +181,15 @@ try {
     }
     if (-not $ready) { throw 'No fresh account setup marker was observed. Send the saved log.' }
     Write-Host 'ANDROID ACCOUNT GAME INSTALL COMPLETE'
-    Write-Host 'The APK update and setup activity are verified. Account registration, login, leader and logout need the manual test.'
-    Write-Host ('In LDPlayer choose Import server profile, then Downloads: ' + (Split-Path $remote -Leaf))
-    Write-Host 'Compare the displayed address and SHA-256 with the Windows server, choose Trust server, then Start game -> Alliance.'
+    if ($KeepSavedProfile) {
+        Write-Host 'Version 1192602 and setup activity startup are verified. No profile was imported or changed by this helper.'
+        Write-Host 'Confirm the existing Trusted server is displayed, then choose Start game -> Alliance -> Log in.'
+        Write-Host 'If setup says no saved profile or reports an unusable profile, stop and send that message; do not reimport or reset the app.'
+    } else {
+        Write-Host 'The APK update and setup activity are verified. Account registration, login, leader and logout need the manual test.'
+        Write-Host ('In LDPlayer choose Import server profile, then Downloads: ' + (Split-Path $remote -Leaf))
+        Write-Host 'Compare the displayed address and SHA-256 with the Windows server, choose Trust server, then Start game -> Alliance.'
+    }
     Write-Host 'No OBB transfer, app-data deletion, account credential collection or database initialization was performed.'
     $testExit = 0
 } catch { Write-Host ('ERROR: ' + $_.Exception.Message) -ForegroundColor Red }

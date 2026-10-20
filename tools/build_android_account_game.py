@@ -7,6 +7,7 @@ account code; no completed dependency is rebuilt or reconfigured.
 """
 import argparse
 from contextlib import contextmanager
+from datetime import datetime, timezone
 import hashlib
 import importlib.util
 import os
@@ -15,6 +16,7 @@ import re
 import stat
 import struct
 import sys
+import time
 import uuid
 import zipfile
 
@@ -30,6 +32,11 @@ ENGINE_KIND = 'wesnoth-android-account-engine'
 LOCK = '.wesnoth-account-game-operation.json'
 MARKER = '.wesnoth-account-game.json'
 ENGINE_MARKER = '.wesnoth-account-engine.json'
+VERSION_CODE = 1192602
+PREVIOUS_VERSION_CODE = 1192601
+UPDATE_JOURNAL = '.wesnoth-account-game-update-1192602.json'
+UPDATE_KIND = 'wesnoth-android-account-game-update'
+UPDATE_STAGES = ('android-account-engine', 'android-account-game')
 PACKAGE = G.PACKAGE
 ACTIVITY = PACKAGE + '.AccountSetupActivity'
 APK, JNI_ROOT, LIBRARIES, ARTIFACTS = G.APK, G.JNI_ROOT, G.LIBRARIES, G.ARTIFACTS
@@ -296,14 +303,14 @@ def inspect_apk(apk, root):
     # The shared inspector verifies ZIP paths, exactly five identical ELF payloads
     # and the unchanged trusted OBB file index. Override only this stage's metadata.
     detail = G.inspect_apk(apk, root)
-    detail.update(activity=ACTIVITY, version_code=1192601)
+    detail.update(activity=ACTIVITY, version_code=VERSION_CODE)
     return detail
 
 
 def signature(apk, sdk, java, repo):
     aapt2, signer, _ = G.android_tools(sdk, java)
     badging = call(S.run, [aapt2, 'dump', 'badging', apk], capture=True)
-    patterns = (r"(?m)^package: name='org\.wesnoth\.offline' versionCode='1192601' versionName='1\.19\.26'",
+    patterns = (rf"(?m)^package: name='org\.wesnoth\.offline' versionCode='{VERSION_CODE}' versionName='1\.19\.26'",
                 r"(?m)^sdkVersion:'23'$", r"(?m)^targetSdkVersion:'35'$",
                 rf"(?m)^launchable-activity: name='{re.escape(ACTIVITY)}'", r"(?m)^native-code: 'x86_64'\s*$")
     if not all(re.search(pattern, badging) for pattern in patterns):
@@ -339,6 +346,195 @@ def verify_receipt(repo, sdk=None, java=None):
         signature(root / APK, sdk, java, repo)
     print('ANDROID ACCOUNT GAME ARTIFACTS VERIFIED', flush=True)
     return expected
+
+
+def update_json(path):
+    """Read only bounded public build metadata, never external/private files."""
+    data = call(N.ninja_read, path, 8 * 1024 * 1024)
+    if data is None:
+        raise BuildError('Account update metadata is missing; preserve all stages.')
+    try:
+        import json
+        def unique_pairs(pairs):
+            result = {}
+            for key, value in pairs:
+                if key in result:
+                    raise ValueError('duplicate key')
+                result[key] = value
+            return result
+        value = json.loads(data, object_pairs_hook=unique_pairs)
+        if not isinstance(value, dict):
+            raise ValueError('object required')
+        return value
+    except (ValueError, UnicodeError) as error:
+        raise BuildError('Account update metadata could not be parsed; existing files were preserved.') from error
+
+
+def stage_snapshot(root):
+    """Bind every old stage file, including empty Gradle bookkeeping files."""
+    root = safe(root)
+    if not root.is_dir():
+        raise BuildError('Expected an existing ordinary account stage directory.')
+    files, directories = {}, []
+    for path in sorted(root.rglob('*')):
+        safe(path)
+        info = path.stat()
+        name = path.relative_to(root).as_posix()
+        if stat.S_ISDIR(info.st_mode):
+            directories.append(name)
+        elif stat.S_ISREG(info.st_mode):
+            if info.st_size:
+                files[name] = fingerprint(path)
+            else:
+                # Fingerprint normally rejects empty build inputs; empty cache
+                # and lock files are nevertheless part of a preserved stage.
+                data = call(N.ninja_read, path, 0)
+                if data != b'':
+                    raise BuildError('An empty account stage file changed during inspection.')
+                files[name] = {'bytes': 0, 'sha256': B.sha256(data)}
+        else:
+            raise BuildError('Account stage contains a special file; nothing was renamed.')
+    return {'files': files, 'directories': directories}
+
+
+def completed_previous_stages(repo, profile, current_inputs):
+    """Validate old completion receipts without comparing old source hashes to new ones."""
+    engine_root = safe(repo / 'build' / UPDATE_STAGES[0])
+    game_root = safe(repo / 'build' / UPDATE_STAGES[1])
+    before = {name: stage_snapshot(repo / 'build' / name) for name in UPDATE_STAGES}
+    owner = update_json(engine_root / ENGINE_MARKER)
+    previous_inputs = owner.get('inputs')
+    if (not isinstance(previous_inputs, dict) or previous_inputs.get('prerequisites') != current_inputs['prerequisites']
+            or set(previous_inputs) != set(current_inputs)):
+        raise BuildError('The previous account build does not bind the preserved original game and prerequisites.')
+    # Both validators recalculate generated-source and output hashes/ELF facts.
+    # Only the source-input comparison deliberately uses the saved binding.
+    engine_verify(repo, previous_inputs)
+    game_inputs = dict(previous_inputs, account_engine_receipt=fingerprint(engine_root / 'receipt.json'))
+    marker = verify_owned(game_root, KIND, MARKER, game_inputs)
+    validation = {'libraries': native_validation(repo, game_root), 'apk': inspect_apk(game_root / APK, game_root)}
+    validation['apk']['version_code'] = PREVIOUS_VERSION_CODE
+    expected = {'schema_version': 1, 'kind': KIND, 'profile': profile, 'inputs': game_inputs,
+                'project_files': marker['files'], 'validation': validation,
+                'artifacts': {name: fingerprint(game_root / name) for name in ARTIFACTS}, 'device_executed': False}
+    if update_json(game_root / 'receipt.json') != expected:
+        raise BuildError('Expected the completed previous account APK receipt and unchanged artifacts; nothing was renamed.')
+    after = {name: stage_snapshot(repo / 'build' / name) for name in UPDATE_STAGES}
+    if after != before:
+        raise BuildError('Previous account stages changed during completion verification; nothing was renamed.')
+    return after
+
+
+def checked_update_journal(record, current_inputs):
+    if (set(record) != {'schema_version', 'kind', 'target_version', 'target_inputs', 'stages'}
+            or type(record['schema_version']) is not int or record['schema_version'] != 1
+            or record['kind'] != UPDATE_KIND or type(record['target_version']) is not int
+            or record['target_version'] != VERSION_CODE or record['target_inputs'] != current_inputs
+            or not isinstance(record['stages'], dict) or set(record['stages']) != set(UPDATE_STAGES)):
+        raise BuildError('The saved account update does not match this source/prerequisite set. Preserve it and send the log.')
+    suffixes = set()
+    for name in UPDATE_STAGES:
+        entry = record['stages'][name]
+        if not isinstance(entry, dict) or set(entry) != {'backup', 'snapshot'}:
+            raise BuildError('Invalid account update stage record.')
+        match = re.fullmatch(re.escape(name) + r'-before-team-ui-(\d{8}T\d{6}Z-[0-9a-f]{32})', str(entry['backup']))
+        if not match:
+            raise BuildError('Invalid account backup location; no paths were changed.')
+        suffixes.add(match.group(1))
+        snapshot = entry['snapshot']
+        if (not isinstance(snapshot, dict) or set(snapshot) != {'files', 'directories'}
+                or not isinstance(snapshot['files'], dict) or not snapshot['files']
+                or not isinstance(snapshot['directories'], list)):
+            raise BuildError('Invalid account stage snapshot.')
+        for path in [*snapshot['files'], *snapshot['directories']]:
+            if (not isinstance(path, str) or '\\' in path or ':' in path
+                    or any(part in ('', '.', '..') for part in path.split('/'))):
+                raise BuildError('Invalid account snapshot path.')
+        for value in snapshot['files'].values():
+            if (not isinstance(value, dict) or set(value) != {'bytes', 'sha256'}
+                    or type(value['bytes']) is not int or value['bytes'] < 0
+                    or not isinstance(value['sha256'], str) or not re.fullmatch(r'[0-9a-f]{64}', value['sha256'])):
+                raise BuildError('Invalid account snapshot fingerprint.')
+    if len(suffixes) != 1:
+        raise BuildError('Account backup transaction identifiers differ.')
+    return record
+
+
+def preserve_stage(source, destination, snapshot):
+    """Retry sharing failures only while the exact checked source still exists."""
+    if stage_snapshot(source) != snapshot:
+        raise BuildError('The account stage changed before backup; preserve it and send the log.')
+    original = source.stat()
+    for attempt in range(len(N.NINJA_RETRY_DELAYS) + 1):
+        if safe(destination).exists():
+            raise BuildError('Account backup destination already exists; nothing was overwritten.')
+        current = safe(source).stat()
+        if (current.st_dev, current.st_ino) != (original.st_dev, original.st_ino):
+            raise BuildError('Account stage identity changed before backup.')
+        try:
+            source.rename(destination)
+            break
+        except OSError as error:
+            if (getattr(error, 'winerror', None) not in (5, 32, 33)
+                    or attempt == len(N.NINJA_RETRY_DELAYS)):
+                raise
+            if safe(destination).exists() or not safe(source).exists() or stage_snapshot(source) != snapshot:
+                raise BuildError('Account stage changed after a sharing failure; the update was stopped.') from error
+            print('Retrying unchanged account stage backup: ' + source.name, flush=True)
+            time.sleep(N.NINJA_RETRY_DELAYS[attempt])
+    if stage_snapshot(destination) != snapshot:
+        raise BuildError('The preserved account stage changed; keep both paths and send the log.')
+    print('Completed account stage preserved: ' + str(destination), flush=True)
+
+
+def prepare_update(repo):
+    """Journal and preserve both completed stages; reruns resume partial moves/builds."""
+    with operation(repo):
+        profile, inputs, _ = selected_inputs(repo)
+        inputs['prerequisites'] = prerequisites(repo)
+        journal = safe(repo / 'build' / UPDATE_JOURNAL)
+        if journal.exists():
+            record = checked_update_journal(update_json(journal), inputs)
+            print('Resuming the recorded account update; retained backups will not be replaced.', flush=True)
+        else:
+            snapshots = completed_previous_stages(repo, profile, inputs)
+            token = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ-') + uuid.uuid4().hex
+            record = {'schema_version': 1, 'kind': UPDATE_KIND, 'target_version': VERSION_CODE,
+                      'target_inputs': inputs, 'stages': {name: {
+                          'backup': name + '-before-team-ui-' + token, 'snapshot': snapshots[name]}
+                          for name in UPDATE_STAGES}}
+            checked_update_journal(record, inputs)
+            write_new(journal, B.json_bytes(record))
+        # The immutable journal survives a failure between directory moves.
+        # An absent backup must still have the exact old source snapshot; a
+        # completed move is verified before any remaining move is attempted.
+        for name in UPDATE_STAGES:
+            entry = record['stages'][name]
+            backup = safe(repo / 'build' / entry['backup'])
+            if backup.exists():
+                if stage_snapshot(backup) != entry['snapshot']:
+                    raise BuildError('An account backup changed; preserve it and send the log.')
+            else:
+                preserve_stage(safe(repo / 'build' / name), backup, entry['snapshot'])
+        for entry in record['stages'].values():
+            if stage_snapshot(repo / 'build' / entry['backup']) != entry['snapshot']:
+                raise BuildError('An account backup changed during preparation; preserve all stages and send the log.')
+        # New in-progress/completed stages may exist on a retry. Check ownership
+        # but leave detailed configure/build resume decisions to the builder.
+        engine = safe(repo / 'build' / UPDATE_STAGES[0])
+        game = safe(repo / 'build' / UPDATE_STAGES[1])
+        if engine.exists():
+            verify_owned(engine, ENGINE_KIND, ENGINE_MARKER, inputs)
+        if game.exists():
+            game_inputs = dict(inputs, account_engine_receipt=fingerprint(engine / 'receipt.json'))
+            verify_owned(game, KIND, MARKER, game_inputs)
+        current = selected_inputs(repo)[1]
+        current['prerequisites'] = prerequisites(repo)
+        if current != inputs:
+            raise BuildError('Sources or prerequisites changed during account update preparation; no build was started.')
+        print('ANDROID ACCOUNT UPDATE PREPARED', flush=True)
+        print('Both previous stages are retained. Build with the existing offline account helper.', flush=True)
+        return record
 
 
 def build(repo, args):
@@ -410,11 +606,16 @@ def main(argv=None):
     parser.add_argument('--gradle-user-home', type=Path, default=Path.home() / '.gradle')
     parser.add_argument('--jobs', type=int, default=2)
     parser.add_argument('--verify', '--verify-only', action='store_true')
+    parser.add_argument('--prepare-update', action='store_true', help='Preserve completed 1192601 stages before the 1192602 update.')
     args = parser.parse_args(argv)
     try:
         for name, value in vars(args).items():
             if isinstance(value, Path): setattr(args, name, safe(value))
-        if args.verify:
+        if args.prepare_update:
+            if args.verify:
+                raise BuildError('Choose update preparation or verification, not both.')
+            prepare_update(REPO)
+        elif args.verify:
             verify_receipt(REPO, args.sdk, args.java)
         else:
             if not 1 <= args.jobs <= 16 or any(getattr(args, name) is None for name in ('ndk', 'cmake', 'ninja', 'sdk', 'java')):
