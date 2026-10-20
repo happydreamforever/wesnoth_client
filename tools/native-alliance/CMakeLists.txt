@@ -49,3 +49,8 @@ target_compile_options(alliance-native-probe PRIVATE -Wall -Wextra -Werror)
 target_link_libraries(alliance-native-probe PRIVATE alliance_transport)
 set_target_properties(alliance-native-probe PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 install(TARGETS alliance-native-probe RUNTIME DESTINATION bin)
+
+option(WESNOTH_ALLIANCE_ANDROID_CHECK "Build the standalone Alliance loopback check" OFF)
+if(WESNOTH_ALLIANCE_ANDROID_CHECK)
+    include(AndroidCheck.cmake)
+endif()
