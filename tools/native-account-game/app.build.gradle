@@ -1,0 +1,27 @@
+plugins { id 'com.android.application' }
+android {
+    namespace 'org.wesnoth.offline'
+    compileSdk @COMPILE_SDK@
+    buildToolsVersion '@BUILD_TOOLS@'
+    ndkVersion '@NDK_VERSION@'
+    defaultConfig {
+        applicationId 'org.wesnoth.offline'
+        minSdk @MIN_SDK@
+        targetSdk @TARGET_SDK@
+        versionCode 1192601
+        versionName '1.19.26'
+        ndk { abiFilters 'x86_64' }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+    buildTypes { debug { debuggable true } }
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+            keepDebugSymbols += ['**/*.so']
+        }
+    }
+}
+// Verified native libraries and local game-data manifest are supplied offline.
