@@ -1,4 +1,4 @@
-# Windows PowerShell 5.1. Preserve the completed account stages, then build/resume the credential-input update.
+# Windows PowerShell 5.1. Preserve the completed account stages, then build/resume the credential-dialog fix.
 [CmdletBinding()]
 param(
     [string]$SdkRoot = (Join-Path $env:LOCALAPPDATA 'Android\Sdk'),
@@ -27,7 +27,7 @@ try {
     $log = Join-Path $diagnostics ('android-account-rebuild-' + (Get-Date -Format 'yyyyMMdd-HHmmss-fff') + '-' + [guid]::NewGuid().ToString('N') + '.txt')
     Start-Transcript -LiteralPath $log -NoClobber | Out-Null
     $started = $true
-    Write-Host 'Verifying and preserving both completed 1192606 account stages before the 1192607 credential-input update.'
+    Write-Host 'Verifying and preserving both completed 1192607 account stages before the 1192608 credential-dialog fix.'
     Write-Host 'Recorded preparation reuses its retained backups. If an operation lock remains, stop and send the log.'
     & $PythonPath -I -B -u $builder --prepare-update
     if ($LASTEXITCODE -ne 0) { throw 'Account update preparation stopped. No build was started. Preserve all stages/backups and send this log.' }
