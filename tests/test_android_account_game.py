@@ -87,7 +87,7 @@ class AccountBuildTests(unittest.TestCase):
     def test_templates_keep_package_data_and_no_plaintext(self):
         manifest = (ROOT / 'tools/native-account-game/AndroidManifest.xml').read_text()
         self.assertIn('.AccountSetupActivity', manifest); self.assertIn('android:allowBackup="false"', manifest)
-        self.assertIn('versionCode 1192602', (ROOT / 'tools/native-account-game/app.build.gradle').read_text())
+        self.assertIn('versionCode 1192603', (ROOT / 'tools/native-account-game/app.build.gradle').read_text())
         data = (ROOT / 'tools/native-account-game/OfflineDataInstaller.java').read_text()
         self.assertIn('main.1192600.org.wesnoth.offline.obb', data)
         self.assertNotIn('usesCleartextTraffic="true"', manifest)
@@ -115,7 +115,7 @@ class AccountUpdateTests(unittest.TestCase):
                               'files': marker['files'], 'validation': self.engine_result, 'device_executed': False}
         A.write_new(self.engine / 'receipt.json', A.B.json_bytes(self.engine_receipt))
         game_inputs = dict(self.old_inputs, account_engine_receipt=A.fingerprint(self.engine / 'receipt.json'))
-        marker = A.prepare_owned(self.game, A.KIND, A.MARKER, game_inputs, {'app/build.gradle': b'versionCode 1192601'})
+        marker = A.prepare_owned(self.game, A.KIND, A.MARKER, game_inputs, {'app/build.gradle': b'versionCode 1192602'})
         self.apk = self.game / 'old.apk'
         self.apk.write_bytes(b'completed apk')
         (self.game / 'empty bookkeeping').write_bytes(b'')
@@ -137,11 +137,25 @@ class AccountUpdateTests(unittest.TestCase):
         self.original = {name: A.stage_snapshot(self.repo / 'build' / name) for name in A.UPDATE_STAGES}
         self.protected = self.repo / 'build/android-engine/original'
         self.protected.parent.mkdir(); self.protected.write_bytes(b'original engine objects/OBB unaffected')
+        # The previous update's journal and 1192601 backups coexist with the
+        # current completed 1192602 stages. A later update must never reuse,
+        # parse as its own, replace, or delete that older transaction.
+        self.previous_delivery = {
+            self.repo / 'build/.wesnoth-account-game-update-1192602.json': b'old immutable update journal\n',
+            self.repo / 'build/android-account-engine-before-team-ui-20261020T000000Z-0123456789abcdef0123456789abcdef/receipt.json': b'old 1192601 engine receipt\n',
+            self.repo / 'build/android-account-game-before-team-ui-20261020T000000Z-0123456789abcdef0123456789abcdef/receipt.json': b'old 1192601 APK receipt\n',
+        }
+        for path, data in self.previous_delivery.items():
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(data)
 
     def prepare(self):
-        result = A.prepare_update(self.repo)
-        self.assertEqual(self.protected.read_bytes(), b'original engine objects/OBB unaffected')
-        return result
+        try:
+            return A.prepare_update(self.repo)
+        finally:
+            self.assertEqual(self.protected.read_bytes(), b'original engine objects/OBB unaffected')
+            for path, data in self.previous_delivery.items():
+                self.assertEqual(path.read_bytes(), data)
 
     def assert_untouched(self):
         for name in A.UPDATE_STAGES:
@@ -150,7 +164,7 @@ class AccountUpdateTests(unittest.TestCase):
 
     def test_changed_source_binding_preserves_both_old_stages_byte_for_byte(self):
         record = self.prepare()
-        self.assertEqual(record['target_version'], 1192602)
+        self.assertEqual(record['target_version'], 1192603)
         for name, entry in record['stages'].items():
             self.assertFalse((self.repo / 'build' / name).exists())
             self.assertEqual(A.stage_snapshot(self.repo / 'build' / entry['backup']), self.original[name])
@@ -159,7 +173,7 @@ class AccountUpdateTests(unittest.TestCase):
     def test_repeated_preparation_keeps_same_backups(self):
         first = self.prepare()
         self.assertEqual(self.prepare(), first)
-        self.assertEqual(len(list((self.repo / 'build').glob('*-before-team-ui-*'))), 2)
+        self.assertEqual(len(list((self.repo / 'build').glob('*-before-membership-ui-*'))), 2)
 
     def test_current_partial_build_is_left_in_place_for_normal_builder_resume(self):
         record = self.prepare()
@@ -175,7 +189,7 @@ class AccountUpdateTests(unittest.TestCase):
                         {'title_screen.cpp': b'new title'})
         (self.engine / 'receipt.json').write_bytes(b'completed current engine')
         inputs = dict(self.current_inputs, account_engine_receipt=A.fingerprint(self.engine / 'receipt.json'))
-        A.prepare_owned(self.game, A.KIND, A.MARKER, inputs, {'app/build.gradle': b'versionCode 1192602'})
+        A.prepare_owned(self.game, A.KIND, A.MARKER, inputs, {'app/build.gradle': b'versionCode 1192603'})
         self.assertEqual(self.prepare(), record)
 
     def test_missing_or_incomplete_old_stage_is_not_blindly_backed_up(self):
@@ -189,6 +203,20 @@ class AccountUpdateTests(unittest.TestCase):
         with self.assertRaises(A.BuildError): self.prepare()
         self.assertTrue(self.engine.exists()); self.assertTrue(self.game.exists())
         self.assertFalse((self.repo / 'build' / A.UPDATE_JOURNAL).exists())
+
+    def test_stage_from_earlier_release_is_not_accepted_as_current_previous(self):
+        self.game_receipt['validation']['apk']['version_code'] = 1192601
+        (self.game / 'receipt.json').write_bytes(A.B.json_bytes(self.game_receipt))
+        with self.assertRaises(A.BuildError): self.prepare()
+        self.assertTrue(self.engine.exists()); self.assertTrue(self.game.exists())
+        self.assertFalse((self.repo / 'build' / A.UPDATE_JOURNAL).exists())
+
+    def test_current_journal_cannot_redirect_into_an_older_update_backup(self):
+        record = self.prepare()
+        record['stages']['android-account-engine']['backup'] = (
+            'android-account-engine-before-team-ui-20261020T000000Z-0123456789abcdef0123456789abcdef')
+        (self.repo / 'build' / A.UPDATE_JOURNAL).write_bytes(A.B.json_bytes(record))
+        with self.assertRaises(A.BuildError): self.prepare()
 
     def test_cross_stage_receipt_mismatch_is_refused(self):
         self.game_receipt['inputs']['account_engine_receipt']['sha256'] = '0' * 64
@@ -280,7 +308,7 @@ class AccountUpdateTests(unittest.TestCase):
         self.prepare()
         self.current_inputs['project_files']['account.cpp']['sha256'] = '0' * 64
         with self.assertRaises(A.BuildError): self.prepare()
-        self.assertEqual(len(list((self.repo / 'build').glob('*-before-team-ui-*'))), 2)
+        self.assertEqual(len(list((self.repo / 'build').glob('*-before-membership-ui-*'))), 2)
 
     def test_symlink_within_stage_and_traversal_journal_are_rejected(self):
         (self.engine / 'alias').symlink_to(self.apk)

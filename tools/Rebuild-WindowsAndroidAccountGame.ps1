@@ -1,4 +1,4 @@
-# Windows PowerShell 5.1. Preserve the completed account stages, then build/resume the team-menu update.
+# Windows PowerShell 5.1. Preserve the completed account stages, then build/resume the membership update.
 [CmdletBinding()]
 param(
     [string]$SdkRoot = (Join-Path $env:LOCALAPPDATA 'Android\Sdk'),
@@ -27,7 +27,7 @@ try {
     $log = Join-Path $diagnostics ('android-account-rebuild-' + (Get-Date -Format 'yyyyMMdd-HHmmss-fff') + '-' + [guid]::NewGuid().ToString('N') + '.txt')
     Start-Transcript -LiteralPath $log -NoClobber | Out-Null
     $started = $true
-    Write-Host 'Verifying and preserving both completed account stages before the team-menu update.'
+    Write-Host 'Verifying and preserving both completed 1192602 account stages before the 1192603 membership update.'
     Write-Host 'Recorded preparation reuses its retained backups. If an operation lock remains, stop and send the log.'
     & $PythonPath -I -B -u $builder --prepare-update
     if ($LASTEXITCODE -ne 0) { throw 'Account update preparation stopped. No build was started. Preserve all stages/backups and send this log.' }
