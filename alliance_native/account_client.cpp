@@ -60,6 +60,25 @@ bool unit_type_valid(const std::string& value) {
             return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || c == ' ';
         });
 }
+bool utc_timestamp_valid(const std::string& value) {
+    if(value.size() != 20 || value[4] != '-' || value[7] != '-' ||
+       value[10] != 'T' || value[13] != ':' || value[16] != ':' || value[19] != 'Z') return false;
+    for(std::size_t i = 0; i < value.size(); ++i) {
+        if(i == 4 || i == 7 || i == 10 || i == 13 || i == 16 || i == 19) continue;
+        if(value[i] < '0' || value[i] > '9') return false;
+    }
+    const auto number = [&](std::size_t start, std::size_t length) {
+        int result = 0;
+        for(std::size_t i = start; i < start + length; ++i) result = result * 10 + value[i] - '0';
+        return result;
+    };
+    const int year = number(0, 4), month = number(5, 2), day = number(8, 2);
+    if(year == 0 || month < 1 || month > 12 || day < 1 || number(11, 2) > 23 ||
+       number(14, 2) > 59 || number(17, 2) > 59) return false;
+    constexpr int days[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+    const bool leap = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
+    return day <= days[month - 1] + (month == 2 && leap ? 1 : 0);
+}
 bool membership_mutation(const std::string& op) {
     return op == "apply_team" || op == "withdraw_application" ||
            op == "approve_application" || op == "reject_application";
@@ -67,7 +86,8 @@ bool membership_mutation(const std::string& op) {
 bool team_operation(const std::string& op) {
     return op == "areas" || op == "teams" || op == "my_team" ||
            op == "create_team" || op == "team_detail" || op == "my_applications" ||
-           op == "team_applicants" || membership_mutation(op);
+           op == "team_applicants" || op == "application_decisions" || op == "ack_decision" ||
+           membership_mutation(op);
 }
 Reply failure(const std::string& code, bool is_team = false) {
     Reply result;
@@ -108,9 +128,9 @@ Reply team_failure(const std::string& code) {
     if(code == "conflict") result.error_message = "The team name, membership or application conflicts with the current server state. Refresh the team or applications before trying again.";
     else if(code == "already_member") result.error_message = "This player already belongs to a team. Refresh My team or the applicant list.";
     else if(code == "busy") result.error_message = "This team action is unavailable while the player or team is in a game.";
-    else if(code == "not_found") result.error_message = "That area or team is no longer available. Open the list again.";
+    else if(code == "not_found") result.error_message = "That area, team or decision is no longer available. Open the list again.";
     else if(code == "forbidden") result.error_message = "This team action is not available to your player account.";
-    else if(code == "invalid_input") result.error_message = "Check the selected area, team or application.";
+    else if(code == "invalid_input") result.error_message = "Check the selected area, team, application or decision.";
     else if(code == "capacity") result.error_message = "The team or its application queue is full. Refresh the roster or applications.";
     else if(code == "not_requested") result.error_message = "That application is no longer pending. Refresh the roster and applications before trying another action.";
     else { result.error_code = "team_failed"; result.error_message = "The team request could not be completed. Try viewing My team."; }
@@ -226,6 +246,33 @@ void team_response(const json::object& data, const Request& input, Reply& reply)
             reply.applicants.push_back(std::move(entry));
         }
         page_cursor(data, reply, reply.applicants.size(), previous);
+    } else if(op == "application_decisions") {
+        keys(data, {"decisions"});
+        std::set<std::string> ids;
+        for(const auto& value : array(data, "decisions", 50)) {
+            if(!value.is_object()) invalid();
+            const auto& source = value.as_object();
+            keys(source, {"id", "team_id", "team_name", "status", "created_at", "unread"});
+            Decision entry;
+            entry.id = uuid(source, "id");
+            entry.team_id = uuid(source, "team_id");
+            entry.team_name = name(source, "team_name");
+            entry.status = string(source, "status", 8);
+            entry.created_at = string(source, "created_at", 20);
+            const auto& unread = source.at("unread");
+            if(!ids.insert(entry.id).second || !unread.is_bool() ||
+               (entry.status != "approved" && entry.status != "rejected") ||
+               !utc_timestamp_valid(entry.created_at)) invalid();
+            entry.unread = unread.as_bool();
+            // Keep committed server order. Equal or adjusted host-clock times
+            // do not establish a different ordering of committed decisions.
+            reply.decisions.push_back(std::move(entry));
+        }
+    } else if(op == "ack_decision") {
+        keys(data, {"decision_id", "status"});
+        reply.decision_id = uuid(data, "decision_id");
+        reply.status = string(data, "status", 4);
+        if(reply.decision_id != input.decision_id || reply.status != "read") invalid();
     } else if(membership_mutation(op)) {
         keys(data, {"team_id", "account_id", "status"});
         reply.team_id = uuid(data, "team_id");
@@ -315,7 +362,8 @@ Reply perform_request(const TrustedProfile& trusted, const Request& request,
         const auto& op = request.operation;
         const bool is_team = team_operation(op);
         if(!is_team && (!request.name.empty() || !request.area_id.empty() ||
-                       !request.team_id.empty() || !request.account_id.empty() || !request.after.empty())) return failure("invalid_input");
+                       !request.team_id.empty() || !request.account_id.empty() || !request.after.empty() ||
+                       !request.decision_id.empty())) return failure("invalid_input");
         if(is_team) {
             if(!token_valid(request.token) || !request.username.empty() || !request.password.empty() ||
                !request.starter_id.empty() || !cursor_valid(request.after)) return team_failure("invalid_input");
@@ -327,6 +375,11 @@ Reply perform_request(const TrustedProfile& trusted, const Request& request,
             if(!uses_team && !request.team_id.empty()) return team_failure("invalid_input");
             if(!uses_account && !request.account_id.empty()) return team_failure("invalid_input");
             if(!uses_after && !request.after.empty()) return team_failure("invalid_input");
+            if(op != "ack_decision" && !request.decision_id.empty()) return team_failure("invalid_input");
+            if(op == "ack_decision") {
+                if(!uuid_valid(request.decision_id)) return team_failure("invalid_input");
+                body["decision_id"] = request.decision_id;
+            }
             if(uses_after) body["after"] = request.after;
             if(uses_account) {
                 if(!uuid_valid(request.account_id)) return team_failure("invalid_input");

@@ -8,7 +8,7 @@
 namespace alliance::account {
 struct Request {
     std::string operation, username, password, starter_id, token;
-    std::string name, area_id, team_id, account_id, after;
+    std::string name, area_id, team_id, account_id, after, decision_id;
 };
 struct Profile {
     std::string account_id, username, unit_type, starter_id;
@@ -28,6 +28,10 @@ struct Team {
     int level = 0, experience = 0, rating = 0, capacity = 0;
     std::vector<Member> members;
 };
+struct Decision {
+    std::string id, team_id, team_name, status, created_at;
+    bool unread = false;
+};
 struct Reply {
     bool ok = false;
     std::string error_code, error_message, token;
@@ -37,7 +41,8 @@ struct Reply {
     std::optional<Team> team;
     std::string next;
     std::vector<Member> applicants;
-    std::string team_id, account_id, status;
+    std::string team_id, account_id, status, decision_id;
+    std::vector<Decision> decisions;
 };
 bool team_name_valid(const std::string&);
 // Called only by a worker. One connection/request with an overall 10s deadline;

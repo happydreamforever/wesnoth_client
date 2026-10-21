@@ -173,7 +173,8 @@ class AccountClientResponseTests(unittest.TestCase):
         self.assertEqual(set(output), {"ok", "error_code", "has_token",
                                       "has_profile", "level", "elapsed_ms", "area_count", "team_count",
                                       "has_next", "has_team", "member_count", "team_level",
-                                      "applicant_count", "has_team_id", "has_account_id", "status"})
+                                      "applicant_count", "has_team_id", "has_account_id", "status",
+                                      "decision_count", "unread_count", "has_decision_id"})
         for secret in (request.get("password"), request.get("token")):
             if secret:
                 self.assertTrue(secret.encode("utf-8") not in result.stdout + result.stderr,
@@ -563,6 +564,132 @@ class AccountClientResponseTests(unittest.TestCase):
             output, _ = self.exercise(error, self.team_request("approve_application", team_id=team_id,
                                                                account_id=account_id))
             self.assertEqual(output["error_code"], expected)
+
+    @classmethod
+    def decision(cls, index=1, **fields):
+        return {"id": f"{index:08x}-1234-4321-8765-0123456789ab",
+                "team_id": cls.team_detail()["id"], "team_name": "Test Team",
+                "status": "rejected", "created_at": "2026-10-21T12:00:01Z",
+                "unread": True, **fields}
+
+    def test_decision_fetch_is_separate_from_ack_and_read_history_is_retained(self):
+        entries = [self.decision(3, status="approved"), self.decision(2),
+                   self.decision(1, unread=False)]
+        for _ in range(2):
+            output, received = self.exercise(self.team_reply({"decisions": entries}),
+                                            self.team_request("application_decisions"))
+            self.assertTrue(output["ok"])
+            self.assertEqual(received["op"], "application_decisions")
+            self.assertEqual(received["body"], {})
+            self.assertEqual(output["decision_count"], 3)
+            self.assertEqual(output["unread_count"], 2)
+            self.assertFalse(output["has_decision_id"])
+            self.assertFalse(output["has_token"])
+        # Acknowledgement is a distinct caller action for precisely one ID.
+        output, received = self.exercise(self.team_reply({"decision_id": entries[1]["id"], "status": "read"}),
+            self.team_request("ack_decision", decision_id=entries[1]["id"]))
+        self.assertTrue(output["ok"])
+        self.assertEqual(received["body"], {"decision_id": entries[1]["id"]})
+        self.assertTrue(output["has_decision_id"])
+        self.assertEqual(output["status"], "read")
+        entries[1]["unread"] = False
+        output, _ = self.exercise(self.team_reply({"decisions": entries}),
+                                 self.team_request("application_decisions"))
+        self.assertEqual(output["decision_count"], 3)
+        self.assertEqual(output["unread_count"], 1)
+
+    def test_decisions_empty_and_full_history_with_equal_or_adjusted_clock_times(self):
+        for entries in ([], [self.decision(i, unread=i % 2 == 0) for i in range(50, 0, -1)]):
+            output, _ = self.exercise(self.team_reply({"decisions": entries}),
+                                     self.team_request("application_decisions"))
+            self.assertTrue(output["ok"])
+            self.assertEqual(output["decision_count"], len(entries))
+        # Ordering is committed server order, not ID or potentially corrected clock order.
+        entries = [self.decision(1, created_at="2024-02-29T23:59:59Z"),
+                   self.decision(3, created_at="2026-01-01T00:00:00Z"),
+                   self.decision(2, created_at="2000-02-29T00:00:00Z")]
+        output, _ = self.exercise(self.team_reply({"decisions": entries}),
+                                 self.team_request("application_decisions"))
+        self.assertTrue(output["ok"])
+
+    def test_decisions_reject_unknown_fields_bad_values_duplicates_and_oversized_history(self):
+        entry = self.decision()
+        cases = [{}, {"decisions": None}, {"decisions": {}}, {"decisions": [False]},
+                 {"decisions": [entry], "next": ""}, {"decisions": [entry, entry]},
+                 {"decisions": [self.decision(i) for i in range(51)]}]
+        for key in entry:
+            cases.append({"decisions": [{k: v for k, v in entry.items() if k != key}]})
+        for key, value in [("id", "bad"), ("team_id", "BAD"), ("id", entry["id"].upper()),
+                           ("team_name", "<b>Team</b>"), ("team_name", "a" * 41),
+                           ("team_name", "ab"), ("team_name", "Team\nOther"),
+                           ("status", "pending"), ("status", True), ("unread", 1),
+                           ("unread", "false"), ("unread", None), ("private", "hidden")]:
+            cases.append({"decisions": [{**entry, key: value}]})
+        for data in cases:
+            self.team_rejects("application_decisions", data)
+
+    def test_decisions_require_real_utc_seconds_calendar_dates(self):
+        for timestamp in ("", "2026-10-21", "2026-10-21 12:00:00Z", "2026-10-21T12:00:00z",
+                          "2026-10-21T12:00:00.000Z", "2026-10-21T12:00:00+00:00",
+                          "2026-10-21T12:00:00Z\n", "2026-10-21T12:00:00\0",
+                          "0000-01-01T00:00:00Z", "2026-00-21T12:00:00Z",
+                          "2026-13-21T12:00:00Z", "2026-10-00T12:00:00Z",
+                          "2026-10-32T12:00:00Z", "2026-04-31T12:00:00Z",
+                          "2026-02-29T12:00:00Z", "1900-02-29T12:00:00Z",
+                          "2026-10-21T24:00:00Z", "2026-10-21T12:60:00Z",
+                          "2026-10-21T12:00:60Z", "202a-10-21T12:00:00Z", True):
+            self.team_rejects("application_decisions", {"decisions": [self.decision(created_at=timestamp)]})
+
+    def test_decision_ack_binds_request_and_rejects_malformed_responses_without_retry(self):
+        decision_id = self.decision()["id"]
+        for data in ({"decision_id": self.decision(2)["id"], "status": "read"},
+                     {"decision_id": "bad", "status": "read"},
+                     {"decision_id": decision_id, "status": "approved"},
+                     {"decision_id": decision_id, "status": True},
+                     {"decision_id": decision_id, "status": "read", "unread": False},
+                     {"status": "read"}):
+            self.team_rejects("ack_decision", data, decision_id=decision_id)
+        output, _ = self.exercise(self.team_reply({"decision_id": decision_id, "status": "read"}, status=201),
+                                 self.team_request("ack_decision", decision_id=decision_id))
+        self.assertEqual(output["error_code"], "protocol")
+
+    def test_decision_request_scope_validated_before_connect(self):
+        decision_id = self.decision()["id"]
+        requests = [self.team_request("ack_decision"),
+                    self.team_request("ack_decision", decision_id="not-a-uuid"),
+                    self.team_request("application_decisions", decision_id=decision_id),
+                    self.team_request("my_team", decision_id=decision_id),
+                    {**self.login_request(), "decision_id": decision_id}]
+        for operation in ("application_decisions", "ack_decision"):
+            base = {"decision_id": decision_id} if operation == "ack_decision" else {}
+            for key, value in (("name", "Test Team"), ("area_id", "area-1"),
+                               ("team_id", self.team_detail()["id"]), ("account_id", self.account()["id"]),
+                               ("after", decision_id), ("username", "ResponseUser"),
+                               ("password", "private-fixture"), ("starter_id", "spearman"), ("token", "")):
+                requests.append(self.team_request(operation, **base, **{key: value}))
+        for request in requests:
+            with self.peer() as (port, state):
+                output = self.invoke(self.profile(port), request)
+            self.assertEqual(output["error_code"], "invalid_input")
+            self.assertEqual(state["connections"], 0)
+            self.assertIsNone(state["error"])
+
+    def test_decision_cancellation_and_errors_do_not_retry_or_invalidate_valid_authentication(self):
+        for operation in ("application_decisions", "ack_decision"):
+            fields = {"decision_id": self.decision()["id"]} if operation == "ack_decision" else {}
+            output, _ = self.exercise(request=self.team_request(operation, **fields, cancel_after_ms=300), stall=True)
+            self.assertEqual(output["error_code"], "cancelled")
+            self.assertLess(output["elapsed_ms"], 3000)
+            for status, code, expected in ((401, "forbidden", "invalid_session"),
+                                           (403, "forbidden", "forbidden"),
+                                           (404, "not_found", "not_found"),
+                                           (503, "service_unavailable", "team_failed")):
+                def error(received):
+                    return {"v": 1, "id": received["id"], "ok": False, "status": status,
+                            "data": {"code": code, "message": "Private backend detail"}}
+                output, _ = self.exercise(error, self.team_request(operation, **fields))
+                self.assertEqual(output["error_code"], expected)
+                self.assertFalse(output["has_token"])
 
     def test_positive_login_and_unicode_password_cross_language_wire(self):
         request = self.login_request()

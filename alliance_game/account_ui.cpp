@@ -296,6 +296,8 @@ void register_player(const alliance::TrustedProfile& profile)
             "\n\nChoose Log in to continue.");
 }
 
+void application_decisions(const alliance::TrustedProfile& profile, bool unread_only);
+
 void login(const alliance::TrustedProfile& profile)
 {
     account::Request input;
@@ -326,6 +328,7 @@ void login(const alliance::TrustedProfile& profile)
     session.identity = profile.address + ":" + std::to_string(profile.port) + ":" +
                        profile.certificate_sha256;
     message("Logged in.\n\n" + profile_text(session.profile));
+    application_decisions(profile, true);
 }
 
 void refresh(const alliance::TrustedProfile& profile)
@@ -401,6 +404,68 @@ int select(const std::string& title, const std::string& description,
     menu.set_ok_label("Open");
     menu.set_cancel_label("Back");
     return menu.show() ? menu.selected_index() : -1;
+}
+
+void application_decisions(const alliance::TrustedProfile& profile, bool unread_only)
+{
+    while(!current_session().token.empty()) {
+        account::Request input;
+        input.operation = "application_decisions";
+        account::Reply output;
+        if(!team_request(profile, input, "Checking your application decisions…", output)) return;
+        std::vector<account::Decision> entries;
+        std::vector<std::string> rows;
+        for(const auto& decision : output.decisions) {
+            if(unread_only && !decision.unread) continue;
+            entries.push_back(decision);
+            rows.push_back(std::string(decision.unread ? "Unread — " : "Read — ") +
+                (decision.status == "approved" ? "Approved — " : "Rejected — ") +
+                decision.team_name + " — " + decision.created_at);
+        }
+        if(rows.empty()) {
+            if(!unread_only) message("You have no saved application decisions yet.\n"
+                "This history records new captain approvals and rejections from this update onward.\n"
+                "Open My team to check your current membership.");
+            return;
+        }
+        const int choice = select(unread_only ? "Unread application decisions" : "Application decisions",
+            "Your latest 50 captain decisions are retained, newest first.\n"
+            "Open one to read its result. Back leaves unopened decisions unread.\n"
+            "History does not replace My team for your current membership.", rows);
+        if(choice < 0) return;
+        if(static_cast<std::size_t>(choice) >= entries.size()) continue;
+        const auto& decision = entries[choice];
+        const bool approved = decision.status == "approved";
+        const std::string detail = std::string(approved ? "Application approved.\n" : "Application rejected.\n") +
+            (approved ? "The captain approved your application to join " : "The captain rejected your application to join ") +
+            decision.team_name + ".\n\nTeam ID: " + decision.team_id +
+            "\nDecision time (UTC): " + decision.created_at +
+            "\n\nThis is a saved decision, not a live membership check. Open My team for your current team." +
+            (decision.unread ? "\nChoose OK to mark only this decision as read." : "\nThis decision has already been read.");
+        // Opening a list is read-only. Only an explicitly opened detail that
+        // closes with OK can acknowledge that one notice; plugins cannot skip it.
+        gui2::dialogs::message dialog("Alliance application decision", detail, false, false, false);
+        dialog.set_allow_plugin_skip(false);
+        dialog.set_button_visible(gui2::dialogs::message::ok, gui2::widget::visibility::visible);
+        dialog.set_button_caption(gui2::dialogs::message::ok, "OK");
+        dialog.show();
+        if(dialog.get_retval() != gui2::retval::OK || !decision.unread) continue;
+        account::Request acknowledge;
+        acknowledge.operation = "ack_decision";
+        acknowledge.decision_id = decision.id;
+        acknowledge.token = current_session().token;
+        account::Reply saved;
+        const bool completed = request(profile, acknowledge, "Marking this decision as read…", saved);
+        if(!completed || !saved.ok) {
+            if(completed) show_failure(saved);
+            if(!current_session().token.empty()) message(
+                "The read status was not confirmed. Open Application decisions again to check it.\n"
+                "Your saved approval or rejection is unchanged. No acknowledgement was automatically retried.");
+            return;
+        }
+        // Refresh after this acknowledgement. Other entries retain their own
+        // unread flags; there is no bulk acknowledgement or mutation retry.
+    }
 }
 
 // Each page is fetched afresh. Only cursors are kept for Previous page, and all
@@ -541,6 +606,7 @@ void team_actions(const alliance::TrustedProfile& profile, const std::string& te
 
 void my_applications(const alliance::TrustedProfile& profile)
 {
+    application_decisions(profile, true);
     std::vector<std::string> cursors{std::string{}};
     while(!current_session().token.empty()) {
         account::Request input;
@@ -555,7 +621,9 @@ void my_applications(const alliance::TrustedProfile& profile)
         const int more = output.next.empty() ? -1 : static_cast<int>(rows.size());
         if(more >= 0) rows.push_back("More applications");
         if(rows.empty()) {
-            message("You have no pending team applications. Open My team to check whether you are already a member.");
+            message("You have no pending team applications.\n"
+                    "Open Application decisions for saved captain approvals and rejections.\n"
+                    "Open My team to check your current membership.");
             return;
         }
         const int choice = select("My applications", "These applications are waiting for a captain's decision.", rows);
@@ -730,13 +798,14 @@ void teams(const alliance::TrustedProfile& profile)
     while(!current_session().token.empty()) {
         const int action = select("Alliance teams",
             "Build your team in an area. Apply to join a team, or review applications as captain.",
-            {"Browse areas and teams", "Create team", "My team", "My applications", "Review applications"});
+            {"Browse areas and teams", "Create team", "My team", "My applications", "Review applications", "Application decisions"});
         if(action < 0) return;
         if(action == 0) browse_areas(profile);
         else if(action == 1) create_team(profile);
         else if(action == 2) my_team(profile);
         else if(action == 3) my_applications(profile);
         else if(action == 4) review_applications(profile);
+        else if(action == 5) application_decisions(profile, false);
     }
 }
 

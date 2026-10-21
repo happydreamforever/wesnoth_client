@@ -4,6 +4,7 @@
 #include "account_client.hpp"
 #include "account_protocol.hpp"
 
+#include <algorithm>
 #include <chrono>
 #include <condition_variable>
 #include <iostream>
@@ -43,6 +44,10 @@ void output(const alliance::account::Reply& reply, long long elapsed_ms)
         {"team_level", reply.team ? reply.team->level : 0},
         {"applicant_count", reply.applicants.size()},
         {"has_team_id", !reply.team_id.empty()}, {"has_account_id", !reply.account_id.empty()},
+        {"decision_count", reply.decisions.size()},
+        {"unread_count", std::count_if(reply.decisions.begin(), reply.decisions.end(),
+            [](const auto& decision) { return decision.unread; })},
+        {"has_decision_id", !reply.decision_id.empty()},
         {"status", reply.status}};
     std::cout << boost::json::serialize(result) << "\n";
 }
@@ -90,6 +95,7 @@ int main(int argc, char** argv)
         request.team_id = field(input, "team_id");
         request.account_id = field(input, "account_id");
         request.after = field(input, "after");
+        request.decision_id = field(input, "decision_id");
         int cancel_after_ms = 0;
         if(const auto* delay = input.if_contains("cancel_after_ms")) {
             if(!delay->is_int64() || delay->as_int64() < 0 || delay->as_int64() > 5000)

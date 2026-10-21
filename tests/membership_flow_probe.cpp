@@ -44,6 +44,13 @@ int main(int argc, char** argv)
             need(result.ok && token_valid(result.token));
             return result;
         };
+        auto acknowledge_decision = [&](const std::string& token, const std::string& decision_id) {
+            Request request;
+            request.operation = "ack_decision";
+            request.token = token;
+            request.decision_id = decision_id;
+            return perform_request(trusted, request, cancellation);
+        };
         auto unchanged = [&](const Reply& actor) {
             const auto result = call(actor.token, "me");
             need(result.ok && result.profile.account_id == actor.profile.account_id &&
@@ -134,6 +141,8 @@ int main(int argc, char** argv)
                 ack(call(applicant.token, "withdraw_application", team_id), team_id, applicant_id, "withdrawn");
                 need(application_ids(applicant.token, "").count(team_id) == 0);
                 need(application_ids(captain.token, team_id).count(applicant_id) == 0);
+                const auto no_decisions = call(applicant.token, "application_decisions");
+                need(no_decisions.ok && no_decisions.decisions.empty());
                 stage = "reject";
                 ack(call(applicant.token, "apply_team", team_id), team_id, applicant_id, "applied");
                 ack(call(captain.token, "reject_application", team_id, applicant_id), team_id, applicant_id, "rejected");
@@ -142,6 +151,39 @@ int main(int argc, char** argv)
                 auto mine = call(applicant.token, "my_team");
                 need(mine.ok && !mine.team);
                 std::cout << "PASS withdrawal and captain rejection remove applications without joining\n";
+                stage = "unread-rejection";
+                auto decisions = call(applicant.token, "application_decisions");
+                need(decisions.ok && decisions.decisions.size() == 1);
+                const auto rejected_id = decisions.decisions.front().id;
+                need(decisions.decisions.front().team_id == team_id &&
+                     decisions.decisions.front().team_name == team_name &&
+                     decisions.decisions.front().status == "rejected" &&
+                     decisions.decisions.front().unread);
+                // Fetching and repeating the captain's decision must neither
+                // consume the notification nor manufacture another event.
+                ack(call(captain.token, "reject_application", team_id, applicant_id), team_id, applicant_id, "rejected");
+                decisions = call(applicant.token, "application_decisions");
+                need(decisions.ok && decisions.decisions.size() == 1 &&
+                     decisions.decisions.front().id == rejected_id && decisions.decisions.front().unread);
+                const auto captain_decisions = call(captain.token, "application_decisions");
+                need(captain_decisions.ok && captain_decisions.decisions.empty());
+                const auto foreign_ack = acknowledge_decision(captain.token, rejected_id);
+                need(!foreign_ack.ok && foreign_ack.error_code == "not_found");
+                unchanged(captain);
+                stage = "relogin-unread-rejection";
+                const auto fresh = login(applicant_name);
+                decisions = call(fresh.token, "application_decisions");
+                need(decisions.ok && decisions.decisions.size() == 1 &&
+                     decisions.decisions.front().id == rejected_id && decisions.decisions.front().unread);
+                for(int repeat = 0; repeat < 2; ++repeat) {
+                    const auto read = acknowledge_decision(fresh.token, rejected_id);
+                    need(read.ok && read.decision_id == rejected_id && read.status == "read");
+                }
+                decisions = call(fresh.token, "application_decisions");
+                need(decisions.ok && decisions.decisions.size() == 1 &&
+                     decisions.decisions.front().id == rejected_id && !decisions.decisions.front().unread);
+                logout(fresh);
+                std::cout << "PASS private unread rejection survives login; explicit acknowledgement retains read history\n";
                 stage = "approve";
                 ack(call(applicant.token, "apply_team", team_id), team_id, applicant_id, "applied");
                 ack(call(captain.token, "approve_application", team_id, applicant_id), team_id, applicant_id, "approved");
@@ -172,6 +214,16 @@ int main(int argc, char** argv)
             }
             need(application_ids(applicant.token, "").count(team_id) == 0);
             need(application_ids(captain.token, team_id).count(applicant_id) == 0);
+            stage = "persistent-decision-history";
+            const auto history = call(applicant.token, "application_decisions");
+            need(history.ok && history.decisions.size() == 2);
+            const auto& approved = history.decisions[0];
+            const auto& rejected = history.decisions[1];
+            need(approved.id != rejected.id && approved.team_id == team_id && rejected.team_id == team_id &&
+                 approved.team_name == team_name && rejected.team_name == team_name &&
+                 approved.status == "approved" && approved.unread &&
+                 rejected.status == "rejected" && !rejected.unread);
+            std::cout << "PASS approved and rejected decisions retain independent unread state and newest-first history\n";
             std::cout << "PASS both players retrieve the same captain and two-member roster with unchanged XP\n";
             logout(applicant); logout(captain);
             std::cout << "PASS revoked sessions cannot access membership operations\n";
