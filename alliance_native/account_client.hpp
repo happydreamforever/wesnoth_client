@@ -8,7 +8,7 @@
 namespace alliance::account {
 struct Request {
     std::string operation, username, password, starter_id, token;
-    std::string name, area_id, team_id, after;
+    std::string name, area_id, team_id, account_id, after;
 };
 struct Profile {
     std::string account_id, username, unit_type, starter_id;
@@ -36,10 +36,12 @@ struct Reply {
     std::vector<TeamSummary> teams;
     std::optional<Team> team;
     std::string next;
+    std::vector<Member> applicants;
+    std::string team_id, account_id, status;
 };
 bool team_name_valid(const std::string&);
 // Called only by a worker. One connection/request with an overall 10s deadline;
-// never retries a potentially completed registration/team creation or logs credentials.
+// never retries a potentially completed registration or team mutation, and never logs credentials.
 Reply perform_request(const TrustedProfile&, const Request&, const CancellationToken&);
 // Public profile only; never reads a server key or database configuration.
 TrustedProfile read_public_profile(const std::string& path);

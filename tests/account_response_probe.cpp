@@ -25,7 +25,7 @@ std::string safe_error(const std::string& value)
     for(const char* allowed : {"", "invalid_input", "invalid_password", "invalid_credentials",
           "invalid_session", "forbidden", "suspended", "conflict", "rate_limited",
           "timeout", "cancelled", "identity", "protocol", "unavailable",
-          "profile_rejected", "document_rejected", "team_failed", "already_member", "busy", "not_found"}) {
+          "profile_rejected", "document_rejected", "team_failed", "already_member", "busy", "not_found", "capacity", "not_requested"}) {
         if(value == allowed) return value;
     }
     return "unrecognized_error";
@@ -40,7 +40,10 @@ void output(const alliance::account::Reply& reply, long long elapsed_ms)
         {"area_count", reply.areas.size()}, {"team_count", reply.teams.size()},
         {"has_next", !reply.next.empty()}, {"has_team", reply.team.has_value()},
         {"member_count", reply.team ? reply.team->members.size() : 0},
-        {"team_level", reply.team ? reply.team->level : 0}};
+        {"team_level", reply.team ? reply.team->level : 0},
+        {"applicant_count", reply.applicants.size()},
+        {"has_team_id", !reply.team_id.empty()}, {"has_account_id", !reply.account_id.empty()},
+        {"status", reply.status}};
     std::cout << boost::json::serialize(result) << "\n";
 }
 }
@@ -85,6 +88,7 @@ int main(int argc, char** argv)
         request.name = field(input, "name");
         request.area_id = field(input, "area_id");
         request.team_id = field(input, "team_id");
+        request.account_id = field(input, "account_id");
         request.after = field(input, "after");
         int cancel_after_ms = 0;
         if(const auto* delay = input.if_contains("cancel_after_ms")) {

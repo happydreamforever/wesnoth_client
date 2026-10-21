@@ -172,7 +172,8 @@ class AccountClientResponseTests(unittest.TestCase):
         output = json.loads(result.stdout)
         self.assertEqual(set(output), {"ok", "error_code", "has_token",
                                       "has_profile", "level", "elapsed_ms", "area_count", "team_count",
-                                      "has_next", "has_team", "member_count", "team_level"})
+                                      "has_next", "has_team", "member_count", "team_level",
+                                      "applicant_count", "has_team_id", "has_account_id", "status"})
         for secret in (request.get("password"), request.get("token")):
             if secret:
                 self.assertTrue(secret.encode("utf-8") not in result.stdout + result.stderr,
@@ -421,6 +422,147 @@ class AccountClientResponseTests(unittest.TestCase):
         self.assertEqual(output["error_code"], "cancelled")
         self.assertLess(output["elapsed_ms"], 3000)
         self.team_rejects("create_team", {"team": {}}, area_id="area-1", name="Test Team")
+
+    @classmethod
+    def team_summary(cls):
+        value = {key: data for key, data in cls.team_detail().items()
+                 if key not in ("capacity", "members", "area_name")}
+        value["member_count"] = 1
+        return value
+
+    def test_membership_operations_exact_shapes_and_acknowledgements(self):
+        team_id, account_id = self.team_detail()["id"], self.account()["id"]
+        for operation, status in [("apply_team", "applied"), ("withdraw_application", "withdrawn"),
+                                  ("approve_application", "approved"), ("reject_application", "rejected")]:
+            fields = {"team_id": team_id}
+            if operation in ("approve_application", "reject_application"):
+                fields["account_id"] = account_id
+            output, received = self.exercise(self.team_reply(
+                {"team_id": team_id, "account_id": account_id, "status": status}),
+                self.team_request(operation, **fields))
+            self.assertTrue(output["ok"])
+            self.assertEqual(received["body"], fields)
+            self.assertEqual(output["status"], status)
+            self.assertTrue(output["has_team_id"])
+            self.assertTrue(output["has_account_id"])
+            self.assertFalse(output["has_token"])
+        data = {"teams": [self.team_summary()], "next": ""}
+        output, received = self.exercise(self.team_reply(data), self.team_request("my_applications"))
+        self.assertTrue(output["ok"])
+        self.assertEqual(output["team_count"], 1)
+        self.assertEqual(received["body"], {"after": ""})
+        data = {"team_id": team_id, "applicants": self.team_detail()["members"], "next": ""}
+        output, received = self.exercise(self.team_reply(data), self.team_request("team_applicants", team_id=team_id))
+        self.assertTrue(output["ok"])
+        self.assertEqual(output["applicant_count"], 1)
+        self.assertEqual(received["body"], {"team_id": team_id, "after": ""})
+
+    def test_membership_pages_full_sorted_and_empty_final_page(self):
+        team_id = self.team_detail()["id"]
+        members = [{"id": f"{i:08x}-1234-4321-8765-0123456789ab", "username": f"User_{i}",
+                    "unit_type": "Elvish Fighter", "level": 1} for i in range(20)]
+        data = {"team_id": team_id, "applicants": members, "next": members[-1]["id"]}
+        output, _ = self.exercise(self.team_reply(data), self.team_request("team_applicants", team_id=team_id))
+        self.assertTrue(output["ok"])
+        self.assertTrue(output["has_next"])
+        self.assertEqual(output["applicant_count"], 20)
+        data = {"team_id": team_id, "applicants": [], "next": ""}
+        output, received = self.exercise(self.team_reply(data), self.team_request(
+            "team_applicants", team_id=team_id, after=members[-1]["id"]))
+        self.assertTrue(output["ok"])
+        self.assertEqual(received["body"]["after"], members[-1]["id"])
+        # Applications may belong to several areas; there is no caller area filter.
+        teams = [{**self.team_summary(), "id": entry["id"], "area_id": f"area-{i}"}
+                 for i, entry in enumerate(members)]
+        output, _ = self.exercise(self.team_reply({"teams": teams, "next": teams[-1]["id"]}),
+                                  self.team_request("my_applications"))
+        self.assertTrue(output["ok"])
+        self.assertTrue(output["has_next"])
+        self.assertEqual(output["team_count"], 20)
+
+    def test_membership_ack_rejects_wrong_identity_status_and_extra_fields(self):
+        team_id, account_id = self.team_detail()["id"], self.account()["id"]
+        other = "eeeeeeee-1234-4321-8765-0123456789ab"
+        for operation, status in [("apply_team", "applied"), ("withdraw_application", "withdrawn"),
+                                  ("approve_application", "approved"), ("reject_application", "rejected")]:
+            fields = {"team_id": team_id}
+            if operation in ("approve_application", "reject_application"):
+                fields["account_id"] = account_id
+            ack = {"team_id": team_id, "account_id": account_id, "status": status}
+            invalid = [{**ack, "team_id": other}, {**ack, "account_id": "bad"},
+                       {**ack, "status": "joined"}, {**ack, "status": True},
+                       {**ack, "private": "hidden"}, {"team_id": team_id, "status": status}]
+            if "account_id" in fields:
+                invalid.append({**ack, "account_id": other})
+            for data in invalid:
+                self.team_rejects(operation, data, **fields)
+            output, _ = self.exercise(self.team_reply(ack, status=201), self.team_request(operation, **fields))
+            self.assertFalse(output["ok"])
+            self.assertEqual(output["error_code"], "protocol")
+
+    def test_membership_applicants_reject_unbounded_invalid_and_unsorted_payloads(self):
+        import copy
+        team_id = self.team_detail()["id"]
+        member = self.team_detail()["members"][0]
+        base = {"team_id": team_id, "applicants": [member], "next": ""}
+        cases = [{**base, "team_id": "eeeeeeee-1234-4321-8765-0123456789ab"},
+                 {**base, "applicants": [member] * 21}, {**base, "applicants": [member] * 2},
+                 {**base, "next": member["id"]}, {**base, "next": "bad/"},
+                 {**base, "private": "hidden"}]
+        for key, value in [("id", "bad"), ("username", "<b>Member</b>"),
+                           ("unit_type", "Spearman\nOther"), ("level", True), ("level", 4),
+                           ("private", "hidden")]:
+            entry = copy.deepcopy(member)
+            entry[key] = value
+            cases.append({**base, "applicants": [entry]})
+        for data in cases:
+            self.team_rejects("team_applicants", data, team_id=team_id)
+        self.team_rejects("team_applicants", base, team_id=team_id, after=member["id"])
+        members = [{**member, "id": f"{i:08x}-1234-4321-8765-0123456789ab"} for i in (2, 1)]
+        self.team_rejects("team_applicants", {**base, "applicants": members}, team_id=team_id)
+        self.team_rejects("my_applications", {"teams": [self.team_summary()] * 2, "next": ""})
+        self.team_rejects("my_applications", {"teams": [self.team_summary()] * 21, "next": ""})
+
+    def test_membership_invalid_request_fields_rejected_before_socket(self):
+        team_id, account_id = self.team_detail()["id"], self.account()["id"]
+        requests = [self.team_request("my_applications", team_id=team_id),
+                    self.team_request("my_applications", area_id="area-1"),
+                    self.team_request("my_applications", after="a" * 65),
+                    self.team_request("team_applicants"),
+                    self.team_request("team_applicants", team_id=team_id, account_id=account_id),
+                    self.team_request("apply_team", team_id=team_id, account_id=account_id),
+                    self.team_request("withdraw_application", team_id=team_id, after=account_id),
+                    self.team_request("approve_application", team_id=team_id),
+                    self.team_request("reject_application", team_id=team_id, account_id="bad"),
+                    self.team_request("my_team", account_id=account_id),
+                    {**self.login_request(), "account_id": account_id}]
+        for request in requests:
+            with self.peer() as (port, state):
+                output = self.invoke(self.profile(port), request)
+            self.assertFalse(output["ok"])
+            self.assertEqual(output["error_code"], "invalid_input")
+            self.assertEqual(state["connections"], 0)
+            self.assertIsNone(state["error"])
+
+    def test_membership_cancel_has_no_retry_and_permission_denial_preserves_session_meaning(self):
+        team_id, account_id = self.team_detail()["id"], self.account()["id"]
+        for operation in ("apply_team", "withdraw_application", "approve_application", "reject_application"):
+            fields = {"team_id": team_id, "cancel_after_ms": 300}
+            if operation in ("approve_application", "reject_application"):
+                fields["account_id"] = account_id
+            output, _ = self.exercise(request=self.team_request(operation, **fields), stall=True)
+            self.assertEqual(output["error_code"], "cancelled")
+            self.assertLess(output["elapsed_ms"], 3000)
+        for status, code, expected in [(401, "forbidden", "invalid_session"),
+                                       (403, "forbidden", "forbidden"),
+                                       (409, "capacity", "capacity"),
+                                       (409, "not_requested", "not_requested")]:
+            def error(received):
+                return {"v": 1, "id": received["id"], "ok": False, "status": status,
+                        "data": {"code": code, "message": "Private server detail"}}
+            output, _ = self.exercise(error, self.team_request("approve_application", team_id=team_id,
+                                                               account_id=account_id))
+            self.assertEqual(output["error_code"], expected)
 
     def test_positive_login_and_unicode_password_cross_language_wire(self):
         request = self.login_request()

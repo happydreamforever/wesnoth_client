@@ -451,7 +451,7 @@ std::string team_text(const account::Team& team)
         text += " — " + member.unit_type + ", leader level " + std::to_string(member.level);
     }
     text += "\n\nTeam experience is separate from personal leader experience.\n"
-            "Joining teams and team battles will be added in a later update.";
+            "Team battles and further captain-management actions will be added in a later update.";
     return text;
 }
 
@@ -463,7 +463,185 @@ void my_team(const alliance::TrustedProfile& profile)
     if(!team_request(profile, input, "Loading your team…", output)) return;
     message(output.team ? team_text(*output.team) :
         "You do not belong to a team yet. Choose Create team to become its captain.\n"
-        "Joining another team will be added in a later update.");
+        "Or browse areas and teams to apply to join an existing team.");
+}
+
+void my_applications(const alliance::TrustedProfile& profile);
+
+std::string membership_recovery(const std::string& operation)
+{
+    if(operation == "apply_team" || operation == "withdraw_application") {
+        return "The action may have reached the server. Check My applications and My team "
+               "before trying it again. An absent application may have been approved, rejected or withdrawn.";
+    }
+    return "The action may have reached the server. Check My team and Review applications "
+           "before trying it again. An absent application alone does not prove approval.";
+}
+
+bool membership_request(const alliance::TrustedProfile& profile, account::Request input,
+                        const std::string& action)
+{
+    const std::string operation = input.operation;
+    const std::string actor = current_session().profile.account_id;
+    input.token = current_session().token;
+    account::Reply output;
+    if(!request(profile, input, action, output)) {
+        message(membership_recovery(operation));
+        return false;
+    }
+    if(!output.ok) {
+        show_failure(output);
+        if(output.error_code == "timeout" || output.error_code == "cancelled" ||
+           output.error_code == "unavailable" || output.error_code == "service_unavailable" ||
+           output.error_code == "protocol" || output.error_code == "team_failed" ||
+           output.error_code == "request_failed") message(membership_recovery(operation));
+        return false;
+    }
+    if((operation == "apply_team" || operation == "withdraw_application") && output.account_id != actor) {
+        message("The response did not identify your player. " + membership_recovery(operation));
+        return false;
+    }
+    return true;
+}
+
+void team_actions(const alliance::TrustedProfile& profile, const std::string& team_id)
+{
+    while(!current_session().token.empty()) {
+        account::Request input;
+        input.operation = "team_detail";
+        input.team_id = team_id;
+        account::Reply output;
+        if(!team_request(profile, input, "Loading the team roster…", output) || !output.team) return;
+        const auto& team = *output.team;
+        bool is_member = false;
+        for(const auto& member : team.members) {
+            if(member.id == current_session().profile.account_id) is_member = true;
+        }
+        std::vector<std::string> actions{"View roster"};
+        if(!is_member) actions.push_back("Apply to join");
+        const int choice = select(team.name,
+            "Area: " + team.area_name + "\nMembers: " + std::to_string(team.members.size()) +
+            "/8\nThe captain decides which applications to approve.", actions);
+        if(choice < 0) return;
+        if(choice == 0) { message(team_text(team)); continue; }
+        if(choice != 1 || is_member) continue;
+        if(select("Confirm application", "Apply to join " + team.name + " in " + team.area_name +
+                  "?\nTeam ID: " + team.id + "\nThis sends an application; it does not immediately join the team.",
+                  {"Send application"}) != 0) return;
+        account::Request apply;
+        apply.operation = "apply_team";
+        apply.team_id = team.id;
+        if(membership_request(profile, apply, "Sending your application…")) {
+            message("Application submitted. Your captain must approve it before you join.\nMy applications will now refresh.");
+            my_applications(profile);
+        }
+        return;
+    }
+}
+
+void my_applications(const alliance::TrustedProfile& profile)
+{
+    std::vector<std::string> cursors{std::string{}};
+    while(!current_session().token.empty()) {
+        account::Request input;
+        input.operation = "my_applications";
+        input.after = cursors.back();
+        account::Reply output;
+        if(!team_request(profile, input, "Loading your applications…", output)) return;
+        std::vector<std::string> rows;
+        for(const auto& team : output.teams) rows.push_back(team.name + " — " + std::to_string(team.member_count) + "/8 members");
+        const int previous = cursors.size() > 1 ? static_cast<int>(rows.size()) : -1;
+        if(previous >= 0) rows.push_back("Previous page");
+        const int more = output.next.empty() ? -1 : static_cast<int>(rows.size());
+        if(more >= 0) rows.push_back("More applications");
+        if(rows.empty()) {
+            message("You have no pending team applications. Open My team to check whether you are already a member.");
+            return;
+        }
+        const int choice = select("My applications", "These applications are waiting for a captain's decision.", rows);
+        if(choice < 0) return;
+        if(choice == previous) { cursors.pop_back(); continue; }
+        if(choice == more) { cursors.push_back(output.next); continue; }
+        if(static_cast<std::size_t>(choice) >= output.teams.size()) continue;
+        const auto& team = output.teams[choice];
+        const int action = select(team.name, "Team ID: " + team.id,
+                                  {"View roster", "Withdraw application"});
+        if(action == 0) {
+            account::Request detail;
+            detail.operation = "team_detail";
+            detail.team_id = team.id;
+            account::Reply loaded;
+            if(team_request(profile, detail, "Loading the team roster…", loaded) && loaded.team)
+                message(team_text(*loaded.team));
+        } else if(action == 1 && select("Confirm withdrawal", "Withdraw your application to " + team.name +
+                  "?\nTeam ID: " + team.id + "\nThis does not leave a team if you have already been approved.",
+                  {"Withdraw this application"}) == 0) {
+            account::Request withdraw;
+            withdraw.operation = "withdraw_application";
+            withdraw.team_id = team.id;
+            if(membership_request(profile, withdraw, "Withdrawing your application…"))
+                message("Application withdrawn. The list will now refresh.");
+        }
+        // Every return from a detail/action dialog re-reads the current page.
+    }
+}
+
+void review_applications(const alliance::TrustedProfile& profile)
+{
+    account::Request own;
+    own.operation = "my_team";
+    account::Reply current;
+    if(!team_request(profile, own, "Loading your team…", current)) return;
+    if(!current.team || current.team->captain_id != current_session().profile.account_id) {
+        message("Only the current team captain can review applications.");
+        return;
+    }
+    const std::string team_id = current.team->id;
+    const std::string team_name = current.team->name;
+    std::vector<std::string> cursors{std::string{}};
+    while(!current_session().token.empty()) {
+        account::Request input;
+        input.operation = "team_applicants";
+        input.team_id = team_id;
+        input.after = cursors.back();
+        account::Reply output;
+        if(!team_request(profile, input, "Loading team applications…", output)) return;
+        std::vector<std::string> rows;
+        for(const auto& member : output.applicants)
+            rows.push_back(member.username + " — " + member.unit_type + ", leader level " + std::to_string(member.level));
+        const int previous = cursors.size() > 1 ? static_cast<int>(rows.size()) : -1;
+        if(previous >= 0) rows.push_back("Previous page");
+        const int more = output.next.empty() ? -1 : static_cast<int>(rows.size());
+        if(more >= 0) rows.push_back("More applications");
+        if(rows.empty()) {
+            message("There are no pending applications for " + team_name + ".");
+            return;
+        }
+        const int choice = select("Applications to " + team_name, "Choose a player to inspect and approve or reject.", rows);
+        if(choice < 0) return;
+        if(choice == previous) { cursors.pop_back(); continue; }
+        if(choice == more) { cursors.push_back(output.next); continue; }
+        if(static_cast<std::size_t>(choice) >= output.applicants.size()) continue;
+        const auto& applicant = output.applicants[choice];
+        const std::string preview = "Player: " + applicant.username + "\nPlayer ID: " + applicant.id +
+            "\nPersonal leader: " + applicant.unit_type + "\nLeader level: " + std::to_string(applicant.level);
+        const int action = select("Review application", preview, {"Approve application", "Reject application"});
+        if(action < 0 || action > 1) continue;
+        const bool approve = action == 0;
+        if(select(approve ? "Confirm approval" : "Confirm rejection",
+                  preview + "\n\nTeam: " + team_name + "\nTeam ID: " + team_id +
+                  (approve ? "\nApprove this player as a member?" : "\nReject this pending application?"),
+                  {approve ? "Approve this player" : "Reject this application"}) != 0) continue;
+        account::Request mutation;
+        mutation.operation = approve ? "approve_application" : "reject_application";
+        mutation.team_id = team_id;
+        mutation.account_id = applicant.id;
+        if(membership_request(profile, mutation, approve ? "Approving application…" : "Rejecting application…")) {
+            message(approve ? "Application approved. The roster and application list will now refresh."
+                            : "Application rejected. The application list will now refresh.");
+            if(approve) my_team(profile);
+        }
+    }
 }
 
 void browse_teams(const alliance::TrustedProfile& profile, const account::Area& area)
@@ -495,12 +673,7 @@ void browse_teams(const alliance::TrustedProfile& profile, const account::Area& 
         if(choice == previous) { cursors.pop_back(); continue; }
         if(choice == more) { cursors.push_back(output.next); continue; }
         if(static_cast<std::size_t>(choice) >= output.teams.size()) continue;
-        account::Request detail;
-        detail.operation = "team_detail";
-        detail.team_id = output.teams[choice].id;
-        account::Reply loaded;
-        if(team_request(profile, detail, "Loading the team roster…", loaded) && loaded.team)
-            message(team_text(*loaded.team));
+        team_actions(profile, output.teams[choice].id);
     }
 }
 
@@ -532,7 +705,7 @@ void create_team(const alliance::TrustedProfile& profile)
     }
     if(select("Confirm new team", "Team: " + input.name + "\nArea: " + area.name +
               "\n\nYou will become captain. A team can have up to 8 members.\n"
-              "Joining teams and team battles are not available yet.", {"Create this team"}) != 0) return;
+              "Other players can apply to join your team. Team battles will follow later.", {"Create this team"}) != 0) return;
     input.token = current_session().token;
     account::Reply output;
     if(!request(profile, input, "Creating your team…", output)) {
@@ -556,12 +729,14 @@ void teams(const alliance::TrustedProfile& profile)
 {
     while(!current_session().token.empty()) {
         const int action = select("Alliance teams",
-            "Build your team in an area. Team battles and joining will follow in a later update.",
-            {"Browse areas and teams", "Create team", "My team"});
+            "Build your team in an area. Apply to join a team, or review applications as captain.",
+            {"Browse areas and teams", "Create team", "My team", "My applications", "Review applications"});
         if(action < 0) return;
         if(action == 0) browse_areas(profile);
         else if(action == 1) create_team(profile);
         else if(action == 2) my_team(profile);
+        else if(action == 3) my_applications(profile);
+        else if(action == 4) review_applications(profile);
     }
 }
 

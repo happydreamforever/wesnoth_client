@@ -60,9 +60,14 @@ bool unit_type_valid(const std::string& value) {
             return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || c == ' ';
         });
 }
+bool membership_mutation(const std::string& op) {
+    return op == "apply_team" || op == "withdraw_application" ||
+           op == "approve_application" || op == "reject_application";
+}
 bool team_operation(const std::string& op) {
     return op == "areas" || op == "teams" || op == "my_team" ||
-           op == "create_team" || op == "team_detail";
+           op == "create_team" || op == "team_detail" || op == "my_applications" ||
+           op == "team_applicants" || membership_mutation(op);
 }
 Reply failure(const std::string& code, bool is_team = false) {
     Reply result;
@@ -100,12 +105,14 @@ Reply transport_failure(const Result& result, bool is_team) {
 Reply team_failure(const std::string& code) {
     Reply result;
     result.error_code = code;
-    if(code == "conflict") result.error_message = "That team name is already in use, or your team membership changed. Check My team before creating another team.";
-    else if(code == "already_member") result.error_message = "You already belong to a team. Open My team to see it.";
-    else if(code == "busy") result.error_message = "You cannot create a team while your player is in a game.";
+    if(code == "conflict") result.error_message = "The team name, membership or application conflicts with the current server state. Refresh the team or applications before trying again.";
+    else if(code == "already_member") result.error_message = "This player already belongs to a team. Refresh My team or the applicant list.";
+    else if(code == "busy") result.error_message = "This team action is unavailable while the player or team is in a game.";
     else if(code == "not_found") result.error_message = "That area or team is no longer available. Open the list again.";
     else if(code == "forbidden") result.error_message = "This team action is not available to your player account.";
-    else if(code == "invalid_input") result.error_message = "Check the selected area and team name.";
+    else if(code == "invalid_input") result.error_message = "Check the selected area, team or application.";
+    else if(code == "capacity") result.error_message = "The team or its application queue is full. Refresh the roster or applications.";
+    else if(code == "not_requested") result.error_message = "That application is no longer pending. Refresh the roster and applications before trying another action.";
     else { result.error_code = "team_failed"; result.error_message = "The team request could not be completed. Try viewing My team."; }
     return result;
 }
@@ -129,6 +136,16 @@ const json::array& array(const json::object& data, const char* key, std::size_t 
     if(!value || !value->is_array() || value->as_array().size() > maximum) invalid();
     return value->as_array();
 }
+Member member(const json::object& source) {
+    keys(source, {"id", "username", "unit_type", "level"});
+    Member result;
+    result.id = uuid(source, "id");
+    result.username = string(source, "username", 24);
+    result.unit_type = string(source, "unit_type", 64);
+    result.level = integer(source, "level", 1, 3);
+    if(!username_valid(result.username) || !unit_type_valid(result.unit_type)) invalid();
+    return result;
+}
 Team team(const json::object& data) {
     keys(data, {"id", "name", "area_id", "area_name", "captain_id", "level", "experience",
                 "rating", "capacity", "members"});
@@ -145,16 +162,9 @@ Team team(const json::object& data) {
     std::set<std::string> ids;
     for(const auto& value : array(data, "members", 8)) {
         if(!value.is_object()) invalid();
-        const auto& source = value.as_object();
-        keys(source, {"id", "username", "unit_type", "level"});
-        Member member;
-        member.id = uuid(source, "id");
-        member.username = string(source, "username", 24);
-        member.unit_type = string(source, "unit_type", 64);
-        member.level = integer(source, "level", 1, 3);
-        if(!ids.insert(member.id).second || !username_valid(member.username) ||
-           !unit_type_valid(member.unit_type)) invalid();
-        result.members.push_back(std::move(member));
+        auto entry = member(value.as_object());
+        if(!ids.insert(entry.id).second) invalid();
+        result.members.push_back(std::move(entry));
     }
     if(ids.count(result.captain_id) != 1) invalid();
     return result;
@@ -182,7 +192,7 @@ void team_response(const json::object& data, const Request& input, Reply& reply)
             reply.areas.push_back(std::move(entry));
         }
         page_cursor(data, reply, reply.areas.size(), previous);
-    } else if(op == "teams") {
+    } else if(op == "teams" || op == "my_applications") {
         keys(data, {"teams", "next"});
         std::string previous = input.after;
         for(const auto& value : array(data, "teams", 20)) {
@@ -198,11 +208,34 @@ void team_response(const json::object& data, const Request& input, Reply& reply)
             entry.experience = integer(source, "experience", 0, std::numeric_limits<int>::max());
             entry.rating = integer(source, "rating", std::numeric_limits<int>::min(), std::numeric_limits<int>::max());
             entry.member_count = integer(source, "member_count", 1, 8);
-            if(entry.area_id != input.area_id || entry.id <= previous) invalid();
+            if((op == "teams" && entry.area_id != input.area_id) || entry.id <= previous) invalid();
             previous = entry.id;
             reply.teams.push_back(std::move(entry));
         }
         page_cursor(data, reply, reply.teams.size(), previous);
+    } else if(op == "team_applicants") {
+        keys(data, {"team_id", "applicants", "next"});
+        reply.team_id = uuid(data, "team_id");
+        if(reply.team_id != input.team_id) invalid();
+        std::string previous = input.after;
+        for(const auto& value : array(data, "applicants", 20)) {
+            if(!value.is_object()) invalid();
+            auto entry = member(value.as_object());
+            if(entry.id <= previous) invalid();
+            previous = entry.id;
+            reply.applicants.push_back(std::move(entry));
+        }
+        page_cursor(data, reply, reply.applicants.size(), previous);
+    } else if(membership_mutation(op)) {
+        keys(data, {"team_id", "account_id", "status"});
+        reply.team_id = uuid(data, "team_id");
+        reply.account_id = uuid(data, "account_id");
+        reply.status = string(data, "status", 16);
+        const std::string expected = op == "apply_team" ? "applied" :
+            op == "withdraw_application" ? "withdrawn" :
+            op == "approve_application" ? "approved" : "rejected";
+        if(reply.team_id != input.team_id || reply.status != expected ||
+           (!input.account_id.empty() && reply.account_id != input.account_id)) invalid();
     } else {
         keys(data, {"team"});
         const auto& value = data.at("team");
@@ -282,15 +315,23 @@ Reply perform_request(const TrustedProfile& trusted, const Request& request,
         const auto& op = request.operation;
         const bool is_team = team_operation(op);
         if(!is_team && (!request.name.empty() || !request.area_id.empty() ||
-                       !request.team_id.empty() || !request.after.empty())) return failure("invalid_input");
+                       !request.team_id.empty() || !request.account_id.empty() || !request.after.empty())) return failure("invalid_input");
         if(is_team) {
             if(!token_valid(request.token) || !request.username.empty() || !request.password.empty() ||
                !request.starter_id.empty() || !cursor_valid(request.after)) return team_failure("invalid_input");
             if(op != "create_team" && !request.name.empty()) return team_failure("invalid_input");
             if(op != "teams" && op != "create_team" && !request.area_id.empty()) return team_failure("invalid_input");
-            if(op != "team_detail" && !request.team_id.empty()) return team_failure("invalid_input");
-            if(op != "areas" && op != "teams" && !request.after.empty()) return team_failure("invalid_input");
-            if(op == "areas" || op == "teams") body["after"] = request.after;
+            const bool uses_team = op == "team_detail" || op == "team_applicants" || membership_mutation(op);
+            const bool uses_account = op == "approve_application" || op == "reject_application";
+            const bool uses_after = op == "areas" || op == "teams" || op == "my_applications" || op == "team_applicants";
+            if(!uses_team && !request.team_id.empty()) return team_failure("invalid_input");
+            if(!uses_account && !request.account_id.empty()) return team_failure("invalid_input");
+            if(!uses_after && !request.after.empty()) return team_failure("invalid_input");
+            if(uses_after) body["after"] = request.after;
+            if(uses_account) {
+                if(!uuid_valid(request.account_id)) return team_failure("invalid_input");
+                body["account_id"] = request.account_id;
+            }
             if(op == "teams" || op == "create_team") {
                 if(request.area_id.empty() || !cursor_valid(request.area_id)) return team_failure("invalid_input");
                 body["area_id"] = request.area_id;
@@ -299,7 +340,7 @@ Reply perform_request(const TrustedProfile& trusted, const Request& request,
                 if(!team_name_valid(request.name)) return team_failure("invalid_input");
                 body["name"] = request.name;
             }
-            if(op == "team_detail") {
+            if(uses_team) {
                 if(!uuid_valid(request.team_id)) return team_failure("invalid_input");
                 body["team_id"] = request.team_id;
             }
