@@ -522,33 +522,72 @@ bool team_name_valid(const std::string& value) {
         std::all_of(value.begin(), value.end(), [&](char c) { return alnum(c) || c == ' ' || c == '_' || c == '-'; });
 }
 
+const char* ProfileReadError::what() const noexcept {
+    switch(failure_) {
+    case ProfileReadFailure::file_unavailable:
+        return "Alliance could not access its saved connection profile. [profile-file]";
+    case ProfileReadFailure::file_read:
+        return "Alliance could not read its saved connection profile. [profile-read]";
+    case ProfileReadFailure::document_invalid:
+        return "Alliance could not validate its saved connection profile format. [profile-format]";
+    case ProfileReadFailure::identity_invalid:
+        return "Alliance could not validate its saved server identity. [profile-identity]";
+    case ProfileReadFailure::pin_mismatch:
+        return "Alliance could not match its saved server certificate fingerprint. [profile-pin]";
+    case ProfileReadFailure::certificate_rejected:
+        return "Alliance could not verify its saved server certificate. [profile-certificate]";
+    case ProfileReadFailure::crypto_failure:
+        return "Alliance could not complete its local certificate checks. [profile-crypto]";
+    case ProfileReadFailure::internal_failure:
+        break;
+    }
+    return "Alliance could not check its saved connection profile. [profile-internal]";
+}
+
 TrustedProfile read_public_profile(const std::string& path) {
     // lstat rejects a final symlink in the trusted, app-private destination.
     struct stat info{};
     if(path.empty() || path.size() > 4096 || lstat(path.c_str(), &info) != 0
        || !S_ISREG(info.st_mode) || info.st_size < 1
        || static_cast<std::uint64_t>(info.st_size) > max_json_bytes)
-        throw std::runtime_error("Import the Windows public server profile first.");
+        throw ProfileReadError(ProfileReadFailure::file_unavailable);
     std::ifstream stream(path, std::ios::binary);
     std::string raw(max_json_bytes + 1, '\0');
     stream.read(raw.data(), static_cast<std::streamsize>(raw.size()));
     raw.resize(static_cast<std::size_t>(stream.gcount()));
     if(stream.bad() || raw.empty() || raw.size() > max_json_bytes)
-        throw std::runtime_error("Cannot read the public server profile.");
-    auto document = parse_document(raw);
-    keys(document, {"format", "protocol", "server_address", "port", "minimum_tls",
-                    "certificate_pem", "certificate_sha256"});
-    if(integer(document, "format", 1, 1) != 1
-       || string(document, "protocol", 32) != "wesnoth-alliance-tls"
-       || string(document, "minimum_tls", 8) != "1.2") invalid();
+        throw ProfileReadError(ProfileReadFailure::file_read);
     TrustedProfile result;
-    result.address = string(document, "server_address", 64);
-    result.port = static_cast<std::uint16_t>(integer(document, "port", 1, 65535));
-    result.certificate_pem = string(document, "certificate_pem", max_certificate_bytes);
-    result.certificate_sha256 = string(document, "certificate_sha256", 64);
-    if(!validate_profile(result))
-        throw std::runtime_error("The public server profile is invalid or expired.");
-    return result;
+    try {
+        auto document = parse_document(raw);
+        keys(document, {"format", "protocol", "server_address", "port", "minimum_tls",
+                        "certificate_pem", "certificate_sha256"});
+        if(integer(document, "format", 1, 1) != 1
+           || string(document, "protocol", 32) != "wesnoth-alliance-tls"
+           || string(document, "minimum_tls", 8) != "1.2") invalid();
+        result.address = string(document, "server_address", 64);
+        result.port = static_cast<std::uint16_t>(integer(document, "port", 1, 65535));
+        result.certificate_pem = string(document, "certificate_pem", max_certificate_bytes);
+        result.certificate_sha256 = string(document, "certificate_sha256", 64);
+    } catch(const std::runtime_error&) {
+        // Only the parser/schema validators' rejection is classified here.
+        // Unexpected exceptions propagate to the UI's fixed fallback message.
+        throw ProfileReadError(ProfileReadFailure::document_invalid);
+    }
+    const auto validation = validate_profile(result);
+    switch(validation.error) {
+    case Error::none: return result;
+    case Error::invalid_profile:
+        throw ProfileReadError(ProfileReadFailure::identity_invalid);
+    case Error::pin_mismatch:
+        throw ProfileReadError(ProfileReadFailure::pin_mismatch);
+    case Error::certificate_rejected:
+        throw ProfileReadError(ProfileReadFailure::certificate_rejected);
+    case Error::internal_error:
+        throw ProfileReadError(ProfileReadFailure::crypto_failure);
+    default:
+        throw ProfileReadError(ProfileReadFailure::internal_failure);
+    }
 }
 
 Reply perform_request(const TrustedProfile& trusted, const Request& request,

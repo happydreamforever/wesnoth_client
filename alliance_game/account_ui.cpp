@@ -304,9 +304,22 @@ private:
         config password_config;
         password_config["id"] = "password";
         password_config["definition"] = "default";
-        get_grid().swap_child("password", std::make_unique<CredentialPasswordBox>(
-            gui2::implementation::builder_text_box(password_config)), true);
-        auto& password = find_widget<CredentialPasswordBox>("password");
+        // The window's outer grid contains a scrollbar panel. swap_child only
+        // recurses into grids, so replace the field in its actual owning grid.
+        auto& original_password = find_widget<gui2::text_box>("password");
+        auto* password_parent = dynamic_cast<gui2::grid*>(original_password.parent());
+        if(password_parent == nullptr) {
+            throw std::runtime_error("The credential field has no owning grid.");
+        }
+        auto replacement = std::make_unique<CredentialPasswordBox>(
+            gui2::implementation::builder_text_box(password_config));
+        auto* replacement_pointer = replacement.get();
+        auto previous = password_parent->swap_child("password", std::move(replacement), false);
+        if(previous.get() != &original_password ||
+           find_widget<CredentialPasswordBox>("password", false, false) != replacement_pointer) {
+            throw std::runtime_error("The credential field could not be installed.");
+        }
+        auto& password = *replacement_pointer;
         username.set_max_input_length(24);
         username.set_value(username_);
         username.set_active(!confirm_only_);
@@ -1523,6 +1536,8 @@ void show_account_dialog()
         explicit ActiveFlow(bool& value) : active(value) { active = true; }
         ~ActiveFlow() { active = false; }
     } flow(active);
+    enum class OpenStage { profile, menu, account_screen };
+    auto stage = OpenStage::profile;
     try {
         const char* path = std::getenv("WESNOTH_ALLIANCE_PROFILE");
         if(path == nullptr || *path == '\0') {
@@ -1536,6 +1551,7 @@ void show_account_dialog()
                                    + ":" + profile.certificate_sha256;
         if(!session.token.empty() && session.identity != identity) session.clear();
         for(;;) {
+            stage = OpenStage::menu;
             const bool logged_in = !session.token.empty();
             gui2::dialogs::simple_item_selector menu(
                 "Alliance",
@@ -1550,6 +1566,7 @@ void show_account_dialog()
             menu.set_cancel_label("Back to game");
             if(!menu.show()) return;
             const int action = menu.selected_index();
+            stage = OpenStage::account_screen;
             if(logged_in) {
                 if(action == 0) refresh(profile);
                 else if(action == 1) teams(profile);
@@ -1559,10 +1576,21 @@ void show_account_dialog()
                 else if(action == 1) login(profile);
             }
         }
+    } catch(const account::ProfileReadError& error) {
+        // This type accepts only an enum and returns fixed public strings.
+        // Arbitrary exceptions below never expose their what() text.
+        message(error.what());
     } catch(...) {
         // Never surface arbitrary exception strings containing request material.
-        message("Alliance could not open. Check that the trusted Windows public "
-                "connection profile has been imported and try again.");
+        if(stage == OpenStage::profile) {
+            message("Alliance could not validate the saved server profile "
+                    "[profile-unexpected]. Please report this message.");
+        } else if(stage == OpenStage::menu) {
+            message("Alliance could not open the account menu. Please report this message.");
+        } else {
+            message("Alliance could not open the selected account screen. Please report "
+                    "which screen you were opening.");
+        }
     }
 }
 } // namespace alliance_game

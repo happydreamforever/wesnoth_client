@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #pragma once
 #include "transport.hpp"
+#include <exception>
 #include <string>
 #include <optional>
 #include <vector>
@@ -82,6 +83,20 @@ bool team_name_valid(const std::string&);
 // Called only by a worker. One connection/request with an overall 10s deadline;
 // never retries a potentially completed registration or team mutation, and never logs credentials.
 Reply perform_request(const TrustedProfile&, const Request&, const CancellationToken&);
+enum class ProfileReadFailure {
+    file_unavailable, file_read, document_invalid, identity_invalid,
+    pin_mismatch, certificate_rejected, crypto_failure, internal_failure
+};
+// Safe to display: the exception stores only a fixed category, never a path,
+// profile field, library exception string or request material.
+class ProfileReadError final : public std::exception {
+public:
+    explicit ProfileReadError(ProfileReadFailure failure) noexcept : failure_(failure) {}
+    ProfileReadFailure failure() const noexcept { return failure_; }
+    const char* what() const noexcept override;
+private:
+    ProfileReadFailure failure_;
+};
 // Public profile only; never reads a server key or database configuration.
 TrustedProfile read_public_profile(const std::string& path);
 }
