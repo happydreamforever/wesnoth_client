@@ -54,7 +54,7 @@ elif cmd[:2]==['shell','getprop']:
 elif cmd[:3]==['shell','pm','path']:print(cfg.get('installed','package:/data/app/base.apk'))
 elif cmd[:3]==['shell','dumpsys','package']:
  updated=pathlib.Path(cfg['installed_flag']).exists()
- default='  versionCode='+str(cfg.get('updated_version',1192605) if updated else cfg.get('installed_version',1192604))+' minSdk=23 targetSdk=35'
+ default='  versionCode='+str(cfg.get('updated_version',1192606) if updated else cfg.get('installed_version',1192605))+' minSdk=23 targetSdk=35'
  print(cfg.get('updated_package_details' if updated else 'installed_package_details',default))
 elif cmd[:2]==['install','-r']:
  pathlib.Path(cfg['installed_flag']).write_text('updated')
@@ -127,8 +127,9 @@ class InstallTests(unittest.TestCase):
   pushes=[x for x in cmd if x[0]=='push'];self.assertEqual(len(pushes),1);self.assertNotEqual(pushes[0][1],str(self.profile));self.assertIn('/sdcard/Download/wesnoth-alliance-public-profile-',pushes[0][2])
   self.assertFalse(any('uninstall' in x or 'clear' in x for x in cmd));self.assertFalse(any('.obb' in str(x) for x in cmd))
   self.assertIn('ANDROID ACCOUNT GAME INSTALL COMPLETE',self.output)
- def test_preserve_saved_profile_update_has_no_profile_read_or_copy(self):
+ def test_preserve_saved_profile_previous_version_1192605_has_no_profile_read_or_copy(self):
   self.keep_saved_profile=True
+  self.config['installed_version']=1192605
   self.profile.unlink()
   self.assertEqual(self.invoke(),0,self.output)
   cmd=self.commands();self.assertIn(['install','-r',str(self.apk)],cmd)
@@ -137,29 +138,29 @@ class InstallTests(unittest.TestCase):
   self.assertFalse(any(any('validate_android_account_profile' in arg for arg in call['args']) for call in self.calls))
   self.assertFalse(list((self.repo/'diagnostics').glob('public-alliance-profile-*')))
   self.assertIn('Confirm the existing Trusted server is displayed',self.output)
-  self.assertIn('Version 1192605 and setup activity startup are verified.',self.output)
+  self.assertIn('Version 1192606 and setup activity startup are verified.',self.output)
   self.assertIn('If setup says no saved profile',self.output)
   self.assertNotIn('PUBLIC ALLIANCE PROFILE VERIFIED',self.output)
  def test_keep_saved_profile_rejects_unexpected_old_version_before_install(self):
   self.keep_saved_profile=True
-  for version in (1192600,1192601,1192602,1192603,1192699,'not a version'):
+  for version in (1192600,1192601,1192602,1192603,1192604,1192699,'not a version'):
    with self.subTest(version=version):
     self.config['installed_version']=version
     self.assertEqual(self.invoke(),2,self.output)
     self.assertFalse(any(x[0]=='install' for x in self.commands()))
  def test_keep_saved_profile_allows_repeat_install_of_current_version(self):
-  self.keep_saved_profile=True;self.config['installed_version']=1192605
+  self.keep_saved_profile=True;self.config['installed_version']=1192606
   self.assertEqual(self.invoke(),0,self.output)
  def test_keep_saved_profile_checks_installed_new_version_before_launch(self):
-  self.keep_saved_profile=True;self.config['updated_version']=1192604
+  self.keep_saved_profile=True;self.config['updated_version']=1192605
   self.assertEqual(self.invoke(),2,self.output)
   self.assertFalse(any(x[:3]==['shell','am','start'] for x in self.commands()))
   self.assertNotIn('ANDROID ACCOUNT GAME INSTALL COMPLETE',self.output)
  def test_keep_saved_profile_rejects_ambiguous_package_version(self):
   self.keep_saved_profile=True
   for field,details in (
-   ('installed_package_details','versionCode=1192604\nversionCode=1192605'),
-   ('updated_package_details','versionCode=1192605\nversionCode=1192605'),
+   ('installed_package_details','versionCode=1192605\nversionCode=1192606'),
+   ('updated_package_details','versionCode=1192606\nversionCode=1192606'),
    ('updated_package_details','versionCode=invalid')):
    with self.subTest(field=field,details=details):
     original=self.config.copy();self.config[field]=details
