@@ -26,7 +26,7 @@ std::string safe_error(const std::string& value)
     for(const char* allowed : {"", "invalid_input", "invalid_password", "invalid_credentials",
           "invalid_session", "forbidden", "suspended", "conflict", "rate_limited",
           "timeout", "cancelled", "identity", "protocol", "unavailable",
-          "profile_rejected", "document_rejected", "team_failed", "already_member", "busy", "not_found", "capacity", "not_requested"}) {
+          "profile_rejected", "document_rejected", "team_failed", "already_member", "busy", "not_found", "capacity", "not_requested", "not_member", "captain_transfer_required"}) {
         if(value == allowed) return value;
     }
     return "unrecognized_error";
@@ -48,7 +48,7 @@ void output(const alliance::account::Reply& reply, long long elapsed_ms)
         {"unread_count", std::count_if(reply.decisions.begin(), reply.decisions.end(),
             [](const auto& decision) { return decision.unread; })},
         {"has_decision_id", !reply.decision_id.empty()},
-        {"status", reply.status}};
+        {"status", reply.status}, {"archived", reply.archived}, {"has_more", reply.has_more}};
     std::cout << boost::json::serialize(result) << "\n";
 }
 }
@@ -96,6 +96,10 @@ int main(int argc, char** argv)
         request.account_id = field(input, "account_id");
         request.after = field(input, "after");
         request.decision_id = field(input, "decision_id");
+        if(const auto* allow_archive = input.if_contains("allow_archive")) {
+            if(!allow_archive->is_bool()) throw std::runtime_error("input");
+            request.allow_archive = allow_archive->as_bool();
+        }
         int cancel_after_ms = 0;
         if(const auto* delay = input.if_contains("cancel_after_ms")) {
             if(!delay->is_int64() || delay->as_int64() < 0 || delay->as_int64() > 5000)

@@ -174,7 +174,7 @@ class AccountClientResponseTests(unittest.TestCase):
                                       "has_profile", "level", "elapsed_ms", "area_count", "team_count",
                                       "has_next", "has_team", "member_count", "team_level",
                                       "applicant_count", "has_team_id", "has_account_id", "status",
-                                      "decision_count", "unread_count", "has_decision_id"})
+                                      "decision_count", "unread_count", "has_decision_id", "archived", "has_more"})
         for secret in (request.get("password"), request.get("token")):
             if secret:
                 self.assertTrue(secret.encode("utf-8") not in result.stdout + result.stderr,
@@ -457,6 +457,125 @@ class AccountClientResponseTests(unittest.TestCase):
         self.assertTrue(output["ok"])
         self.assertEqual(output["applicant_count"], 1)
         self.assertEqual(received["body"], {"team_id": team_id, "after": ""})
+
+    def test_management_exact_bodies_and_acknowledgements(self):
+        team_id, account_id = self.team_detail()["id"], self.account()["id"]
+        for allow_archive, archived in ((False, False), (True, True), (True, False)):
+            data = {"team_id": team_id, "account_id": account_id, "status": "left", "archived": archived}
+            output, received = self.exercise(self.team_reply(data), self.team_request("leave_team", team_id=team_id, allow_archive=allow_archive))
+            self.assertTrue(output["ok"])
+            self.assertEqual(output["archived"], archived)
+            self.assertEqual(output["status"], "left")
+            self.assertEqual(received["body"], {"team_id": team_id, "allow_archive": allow_archive})
+        fields = {"team_id": team_id, "account_id": account_id}
+        output, received = self.exercise(self.team_reply({**fields, "status": "transferred"}),
+                                         self.team_request("transfer_captain", **fields))
+        self.assertTrue(output["ok"])
+        self.assertEqual(output["status"], "transferred")
+        self.assertEqual(received["body"], fields)
+
+    def test_management_rejects_forged_identity_status_nonboolean_and_extra_fields(self):
+        team_id, account_id = self.team_detail()["id"], self.account()["id"]
+        other = "eeeeeeee-1234-4321-8765-0123456789ab"
+        for operation, status in (("leave_team", "left"), ("transfer_captain", "transferred")):
+            fields = {"team_id": team_id}
+            data = {"team_id": team_id, "account_id": account_id, "status": status}
+            if operation == "leave_team":
+                data["archived"] = False
+            else:
+                fields["account_id"] = account_id
+            cases = [{**data, "team_id": other}, {**data, "account_id": "bad"},
+                     {**data, "status": "approved"}, {**data, "private": "hidden"}]
+            cases.extend({key: value for key, value in data.items() if key != omitted} for omitted in data)
+            if operation == "leave_team":
+                cases.extend({**data, "archived": value} for value in (0, 1, "false", None, []))
+                cases.append({**data, "archived": True})  # No archive consent was sent.
+            else:
+                cases.extend(({**data, "account_id": other}, {**data, "archived": False}))
+            for invalid in cases:
+                self.team_rejects(operation, invalid, **fields)
+            output, _ = self.exercise(self.team_reply(data, status=201), self.team_request(operation, **fields))
+            self.assertEqual(output["error_code"], "protocol")
+
+    def test_standings_top_twenty_strict_order_and_has_more(self):
+        page = [{**self.team_summary(), "id": f"{i:08x}-1234-4321-8765-0123456789ab",
+                 "rating": 2000 - i // 2} for i in range(20)]
+        for entries, more in (([], False), (page[:2], False), (page, False), (page, True)):
+            output, received = self.exercise(self.team_reply({"area_id": "area-1", "teams": entries, "has_more": more}),
+                                             self.team_request("standings", area_id="area-1"))
+            self.assertTrue(output["ok"])
+            self.assertEqual(output["has_more"], more)
+            self.assertEqual(output["team_count"], len(entries))
+            self.assertFalse(output["has_next"])
+            self.assertEqual(received["body"], {"area_id": "area-1"})
+        # Different ratings are ordered by rating, not by UUID.
+        output, _ = self.exercise(self.team_reply({"area_id": "area-1", "has_more": False,
+            "teams": [{**page[3], "rating": 2147483647}, {**page[0], "rating": -2147483648}]}),
+            self.team_request("standings", area_id="area-1"))
+        self.assertTrue(output["ok"])
+
+    def test_standings_rejects_scope_duplicates_sort_bounds_and_malformed_summaries(self):
+        first = {**self.team_summary(), "id": "00000001-1234-4321-8765-0123456789ab"}
+        second = {**first, "id": "00000002-1234-4321-8765-0123456789ab"}
+        base = {"area_id": "area-1", "teams": [first, second], "has_more": False}
+        cases = [{**base, "area_id": "area-2"}, {**base, "next": ""},
+                 {**base, "teams": [first, first]}, {**base, "teams": [second, first]},
+                 {**base, "teams": [first, {**first, "rating": 900}]},
+                 {**base, "teams": [first, {**second, "rating": 1001}]},
+                 {**base, "teams": [first] * 21}, {**base, "has_more": True},
+                 {**base, "teams": [], "has_more": True}, {**base, "teams": None}]
+        cases.extend({**base, "has_more": value} for value in (0, 1, "false", None))
+        cases.extend({key: value for key, value in base.items() if key != omitted} for omitted in base)
+        for key, value in (("area_id", "area-2"), ("id", "bad"), ("captain_id", "bad"),
+                           ("rating", True), ("rating", 2147483648), ("rating", -2147483649),
+                           ("level", 0), ("experience", -1), ("member_count", 0), ("member_count", 9),
+                           ("member_count", True), ("name", "Bad <markup>"), ("private", "hidden")):
+            cases.append({**base, "teams": [{**first, key: value}]})
+        for data in cases:
+            self.team_rejects("standings", data, area_id="area-1")
+
+    def test_management_invalid_requests_rejected_before_socket(self):
+        team_id, account_id = self.team_detail()["id"], self.account()["id"]
+        requests = [self.team_request("leave_team"), self.team_request("leave_team", team_id="bad"),
+                    self.team_request("transfer_captain", team_id=team_id),
+                    self.team_request("transfer_captain", team_id=team_id, account_id="bad"),
+                    self.team_request("transfer_captain", team_id=team_id, account_id=account_id, allow_archive=True),
+                    self.team_request("standings", area_id="area-1", allow_archive=True),
+                    self.team_request("standings"), self.team_request("standings", area_id="bad/area")]
+        for operation, fields in (("leave_team", {"team_id": team_id}),
+                                  ("transfer_captain", {"team_id": team_id, "account_id": account_id}),
+                                  ("standings", {"area_id": "area-1"})):
+            extras = {"name": "Team Name", "after": team_id, "decision_id": team_id,
+                      "username": "Player", "password": "test-only", "starter_id": "spearman",
+                      "token": "bad", "area_id": "area-1", "team_id": team_id, "account_id": account_id}
+            for key, value in extras.items():
+                if key not in fields:
+                    requests.append(self.team_request(operation, **fields, **{key: value}))
+        for request in requests:
+            with self.peer() as (port, state):
+                output = self.invoke(self.profile(port), request)
+            self.assertEqual(output["error_code"], "invalid_input")
+            self.assertEqual(state["connections"], 0)
+            self.assertIsNone(state["error"])
+
+    def test_management_uncertainty_cancellation_never_retries_and_only_401_expires_session(self):
+        team_id, account_id = self.team_detail()["id"], self.account()["id"]
+        for operation, fields in (("leave_team", {"team_id": team_id}),
+                                  ("transfer_captain", {"team_id": team_id, "account_id": account_id}),
+                                  ("standings", {"area_id": "area-1"})):
+            output, _ = self.exercise(request=self.team_request(operation, **fields, cancel_after_ms=300), stall=True)
+            self.assertEqual(output["error_code"], "cancelled")
+            self.assertLess(output["elapsed_ms"], 3000)
+            for status, code, expected in ((401, "forbidden", "invalid_session"),
+                                           (403, "forbidden", "forbidden"),
+                                           (409, "not_member", "not_member"),
+                                           (409, "captain_transfer_required", "captain_transfer_required"),
+                                           (409, "busy", "busy"), (503, "service_unavailable", "team_failed")):
+                def error(received):
+                    return {"v": 1, "id": received["id"], "ok": False, "status": status,
+                            "data": {"code": code, "message": "Private backend detail"}}
+                output, _ = self.exercise(error, self.team_request(operation, **fields))
+                self.assertEqual(output["error_code"], expected)
 
     def test_membership_pages_full_sorted_and_empty_final_page(self):
         team_id = self.team_detail()["id"]

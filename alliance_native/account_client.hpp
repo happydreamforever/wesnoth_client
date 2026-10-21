@@ -9,6 +9,7 @@ namespace alliance::account {
 struct Request {
     std::string operation, username, password, starter_id, token;
     std::string name, area_id, team_id, account_id, after, decision_id;
+    bool allow_archive = false;
 };
 struct Profile {
     std::string account_id, username, unit_type, starter_id;
@@ -43,6 +44,7 @@ struct Reply {
     std::vector<Member> applicants;
     std::string team_id, account_id, status, decision_id;
     std::vector<Decision> decisions;
+    bool archived = false, has_more = false;
 };
 bool team_name_valid(const std::string&);
 // Called only by a worker. One connection/request with an overall 10s deadline;
