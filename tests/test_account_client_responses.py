@@ -93,7 +93,7 @@ class AccountClientResponseTests(unittest.TestCase):
         }
 
     @contextmanager
-    def peer(self, responder=None, *, stall=False, preamble_delay=0):
+    def peer(self, responder=None, *, stall=False, preamble_delay=0, drop_response=False):
         listener = socket.socket()
         listener.bind(("127.0.0.1", 0))
         listener.listen(2)
@@ -130,7 +130,7 @@ class AccountClientResponseTests(unittest.TestCase):
                         state["request"] = json.loads(wire)
                         if stall:
                             stop.wait(13)
-                        else:
+                        elif not drop_response:
                             response = (responder or self.success)(state["request"])
                             payload = response if isinstance(response, bytes) else compact(response)
                             frame = gzip.compress(payload, mtime=0)
@@ -174,7 +174,8 @@ class AccountClientResponseTests(unittest.TestCase):
                                       "has_profile", "level", "elapsed_ms", "area_count", "team_count",
                                       "has_next", "has_team", "member_count", "team_level",
                                       "applicant_count", "has_team_id", "has_account_id", "status",
-                                      "decision_count", "unread_count", "has_decision_id", "archived", "has_more"})
+                                      "decision_count", "unread_count", "has_decision_id", "archived", "has_more",
+                                      "map_count", "battle_count", "has_battle", "battle_state", "battle_validity"})
         for secret in (request.get("password"), request.get("token")):
             if secret:
                 self.assertTrue(secret.encode("utf-8") not in result.stdout + result.stderr,

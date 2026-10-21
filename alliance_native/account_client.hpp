@@ -6,10 +6,14 @@
 #include <vector>
 
 namespace alliance::account {
+struct Lineup { std::string team_id; std::vector<std::string> account_ids; };
 struct Request {
     std::string operation, username, password, starter_id, token;
     std::string name, area_id, team_id, account_id, after, decision_id;
     bool allow_archive = false;
+    std::string battle_id, opponent_team_id, map_id;
+    std::vector<Lineup> lineups;
+    bool ready = false;
 };
 struct Profile {
     std::string account_id, username, unit_type, starter_id;
@@ -33,6 +37,31 @@ struct Decision {
     std::string id, team_id, team_name, status, created_at;
     bool unread = false;
 };
+struct BattleMap {
+    std::string id, name, scenario_id;
+    int size = 0;
+    std::vector<std::vector<int>> sides;
+};
+struct BattleTeamName { std::string id, name; };
+struct BattleSummary {
+    std::string id, area_id, map_id, state, created_at;
+    std::vector<BattleTeamName> teams;
+};
+struct BattlePlayer {
+    std::string id, username, unit_type;
+    int level = 0, side = 0;
+    bool ready = false;
+};
+struct BattleTeam {
+    std::string id, name, captain_id;
+    bool approved = false;
+    std::vector<BattlePlayer> players;
+};
+struct Battle {
+    std::string id, area_id, state, created_at, validity;
+    BattleMap map;
+    std::vector<BattleTeam> teams;
+};
 struct Reply {
     bool ok = false;
     std::string error_code, error_message, token;
@@ -45,6 +74,9 @@ struct Reply {
     std::string team_id, account_id, status, decision_id;
     std::vector<Decision> decisions;
     bool archived = false, has_more = false;
+    std::vector<BattleMap> maps;
+    std::vector<BattleSummary> battles;
+    std::optional<Battle> battle;
 };
 bool team_name_valid(const std::string&);
 // Called only by a worker. One connection/request with an overall 10s deadline;

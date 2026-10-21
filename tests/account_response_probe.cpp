@@ -26,7 +26,8 @@ std::string safe_error(const std::string& value)
     for(const char* allowed : {"", "invalid_input", "invalid_password", "invalid_credentials",
           "invalid_session", "forbidden", "suspended", "conflict", "rate_limited",
           "timeout", "cancelled", "identity", "protocol", "unavailable",
-          "profile_rejected", "document_rejected", "team_failed", "already_member", "busy", "not_found", "capacity", "not_requested", "not_member", "captain_transfer_required"}) {
+          "profile_rejected", "document_rejected", "team_failed", "already_member", "busy", "not_found", "capacity", "not_requested", "not_member", "captain_transfer_required",
+          "planning_exists", "invalid_map", "invalid_lineup", "different_area", "stale_proposal", "approval_required", "invalid_state"}) {
         if(value == allowed) return value;
     }
     return "unrecognized_error";
@@ -48,7 +49,10 @@ void output(const alliance::account::Reply& reply, long long elapsed_ms)
         {"unread_count", std::count_if(reply.decisions.begin(), reply.decisions.end(),
             [](const auto& decision) { return decision.unread; })},
         {"has_decision_id", !reply.decision_id.empty()},
-        {"status", reply.status}, {"archived", reply.archived}, {"has_more", reply.has_more}};
+        {"status", reply.status}, {"archived", reply.archived}, {"has_more", reply.has_more},
+        {"map_count", reply.maps.size()}, {"battle_count", reply.battles.size()}, {"has_battle", reply.battle.has_value()},
+        {"battle_state", reply.battle ? reply.battle->state : ""},
+        {"battle_validity", reply.battle ? reply.battle->validity : ""}};
     std::cout << boost::json::serialize(result) << "\n";
 }
 }
@@ -96,6 +100,24 @@ int main(int argc, char** argv)
         request.account_id = field(input, "account_id");
         request.after = field(input, "after");
         request.decision_id = field(input, "decision_id");
+        request.battle_id = field(input, "battle_id");
+        request.opponent_team_id = field(input, "opponent_team_id");
+        request.map_id = field(input, "map_id");
+        if(const auto* ready = input.if_contains("ready")) {
+            if(!ready->is_bool()) throw std::runtime_error("input");
+            request.ready = ready->as_bool();
+        }
+        if(const auto* lineups = input.if_contains("lineups")) {
+            if(!lineups->is_array()) throw std::runtime_error("input");
+            for(const auto& value : lineups->as_array()) {
+                if(!value.is_object()) throw std::runtime_error("input");
+                Lineup lineup;
+                lineup.team_id = field(value.as_object(), "team_id");
+                const auto& ids = value.as_object().at("account_ids").as_array();
+                for(const auto& id : ids) lineup.account_ids.emplace_back(id.as_string());
+                request.lineups.push_back(std::move(lineup));
+            }
+        }
         if(const auto* allow_archive = input.if_contains("allow_archive")) {
             if(!allow_archive->is_bool()) throw std::runtime_error("input");
             request.allow_archive = allow_archive->as_bool();

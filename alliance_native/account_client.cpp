@@ -83,11 +83,15 @@ bool membership_mutation(const std::string& op) {
     return op == "apply_team" || op == "withdraw_application" ||
            op == "approve_application" || op == "reject_application";
 }
+bool battle_operation(const std::string& op) {
+    return op == "battle_maps" || op == "my_battles" || op == "battle_detail" ||
+        op == "propose_battle" || op == "approve_battle" || op == "battle_ready" || op == "cancel_battle";
+}
 bool team_operation(const std::string& op) {
     return op == "areas" || op == "teams" || op == "my_team" ||
            op == "create_team" || op == "team_detail" || op == "my_applications" ||
            op == "team_applicants" || op == "application_decisions" || op == "ack_decision" ||
-           op == "leave_team" || op == "transfer_captain" || op == "standings" || membership_mutation(op);
+           op == "leave_team" || op == "transfer_captain" || op == "standings" || membership_mutation(op) || battle_operation(op);
 }
 Reply failure(const std::string& code, bool is_team = false) {
     Reply result;
@@ -135,6 +139,13 @@ Reply team_failure(const std::string& code) {
     else if(code == "not_requested") result.error_message = "That application is no longer pending. Refresh the roster and applications before trying another action.";
     else if(code == "not_member") result.error_message = "That player is no longer a member of this team. Refresh My team before trying another action.";
     else if(code == "captain_transfer_required") result.error_message = "Transfer captain to another current member before leaving this team.";
+    else if(code == "planning_exists") result.error_message = "One of these teams already has a draft battle plan. Open My battle plans before proposing another.";
+    else if(code == "invalid_map") result.error_message = "This map is not currently available in the selected area. Load the map list again.";
+    else if(code == "invalid_lineup") result.error_message = "The selected lineups no longer match the map and teams. Load the rosters again.";
+    else if(code == "different_area") result.error_message = "Both teams must belong to the same area.";
+    else if(code == "stale_proposal") result.error_message = "This plan no longer matches the current teams or leaders. Open its detail; a current captain can cancel the draft and prepare a new plan.";
+    else if(code == "approval_required") result.error_message = "Both current captains must approve this saved plan before players can become ready.";
+    else if(code == "invalid_state") result.error_message = "This battle plan is no longer a draft. Refresh My battle plans before making another change.";
     else { result.error_code = "team_failed"; result.error_message = "The team request could not be completed. Try viewing My team."; }
     return result;
 }
@@ -157,6 +168,163 @@ const json::array& array(const json::object& data, const char* key, std::size_t 
     const auto* value = data.if_contains(key);
     if(!value || !value->is_array() || value->as_array().size() > maximum) invalid();
     return value->as_array();
+}
+bool boolean(const json::object& data, const char* key) {
+    const auto* value = data.if_contains(key);
+    if(!value || !value->is_bool()) invalid();
+    return value->as_bool();
+}
+BattleMap known_map(const std::string& id) {
+    if(id == "isars-cross") return {id, "Isar's Cross", "multiplayer_Isars_Cross", 2, {{1, 4}, {2, 3}}};
+    if(id == "hexcake") return {id, "Hexcake", "multiplayer_Hexcake", 3, {{1, 4, 5}, {2, 3, 6}}};
+    if(id == "mokena-prairie") return {id, "Mokena Prairie", "multiplayer_8p_Mokena_Prairie", 4, {{1, 3, 5, 8}, {2, 4, 6, 7}}};
+    invalid();
+}
+BattleMap battle_map(const json::object& data) {
+    keys(data, {"id", "name", "scenario_id", "size", "sides"});
+    auto result = known_map(string(data, "id", 32));
+    if(string(data, "name", 40) != result.name || string(data, "scenario_id", 64) != result.scenario_id ||
+       integer(data, "size", 2, 4) != result.size) invalid();
+    const auto& sides = array(data, "sides", 2);
+    if(sides.size() != 2) invalid();
+    for(std::size_t i = 0; i < sides.size(); ++i) {
+        if(!sides[i].is_array() || sides[i].as_array().size() != result.sides[i].size()) invalid();
+        const auto& values = sides[i].as_array();
+        for(std::size_t j = 0; j < values.size(); ++j)
+            if(!values[j].is_int64() || values[j].as_int64() != result.sides[i][j]) invalid();
+    }
+    return result;
+}
+std::string battle_state(const json::object& data) {
+    auto result = string(data, "state", 16);
+    if(result != "draft" && result != "running" && result != "completed" && result != "cancelled") invalid();
+    return result;
+}
+std::string battle_created(const json::object& data) {
+    auto result = string(data, "created_at", 20);
+    if(!utc_timestamp_valid(result)) invalid();
+    return result;
+}
+bool battle_leader_valid(const std::string& unit, int level) {
+    const std::vector<std::set<std::string>> levels{
+        {"Spearman", "Elvish Fighter", "Orcish Grunt", "Dwarvish Fighter", "Drake Fighter", "Skeleton"},
+        {"Swordsman", "Pikeman", "Javelineer", "Elvish Captain", "Elvish Hero", "Orcish Warrior",
+         "Dwarvish Steelclad", "Drake Warrior", "Revenant", "Deathblade"},
+        {"Royal Guard", "Halberdier", "Elvish Marshal", "Elvish Champion", "Orcish Warlord", "Dwarvish Lord",
+         "Drake Blademaster", "Draug"}};
+    return level >= 1 && level <= 3 && levels[level - 1].count(unit) == 1;
+}
+Battle battle(const json::object& data) {
+    keys(data, {"id", "area_id", "state", "created_at", "map", "validity", "teams"});
+    Battle result;
+    result.id = uuid(data, "id");
+    result.area_id = area_id(data, "area_id");
+    result.state = battle_state(data);
+    result.created_at = battle_created(data);
+    result.map = battle_map(object(data, "map"));
+    result.validity = string(data, "validity", 32);
+    const std::set<std::string> validities{"valid", "roster_changed", "area_changed", "map_unavailable",
+        "leader_changed", "player_unavailable", "team_unavailable", "busy", "rules_changed"};
+    if(!validities.count(result.validity)) invalid();
+    std::set<std::string> team_ids, player_ids, captain_ids;
+    const auto& teams = array(data, "teams", 2);
+    if(teams.size() != 2) invalid();
+    for(std::size_t i = 0; i < teams.size(); ++i) {
+        if(!teams[i].is_object()) invalid();
+        const auto& source = teams[i].as_object();
+        keys(source, {"id", "name", "captain_id", "approved", "players"});
+        BattleTeam team;
+        team.id = uuid(source, "id");
+        team.name = name(source, "name");
+        if(!team_ids.insert(team.id).second) invalid();
+        const auto* captain = source.if_contains("captain_id");
+        if(!captain || !captain->is_string()) invalid();
+        team.captain_id = std::string(captain->as_string());
+        team.approved = boolean(source, "approved");
+        if(team.captain_id.empty()) { if(team.approved) invalid(); }
+        else if(!uuid_valid(team.captain_id) || !captain_ids.insert(team.captain_id).second) invalid();
+        const auto& players = array(source, "players", 4);
+        if(players.size() != static_cast<std::size_t>(result.map.size)) invalid();
+        for(std::size_t j = 0; j < players.size(); ++j) {
+            if(!players[j].is_object()) invalid();
+            const auto& entry = players[j].as_object();
+            keys(entry, {"id", "username", "unit_type", "level", "side", "ready"});
+            BattlePlayer player;
+            player.id = uuid(entry, "id");
+            player.username = string(entry, "username", 24);
+            player.unit_type = string(entry, "unit_type", 64);
+            player.level = integer(entry, "level", 1, 3);
+            player.side = integer(entry, "side", 1, 8);
+            player.ready = boolean(entry, "ready");
+            if(!player_ids.insert(player.id).second || !username_valid(player.username) ||
+               !battle_leader_valid(player.unit_type, player.level) || player.side != result.map.sides[i][j]) invalid();
+            team.players.push_back(std::move(player));
+        }
+        result.teams.push_back(std::move(team));
+    }
+    return result;
+}
+void battle_response(const json::object& data, const Request& input, Reply& reply) {
+    const auto& op = input.operation;
+    if(op == "battle_maps") {
+        keys(data, {"area_id", "maps"});
+        if(area_id(data, "area_id") != input.area_id) invalid();
+        std::set<std::string> ids;
+        for(const auto& entry : array(data, "maps", 3)) {
+            if(!entry.is_object()) invalid();
+            auto map = battle_map(entry.as_object());
+            if(!ids.insert(map.id).second) invalid();
+            reply.maps.push_back(std::move(map));
+        }
+    } else if(op == "my_battles") {
+        keys(data, {"battles", "next"});
+        std::string previous = input.after;
+        for(const auto& entry : array(data, "battles", 20)) {
+            if(!entry.is_object()) invalid();
+            const auto& source = entry.as_object();
+            keys(source, {"id", "area_id", "map_id", "state", "created_at", "teams"});
+            BattleSummary summary;
+            summary.id = uuid(source, "id");
+            summary.area_id = area_id(source, "area_id");
+            summary.map_id = known_map(string(source, "map_id", 32)).id;
+            summary.state = battle_state(source);
+            summary.created_at = battle_created(source);
+            const auto& teams = array(source, "teams", 2);
+            if(teams.size() != 2 || summary.id <= previous) invalid();
+            for(const auto& value : teams) {
+                if(!value.is_object()) invalid();
+                const auto& team = value.as_object();
+                keys(team, {"id", "name"});
+                summary.teams.push_back({uuid(team, "id"), name(team, "name")});
+            }
+            if(summary.teams[0].id == summary.teams[1].id) invalid();
+            previous = summary.id;
+            reply.battles.push_back(std::move(summary));
+        }
+        const auto* next = data.if_contains("next");
+        if(!next || !next->is_string()) invalid();
+        reply.next = std::string(next->as_string());
+        if(!reply.next.empty() && (!uuid_valid(reply.next) || reply.battles.size() != 20 || reply.next != previous)) invalid();
+    } else {
+        keys(data, {"battle"});
+        reply.battle = battle(object(data, "battle"));
+        const auto& result = *reply.battle;
+        if(op == "propose_battle") {
+            if(result.state != "draft" || result.validity != "valid" || result.map.id != input.map_id ||
+               result.teams[0].id != input.team_id || result.teams[1].id != input.opponent_team_id) invalid();
+            for(std::size_t i = 0; i < result.teams.size(); ++i) {
+                if(result.teams[i].approved) invalid();
+                for(std::size_t j = 0; j < result.teams[i].players.size(); ++j)
+                    if(result.teams[i].players[j].id != input.lineups[i].account_ids[j] || result.teams[i].players[j].ready) invalid();
+            }
+        } else {
+            if(result.id != input.battle_id) invalid();
+            if(op == "cancel_battle" && result.state != "cancelled") invalid();
+            if((op == "approve_battle" || op == "battle_ready") && result.state != "draft") invalid();
+            if((op == "approve_battle" || (op == "battle_ready" && input.ready)) && result.validity != "valid") invalid();
+            if(op == "battle_ready" && input.ready && (!result.teams[0].approved || !result.teams[1].approved)) invalid();
+        }
+    }
 }
 Member member(const json::object& source) {
     keys(source, {"id", "username", "unit_type", "level"});
@@ -389,11 +557,64 @@ Reply perform_request(const TrustedProfile& trusted, const Request& request,
         json::object body;
         const auto& op = request.operation;
         const bool is_team = team_operation(op);
+        const bool is_battle = battle_operation(op);
         if(op != "leave_team" && request.allow_archive) return failure("invalid_input", is_team);
+        if(op != "battle_ready" && request.ready) return failure("invalid_input", is_team);
+        if(!is_battle && (!request.battle_id.empty() || !request.opponent_team_id.empty() ||
+                         !request.map_id.empty() || !request.lineups.empty())) return failure("invalid_input", is_team);
         if(!is_team && (!request.name.empty() || !request.area_id.empty() ||
                        !request.team_id.empty() || !request.account_id.empty() || !request.after.empty() ||
                        !request.decision_id.empty())) return failure("invalid_input");
-        if(is_team) {
+        if(is_battle) {
+            if(!token_valid(request.token) || !request.username.empty() || !request.password.empty() ||
+               !request.starter_id.empty() || !request.name.empty() || !request.account_id.empty() ||
+               !request.decision_id.empty()) return team_failure("invalid_input");
+            const bool propose = op == "propose_battle";
+            const bool uses_id = op == "battle_detail" || op == "approve_battle" ||
+                op == "battle_ready" || op == "cancel_battle";
+            if(op != "battle_maps" && !request.area_id.empty()) return team_failure("invalid_input");
+            if(op != "my_battles" && !request.after.empty()) return team_failure("invalid_input");
+            if(!uses_id && !request.battle_id.empty()) return team_failure("invalid_input");
+            if(!propose && (!request.team_id.empty() || !request.opponent_team_id.empty() ||
+                           !request.map_id.empty() || !request.lineups.empty())) return team_failure("invalid_input");
+            if(op == "battle_maps") {
+                if(request.area_id.empty() || !cursor_valid(request.area_id)) return team_failure("invalid_input");
+                body["area_id"] = request.area_id;
+            }
+            if(op == "my_battles") {
+                if(!request.after.empty() && !uuid_valid(request.after)) return team_failure("invalid_input");
+                body["after"] = request.after;
+            }
+            if(uses_id) {
+                if(!uuid_valid(request.battle_id)) return team_failure("invalid_input");
+                body["battle_id"] = request.battle_id;
+            }
+            if(op == "battle_ready") body["ready"] = request.ready;
+            if(propose) {
+                if(!uuid_valid(request.team_id) || !uuid_valid(request.opponent_team_id) ||
+                   request.team_id == request.opponent_team_id || request.lineups.size() != 2 ||
+                   (request.map_id != "isars-cross" && request.map_id != "hexcake" && request.map_id != "mokena-prairie"))
+                    return team_failure("invalid_input");
+                const auto map = known_map(request.map_id);
+                json::array lineups;
+                std::set<std::string> players;
+                for(std::size_t i = 0; i < request.lineups.size(); ++i) {
+                    const auto& lineup = request.lineups[i];
+                    if(lineup.team_id != (i == 0 ? request.team_id : request.opponent_team_id) ||
+                       lineup.account_ids.size() != static_cast<std::size_t>(map.size)) return team_failure("invalid_input");
+                    json::array ids;
+                    for(const auto& id : lineup.account_ids) {
+                        if(!uuid_valid(id) || !players.insert(id).second) return team_failure("invalid_input");
+                        ids.push_back(json::value(id));
+                    }
+                    lineups.push_back(json::object{{"team_id", lineup.team_id}, {"account_ids", std::move(ids)}});
+                }
+                body["team_id"] = request.team_id;
+                body["opponent_team_id"] = request.opponent_team_id;
+                body["map_id"] = request.map_id;
+                body["lineups"] = std::move(lineups);
+            }
+        } else if(is_team) {
             if(!token_valid(request.token) || !request.username.empty() || !request.password.empty() ||
                !request.starter_id.empty() || !cursor_valid(request.after)) return team_failure("invalid_input");
             if(op != "create_team" && !request.name.empty()) return team_failure("invalid_input");
@@ -489,8 +710,9 @@ Reply perform_request(const TrustedProfile& trusted, const Request& request,
         }
         Reply reply;
         if(is_team) {
-            if(status != (op == "create_team" ? 201 : 200)) invalid();
-            team_response(data, request, reply);
+            if(status != (op == "create_team" || op == "propose_battle" ? 201 : 200)) invalid();
+            if(is_battle) battle_response(data, request, reply);
+            else team_response(data, request, reply);
         } else if(op == "logout") {
             keys(data, {"status"});
             if(status != 200 || string(data, "status", 16) != "logged_out") invalid();
