@@ -32,9 +32,9 @@ ENGINE_KIND = 'wesnoth-android-account-engine'
 LOCK = '.wesnoth-account-game-operation.json'
 MARKER = '.wesnoth-account-game.json'
 ENGINE_MARKER = '.wesnoth-account-engine.json'
-VERSION_CODE = 1192604
-PREVIOUS_VERSION_CODE = 1192603
-UPDATE_JOURNAL = '.wesnoth-account-game-update-1192604.json'
+VERSION_CODE = 1192605
+PREVIOUS_VERSION_CODE = 1192604
+UPDATE_JOURNAL = '.wesnoth-account-game-update-1192605.json'
 UPDATE_KIND = 'wesnoth-android-account-game-update'
 UPDATE_STAGES = ('android-account-engine', 'android-account-game')
 PACKAGE = G.PACKAGE
@@ -437,7 +437,7 @@ def checked_update_journal(record, current_inputs):
         entry = record['stages'][name]
         if not isinstance(entry, dict) or set(entry) != {'backup', 'snapshot'}:
             raise BuildError('Invalid account update stage record.')
-        match = re.fullmatch(re.escape(name) + r'-before-decisions-ui-(\d{8}T\d{6}Z-[0-9a-f]{32})', str(entry['backup']))
+        match = re.fullmatch(re.escape(name) + r'-before-management-ui-(\d{8}T\d{6}Z-[0-9a-f]{32})', str(entry['backup']))
         if not match:
             raise BuildError('Invalid account backup location; no paths were changed.')
         suffixes.add(match.group(1))
@@ -501,7 +501,7 @@ def prepare_update(repo):
             token = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ-') + uuid.uuid4().hex
             record = {'schema_version': 1, 'kind': UPDATE_KIND, 'target_version': VERSION_CODE,
                       'target_inputs': inputs, 'stages': {name: {
-                          'backup': name + '-before-decisions-ui-' + token, 'snapshot': snapshots[name]}
+                          'backup': name + '-before-management-ui-' + token, 'snapshot': snapshots[name]}
                           for name in UPDATE_STAGES}}
             checked_update_journal(record, inputs)
             write_new(journal, B.json_bytes(record))
@@ -606,7 +606,7 @@ def main(argv=None):
     parser.add_argument('--gradle-user-home', type=Path, default=Path.home() / '.gradle')
     parser.add_argument('--jobs', type=int, default=2)
     parser.add_argument('--verify', '--verify-only', action='store_true')
-    parser.add_argument('--prepare-update', action='store_true', help='Preserve completed 1192603 stages before the 1192604 update.')
+    parser.add_argument('--prepare-update', action='store_true', help='Preserve completed 1192604 stages before the 1192605 update.')
     args = parser.parse_args(argv)
     try:
         for name, value in vars(args).items():
