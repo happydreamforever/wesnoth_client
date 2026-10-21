@@ -54,7 +54,7 @@ elif cmd[:2]==['shell','getprop']:
 elif cmd[:3]==['shell','pm','path']:print(cfg.get('installed','package:/data/app/base.apk'))
 elif cmd[:3]==['shell','dumpsys','package']:
  updated=pathlib.Path(cfg['installed_flag']).exists()
- print('  versionCode='+str(cfg.get('updated_version',1192603) if updated else cfg.get('installed_version',1192602))+' minSdk=23 targetSdk=35')
+ print('  versionCode='+str(cfg.get('updated_version',1192604) if updated else cfg.get('installed_version',1192603))+' minSdk=23 targetSdk=35')
 elif cmd[:2]==['install','-r']:
  pathlib.Path(cfg['installed_flag']).write_text('updated')
  print(cfg.get('install','Success'));sys.exit(cfg.get('install_exit',0))
@@ -125,20 +125,21 @@ class InstallTests(unittest.TestCase):
   self.assertFalse(any(any('validate_android_account_profile' in arg for arg in call['args']) for call in self.calls))
   self.assertFalse(list((self.repo/'diagnostics').glob('public-alliance-profile-*')))
   self.assertIn('Confirm the existing Trusted server is displayed',self.output)
+  self.assertIn('Version 1192604 and setup activity startup are verified.',self.output)
   self.assertIn('If setup says no saved profile',self.output)
   self.assertNotIn('PUBLIC ALLIANCE PROFILE VERIFIED',self.output)
  def test_keep_saved_profile_rejects_unexpected_old_version_before_install(self):
   self.keep_saved_profile=True
-  for version in (1192600,1192601,1192699,'not a version'):
+  for version in (1192600,1192601,1192602,1192699,'not a version'):
    with self.subTest(version=version):
     self.config['installed_version']=version
     self.assertEqual(self.invoke(),2,self.output)
     self.assertFalse(any(x[0]=='install' for x in self.commands()))
  def test_keep_saved_profile_allows_repeat_install_of_current_version(self):
-  self.keep_saved_profile=True;self.config['installed_version']=1192603
+  self.keep_saved_profile=True;self.config['installed_version']=1192604
   self.assertEqual(self.invoke(),0,self.output)
  def test_keep_saved_profile_checks_installed_new_version_before_launch(self):
-  self.keep_saved_profile=True;self.config['updated_version']=1192602
+  self.keep_saved_profile=True;self.config['updated_version']=1192603
   self.assertEqual(self.invoke(),2,self.output)
   self.assertFalse(any(x[:3]==['shell','am','start'] for x in self.commands()))
   self.assertNotIn('ANDROID ACCOUNT GAME INSTALL COMPLETE',self.output)
