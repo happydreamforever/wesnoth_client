@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "alliance_game/account_ui.hpp"
 #include "alliance_native/account_client.hpp"
+#include "alliance_native/account_protocol.hpp"
 
+#include "desktop/clipboard.hpp"
+#include "font/constants.hpp"
 #include "gui/dialogs/message.hpp"
 #include "gui/dialogs/modal_dialog.hpp"
 #include "gui/dialogs/network_transmission.hpp"
@@ -9,14 +12,18 @@
 #include "gui/widgets/button.hpp"
 #include "gui/widgets/grid.hpp"
 #include "gui/widgets/label.hpp"
-#include "gui/widgets/password_box.hpp"
 #include "gui/widgets/text_box.hpp"
 #include "gui/widgets/toggle_button.hpp"
+#include "log.hpp"
 #include "serialization/unicode.hpp"
 
+#include <algorithm>
+#include <array>
 #include <atomic>
 #include <cstdlib>
 #include <functional>
+#include <memory>
+#include <stdexcept>
 #include <string>
 #include <thread>
 #include <utility>
@@ -73,10 +80,197 @@ bool valid_username(const std::string& name)
     return true;
 }
 
-// The existing mp_login layout supplies a masked password_box. We deliberately
+// Keep the submitted value and the displayed character count in one editor.
+// The engine password_box can retain undisplayed input past its render limit
+// and its inherited composition handler edits the mask instead of the secret.
+// This scoped widget leaves the engine and its other password dialogs intact.
+class CredentialPasswordBox final : public gui2::text_box {
+public:
+    explicit CredentialPasswordBox(const gui2::implementation::builder_styled_widget& builder)
+        : text_box(builder)
+    {
+        set_max_input_length(limit);
+        set_use_markup(false);
+    }
+    ~CredentialPasswordBox() override
+    {
+        clear_secret(secret_);
+        // The dialog clears its displayed value before closing. Do not render
+        // from a widget destructor while its containing grid is being torn down.
+    }
+
+    const std::string& get_secret() const { return secret_; }
+
+    void set_value(const std::string& text) override
+    {
+        std::string bounded;
+        if(!bounded_prefix(text, limit, bounded)) return;
+        clear_secret(secret_);
+        secret_.swap(bounded);
+        render();
+        set_cursor(utf8::size(secret_), false);
+    }
+
+    void set_password_visible(bool visible)
+    {
+        if(visible_ == visible) return;
+        const auto start = get_selection_start();
+        const int length = static_cast<int>(get_selection_length());
+        visible_ = visible;
+        render();
+        set_selection(start, length);
+    }
+
+protected:
+    void insert_char(const std::string& text) override
+    {
+        if(!is_editable() || text.empty()) return;
+        const auto selection = selected_range();
+        const auto available = limit - (utf8::size(secret_) - selection.second);
+        std::string bounded;
+        if(!bounded_prefix(text, available, bounded) || bounded.empty()) return;
+        const auto added = utf8::size(bounded);
+        utf8::erase(secret_, selection.first, selection.second);
+        utf8::insert(secret_, selection.first, bounded);
+        clear_secret(bounded);
+        render();
+        set_cursor(selection.first + added, false);
+    }
+
+    void delete_selection() override
+    {
+        if(!is_editable()) return;
+        const auto selection = selected_range();
+        if(selection.second == 0) return;
+        utf8::erase(secret_, selection.first, selection.second);
+        render();
+        set_cursor(selection.first, false);
+    }
+
+    void copy_selection() override {}
+
+    void paste_selection() override
+    {
+        if(!is_editable()) return;
+        std::string text = desktop::clipboard::copy_from_clipboard();
+        insert_char(text);
+        clear_secret(text);
+        fire(gui2::event::NOTIFY_MODIFIED, *this, nullptr);
+    }
+
+    void handle_commit(bool& handled, const std::string& text) override
+    {
+        handled = true;
+        if(text.empty()) return;
+        insert_char(text);
+        fire(gui2::event::NOTIFY_MODIFIED, *this, nullptr);
+    }
+
+    void handle_editing(bool& handled, const std::string&, int32_t, int32_t) override
+    {
+        // Consume preedit before the base implementation can change the mask,
+        // reveal uncommitted text, or replace any canonical input. Only committed
+        // text edits the password; no IME text is retained in this widget.
+        handled = true;
+    }
+
+private:
+    static constexpr std::size_t limit = 128;
+
+    static bool bounded_prefix(const std::string& text, std::size_t characters,
+                               std::string& bounded)
+    {
+        // At most 128 Unicode scalars need at most 512 UTF-8 bytes. Validate
+        // the retained prefix before it can reach the renderer in visible mode.
+        bounded.assign(text, 0, std::min(text.size(), limit * 4));
+        try { utf8::truncate(bounded, characters); }
+        catch(...) { clear_secret(bounded); return false; }
+        if(!bounded.empty() && !account::password_valid(bounded, false)) {
+            clear_secret(bounded);
+            return false;
+        }
+        return true;
+    }
+
+    std::pair<std::size_t, std::size_t> selected_range() const
+    {
+        const auto size = utf8::size(secret_);
+        const auto anchor = std::min(get_selection_start(), size);
+        const int length = static_cast<int>(get_selection_length());
+        if(length < 0) {
+            const auto count = std::min(anchor, static_cast<std::size_t>(-static_cast<long long>(length)));
+            return {anchor - count, count};
+        }
+        return {anchor, std::min(size - anchor, static_cast<std::size_t>(length))};
+    }
+
+    void render()
+    {
+        if(visible_) {
+            gui2::text_box::set_value(secret_);
+        } else {
+            std::string mask;
+            for(std::size_t i = 0; i < utf8::size(secret_); ++i) mask += font::unicode_bullet;
+            gui2::text_box::set_value(mask);
+        }
+    }
+
+    std::string secret_;
+    bool visible_ = false;
+};
+
+// Pinned text layout/drawing debug messages can include the displayed text.
+// Keep both domains silent through the entire modal window lifetime, including
+// later redraws and teardown, then clear the shared canvas renderer before
+// restoring the caller's exact logging levels. This must be the first base.
+class CredentialRenderPrivacy {
+public:
+    CredentialRenderPrivacy()
+    {
+        try {
+            for(std::size_t i = 0; i < domains_.size(); ++i) {
+                if(!lg::get_log_domain_severity(domains_[i], previous_[i]) ||
+                   !lg::set_log_domain_severity(domains_[i], lg::severity::LG_NONE)) {
+                    throw std::runtime_error("The credential dialog could not protect its display.");
+                }
+                ++suppressed_;
+            }
+        } catch(...) {
+            restore();
+            throw;
+        }
+    }
+    ~CredentialRenderPrivacy() noexcept
+    {
+        try { font::get_text_renderer().set_text("", false); }
+        catch(...) {
+            // Fail closed if the renderer could still contain visible text.
+            return;
+        }
+        restore();
+    }
+    CredentialRenderPrivacy(const CredentialRenderPrivacy&) = delete;
+    CredentialRenderPrivacy& operator=(const CredentialRenderPrivacy&) = delete;
+
+private:
+    void restore() noexcept
+    {
+        while(suppressed_ != 0) {
+            const auto i = --suppressed_;
+            try { lg::set_log_domain_severity(domains_[i], previous_[i]); }
+            catch(...) {} // A failed restoration leaves that domain suppressed.
+        }
+    }
+    static constexpr std::array<const char*, 2> domains_{{"gui/layout", "gui/draw"}};
+    std::array<lg::severity, 2> previous_{};
+    std::size_t suppressed_ = 0;
+};
+
+// The existing mp_login layout supplies the credential fields. We deliberately
 // do not use mp_login itself: that dialog reads and writes guest-login prefs.
 // No fields are registered, so modal_dialog cannot save them to text history.
-class CredentialsDialog final : public gui2::dialogs::modal_dialog {
+class CredentialsDialog final : private CredentialRenderPrivacy,
+                                public gui2::dialogs::modal_dialog {
 public:
     CredentialsDialog(std::string& username, std::string& password,
                       const std::string& description, const std::string& action,
@@ -107,17 +301,29 @@ private:
             }
         }
         auto& username = find_widget<gui2::text_box>("user_name");
-        auto& password = find_widget<gui2::password_box>("password");
+        config password_config;
+        password_config["id"] = "password";
+        password_config["definition"] = "default";
+        get_grid().swap_child("password", std::make_unique<CredentialPasswordBox>(
+            gui2::implementation::builder_text_box(password_config)), true);
+        auto& password = find_widget<CredentialPasswordBox>("password");
         username.set_max_input_length(24);
         username.set_value(username_);
         username.set_active(!confirm_only_);
-        password.set_max_input_length(128);
         password.set_value("");
         auto& label = find_widget<gui2::label>("login_label");
         label.set_use_markup(false);
         label.set_label(description_);
-        find_widget<gui2::toggle_button>("remember_password")
-            .set_visible(gui2::widget::visibility::invisible);
+        auto& show_password = find_widget<gui2::toggle_button>("remember_password");
+        show_password.set_label("Show password");
+        show_password.set_value(false);
+        show_password.set_visible(gui2::widget::visibility::visible);
+        gui2::event::connect_signal_notify_modified(show_password, [this](auto&&...) {
+            auto& password = find_widget<CredentialPasswordBox>("password");
+            password.set_password_visible(
+                find_widget<gui2::toggle_button>("remember_password").get_value_bool());
+            keyboard_capture(&password);
+        });
         find_widget<gui2::button>("ok").set_label(action_);
         add_to_tab_order(&username);
         add_to_tab_order(&password);
@@ -126,12 +332,15 @@ private:
     }
     void post_show() override
     {
-        auto& password = find_widget<gui2::password_box>("password");
+        auto& password = find_widget<CredentialPasswordBox>("password");
+        clear_secret(password_);
         if(get_retval() == gui2::retval::OK) {
             username_ = find_widget<gui2::text_box>("user_name").get_value();
-            password_ = password.get_real_value();
+            password_ = password.get_secret();
         }
         password.set_value("");
+        password.set_password_visible(false);
+        find_widget<gui2::toggle_button>("remember_password").set_value(false);
         find_widget<gui2::text_box>("user_name").set_value("");
     }
     std::string& username_;
