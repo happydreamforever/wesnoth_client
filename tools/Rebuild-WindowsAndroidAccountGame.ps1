@@ -27,7 +27,7 @@ try {
     $log = Join-Path $diagnostics ('android-account-rebuild-' + (Get-Date -Format 'yyyyMMdd-HHmmss-fff') + '-' + [guid]::NewGuid().ToString('N') + '.txt')
     Start-Transcript -LiteralPath $log -NoClobber | Out-Null
     $started = $true
-    Write-Host 'Verifying and preserving both completed 1192608 account stages before the 1192609 team-practice update.'
+    Write-Host 'Verifying and preserving both completed 1192608 or 1192609 account stages before the 1192610 planning-state correction.'
     Write-Host 'Recorded preparation reuses its retained backups. If an operation lock remains, stop and send the log.'
     & $PythonPath -I -B -u $builder --prepare-update
     if ($LASTEXITCODE -ne 0) { throw 'Account update preparation stopped. No build was started. Preserve all stages/backups and send this log.' }

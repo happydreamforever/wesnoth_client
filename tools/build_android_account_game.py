@@ -32,9 +32,9 @@ ENGINE_KIND = 'wesnoth-android-account-engine'
 LOCK = '.wesnoth-account-game-operation.json'
 MARKER = '.wesnoth-account-game.json'
 ENGINE_MARKER = '.wesnoth-account-engine.json'
-VERSION_CODE = 1192609
-PREVIOUS_VERSION_CODE = 1192608
-UPDATE_JOURNAL = '.wesnoth-account-game-update-1192609.json'
+VERSION_CODE = 1192610
+PREVIOUS_VERSION_CODES = frozenset((1192608, 1192609))
+UPDATE_JOURNAL = '.wesnoth-account-game-update-1192610.json'
 UPDATE_KIND = 'wesnoth-android-account-game-update'
 UPDATE_STAGES = ('android-account-engine', 'android-account-game')
 PACKAGE = G.PACKAGE
@@ -321,11 +321,11 @@ def native_validation(repo, root):
     return result
 
 
-def inspect_apk(apk, root):
+def inspect_apk(apk, root, version_code=VERSION_CODE):
     # The shared inspector verifies ZIP paths, exactly five identical ELF payloads
     # and the unchanged trusted OBB file index. Override only this stage's metadata.
     detail = G.inspect_apk(apk, root)
-    detail.update(activity=ACTIVITY, version_code=VERSION_CODE)
+    detail.update(activity=ACTIVITY, version_code=version_code)
     return detail
 
 
@@ -419,6 +419,27 @@ def stage_snapshot(root):
     return {'files': files, 'directories': directories}
 
 
+def previous_version(root, marker, receipt):
+    """Bind an allowed old release to its checked generated project and receipt."""
+    validation = receipt.get('validation')
+    apk = validation.get('apk') if isinstance(validation, dict) else None
+    version = apk.get('version_code') if isinstance(apk, dict) else None
+    if type(version) is not int or version not in PREVIOUS_VERSION_CODES:
+        raise BuildError('Expected a completed 1192608 or 1192609 account APK; nothing was renamed.')
+    if 'app/build.gradle' not in marker['files']:
+        raise BuildError('The previous account version is not bound to its owned Gradle input.')
+    data = call(N.ninja_read, root / 'app/build.gradle', 64 * 1024)
+    try:
+        text = data.decode('utf-8')
+    except (AttributeError, UnicodeError) as error:
+        raise BuildError('The previous owned Gradle version could not be read.') from error
+    declarations = re.findall(r'(?m)^\s*versionCode\s+([0-9]+)\s*$', text)
+    if (len(re.findall(r'\bversionCode\b', text)) != 1 or len(declarations) != 1
+            or int(declarations[0]) != version):
+        raise BuildError('The previous APK receipt and owned Gradle version differ; nothing was renamed.')
+    return version
+
+
 def completed_previous_stages(repo, profile, current_inputs):
     """Validate old completion receipts without comparing old source hashes to new ones."""
     engine_root = safe(repo / 'build' / UPDATE_STAGES[0])
@@ -434,12 +455,20 @@ def completed_previous_stages(repo, profile, current_inputs):
     engine_verify(repo, previous_inputs)
     game_inputs = dict(previous_inputs, account_engine_receipt=fingerprint(engine_root / 'receipt.json'))
     marker = verify_owned(game_root, KIND, MARKER, game_inputs)
-    validation = {'libraries': native_validation(repo, game_root), 'apk': inspect_apk(game_root / APK, game_root)}
-    validation['apk']['version_code'] = PREVIOUS_VERSION_CODE
+    receipt = update_json(game_root / 'receipt.json')
+    version = previous_version(game_root, marker, receipt)
+    # A pending 1192609 transaction can still leave completed 1192608 source
+    # directories in place before its first move. Do not start another upgrade
+    # on top of it or reinterpret its immutable journal as a 1192610 update.
+    for later in PREVIOUS_VERSION_CODES:
+        if later > version and safe(repo / 'build' / ('.wesnoth-account-game-update-' + str(later) + '.json')).exists():
+            raise BuildError('A later account update journal exists beside older completed stages. Preserve it and send the log.')
+    validation = {'libraries': native_validation(repo, game_root),
+                  'apk': inspect_apk(game_root / APK, game_root, version)}
     expected = {'schema_version': 1, 'kind': KIND, 'profile': profile, 'inputs': game_inputs,
                 'project_files': marker['files'], 'validation': validation,
                 'artifacts': {name: fingerprint(game_root / name) for name in ARTIFACTS}, 'device_executed': False}
-    if update_json(game_root / 'receipt.json') != expected:
+    if receipt != expected:
         raise BuildError('Expected the completed previous account APK receipt and unchanged artifacts; nothing was renamed.')
     after = {name: stage_snapshot(repo / 'build' / name) for name in UPDATE_STAGES}
     if after != before:
@@ -459,7 +488,7 @@ def checked_update_journal(record, current_inputs):
         entry = record['stages'][name]
         if not isinstance(entry, dict) or set(entry) != {'backup', 'snapshot'}:
             raise BuildError('Invalid account update stage record.')
-        match = re.fullmatch(re.escape(name) + r'-before-team-practice-(\d{8}T\d{6}Z-[0-9a-f]{32})', str(entry['backup']))
+        match = re.fullmatch(re.escape(name) + r'-before-planning-state-fix-(\d{8}T\d{6}Z-[0-9a-f]{32})', str(entry['backup']))
         if not match:
             raise BuildError('Invalid account backup location; no paths were changed.')
         suffixes.add(match.group(1))
@@ -523,7 +552,7 @@ def prepare_update(repo):
             token = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ-') + uuid.uuid4().hex
             record = {'schema_version': 1, 'kind': UPDATE_KIND, 'target_version': VERSION_CODE,
                       'target_inputs': inputs, 'stages': {name: {
-                          'backup': name + '-before-team-practice-' + token, 'snapshot': snapshots[name]}
+                          'backup': name + '-before-planning-state-fix-' + token, 'snapshot': snapshots[name]}
                           for name in UPDATE_STAGES}}
             checked_update_journal(record, inputs)
             write_new(journal, B.json_bytes(record))
@@ -628,7 +657,7 @@ def main(argv=None):
     parser.add_argument('--gradle-user-home', type=Path, default=Path.home() / '.gradle')
     parser.add_argument('--jobs', type=int, default=2)
     parser.add_argument('--verify', '--verify-only', action='store_true')
-    parser.add_argument('--prepare-update', action='store_true', help='Preserve completed 1192608 stages before the 1192609 practice update.')
+    parser.add_argument('--prepare-update', action='store_true', help='Preserve completed 1192608 or 1192609 stages before the 1192610 planning-state correction.')
     args = parser.parse_args(argv)
     try:
         for name, value in vars(args).items():
