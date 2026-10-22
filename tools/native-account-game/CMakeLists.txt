@@ -21,6 +21,11 @@ set_source_files_properties(${account_base_objects} PROPERTIES EXTERNAL_OBJECT T
 configure_file("${ACCOUNT_STAGE}/config.h" "${CMAKE_BINARY_DIR}/config.h" COPYONLY)
 add_library(main SHARED ${account_base_objects}
  "${ACCOUNT_STAGE}/title_screen.cpp"
+ "${ACCOUNT_STAGE}/wesnoth.cpp"
+ "${ACCOUNT_STAGE}/game_launcher.cpp"
+ "${REPO}/alliance_game/battle_launch.cpp"
+ "${REPO}/alliance_game/practice_plan.cpp"
+ "${REPO}/alliance_game/practice_scenario.cpp"
  "${REPO}/alliance_game/account_ui.cpp"
  "${REPO}/alliance_native/account_protocol.cpp"
  "${REPO}/alliance_native/account_client.cpp"
