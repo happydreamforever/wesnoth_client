@@ -1240,7 +1240,7 @@ std::string practice_availability_text(const account::Battle& battle, const acco
         ? "Your personal practice is available. Other players do not need to be Ready."
         : practice_eligibility_reason(eligibility);
     if(eligibility == PracticeEligibility::viewer_readiness_required)
-        text += " Ready and practice can save your Ready, then open a separate practice confirmation.";
+        text += " Choose Set myself ready first, then choose Practice this plan when you want to start.";
     if(battle.state != "draft" || battle.validity != "valid" || eligibility == PracticeEligibility::invalid_plan) return text;
     int approved = 0, ready = 0, players = 0;
     std::string captains_waiting, players_waiting;
@@ -1432,9 +1432,6 @@ void battle_detail(const alliance::TrustedProfile& profile, const std::string& b
         const int practice = can_practice_plan(battle, current_session().profile)
             ? static_cast<int>(actions.size()) : -1;
         if(practice >= 0) actions.push_back("Practice this plan");
-        const int ready_practice = practice_eligibility(battle, current_session().profile) == PracticeEligibility::viewer_readiness_required
-            ? static_cast<int>(actions.size()) : -1;
-        if(ready_practice >= 0) actions.push_back("Ready and practice");
         const bool draft = battle.state == "draft";
         const int approve = draft && captain && !approved && battle.validity == "valid"
             ? static_cast<int>(actions.size()) : -1;
@@ -1476,7 +1473,6 @@ void battle_detail(const alliance::TrustedProfile& profile, const std::string& b
         if(choice == practice) { practice_plan(profile, battle); if(practice_pending()) return; continue; }
         account::Request mutation;
         mutation.battle_id = battle.id;
-        bool practice_after_ready = false;
         std::string title, explanation, affirmative, success;
         if(choice == approve) {
             mutation.operation = "approve_battle";
@@ -1484,16 +1480,6 @@ void battle_detail(const alliance::TrustedProfile& profile, const std::string& b
             explanation = "Approve this exact saved map and both fixed lineups as your team's current captain?";
             affirmative = "Approve saved map and lineups";
             success = "Your captain approval was saved.";
-        } else if(choice == ready_practice) {
-            practice_after_ready = true;
-            mutation.operation = "battle_ready";
-            mutation.ready = true;
-            title = "Confirm Ready and practice";
-            explanation = "Save your own Ready for this plan on the Windows server? No other player's readiness will change.\n\n"
-                "We will then check the current plan and show a separate confirmation before starting your personal practice. "
-                "Backing out of that later confirmation does not undo this Ready action. "
-                "Practice runs locally against the computer and does not start a shared battle or award account rewards.";
-            affirmative = "Save my Ready and continue";
         } else if(choice == readiness) {
             mutation.operation = "battle_ready";
             mutation.ready = !ready;
@@ -1510,29 +1496,8 @@ void battle_detail(const alliance::TrustedProfile& profile, const std::string& b
             success = "The battle plan was cancelled. No battle was started.";
         } else continue;
         if(select_change(title, battle_text(battle) + "\n\n" + explanation, {affirmative}) != 0) return;
-        if(practice_after_ready && (current_session().token.empty() || current_session().profile.account_id != actor)) {
-            message("Your player changed before saving Ready. No Ready request was sent. Open Alliance again before continuing.");
-            return;
-        }
         account::Battle confirmed;
         if(!battle_mutation(profile, mutation, "Saving the battle plan change…", confirmed)) return;
-        if(practice_after_ready) {
-            if(confirmed.id != mutation.battle_id) {
-                message("The response did not confirm Ready for the requested plan. No practice was started. "
-                    "Open My battle plans to check the result before making another change.");
-                return;
-            }
-            const std::string saved = "Your Ready action was confirmed. No practice started; refresh to check current readiness. "
-                "If you want to withdraw readiness, use Set myself not ready. No Ready action was automatically retried.";
-            if(current_session().token.empty() || current_session().profile.account_id != actor) {
-                message(saved + "\nYour player changed. Open Alliance again before continuing.");
-                return;
-            }
-            try { practice_plan(profile, confirmed); }
-            catch(...) { message(saved); return; }
-            if(!practice_pending()) message(saved);
-            return;
-        }
         // The acknowledgement contains the confirmed snapshot. Show it before
         // another read so a later read failure cannot erase the saved result.
         message(success + "\n\n" + battle_text(confirmed));
@@ -1674,7 +1639,7 @@ void battle_plans(const alliance::TrustedProfile& profile)
         const int choice = select("Battle plans", "Prepare maps and fixed lineups with another team in your area.\n"
             "Both captains approve, then selected players set their readiness.\n"
             "For personal practice, a selected player needs a valid draft, both captain approvals and only their own Ready. "
-            "Ready and practice saves your Ready before a separate launch confirmation. "
+            "Choose Set myself ready first, then choose Practice this plan separately. "
             "Cancelled and completed plans cannot start practice. "
             "Practice does not change the plan or award account experience or rating.", {"My battle plans", "Propose battle"});
         if(choice < 0) return;
