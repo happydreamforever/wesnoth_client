@@ -57,16 +57,16 @@ extern "C" int __wrap_main(int argc, char** argv) {
             const Map& map=maps[index<6?0:index-5];
             const auto source=data.find_child("multiplayer","id",map.scenario); require(bool(source),"real map missing");
             alliance::account::Battle battle;
-            battle.id=uuid(100+index); battle.state=index%2?"cancelled":"draft";
+            battle.id=uuid(100+index); battle.state="draft"; battle.validity="valid";
             battle.map.id=map.id; battle.map.scenario_id=map.scenario;
             battle.map.size=static_cast<int>(map.sides[0].size()); battle.map.sides=map.sides;
             for(int team=0;team<2;++team) {
                 alliance::account::BattleTeam t;
-                t.id=uuid(10+team); t.name=team?"Fixture Beta":"Fixture Alpha";
+                t.id=uuid(10+team); t.name=team?"Fixture Beta":"Fixture Alpha"; t.approved=true;
                 for(std::size_t slot=0;slot<map.sides[team].size();++slot) {
                     const int side=map.sides[team][slot];
                     const Unit& unit=units[(index<6?index*4+side-1:side*3+index)%units.size()];
-                    t.players.push_back({uuid(side),"Fixture_"+std::to_string(side),unit.type,unit.level,side,false});
+                    t.players.push_back({uuid(side),"Fixture_"+std::to_string(side),unit.type,unit.level,side,true});
                 }
                 t.captain_id=t.players.front().id; battle.teams.push_back(t);
             }

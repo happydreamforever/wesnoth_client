@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "alliance_game/account_ui.hpp"
 #include "alliance_game/battle_launch.hpp"
+#include "alliance_game/practice_plan.hpp"
 #include "alliance_native/account_client.hpp"
 #include "alliance_native/account_protocol.hpp"
 
@@ -1225,6 +1226,38 @@ std::string battle_validity_text(const std::string& value)
     return "This plan requires a different version of the battle rules.";
 }
 
+std::string practice_availability_text(const account::Battle& battle, const account::Profile& player)
+{
+    if(battle.state == "cancelled")
+        return "Cancelled plans are history only. Local practice is unavailable.";
+    if(battle.state == "completed")
+        return "Completed battles cannot start local practice. Alliance battle replay viewing is not available in this version. "
+            "A local practice save or replay, if you saved one, is separate and remains available through Load.";
+    if(battle.state == "running")
+        return "This Alliance battle is already running. Local practice is unavailable.";
+    const auto eligibility = practice_eligibility(battle, player);
+    std::string text = eligibility == PracticeEligibility::eligible
+        ? "Local practice is available for selected players."
+        : practice_eligibility_reason(eligibility);
+    if(battle.state != "draft" || battle.validity != "valid" || eligibility == PracticeEligibility::invalid_plan) return text;
+    int approved = 0, ready = 0, players = 0;
+    std::string captains_waiting, players_waiting;
+    for(const auto& team : battle.teams) {
+        if(team.approved) ++approved;
+        else captains_waiting += (captains_waiting.empty() ? "" : ", ") + team.name;
+        for(const auto& member : team.players) {
+            ++players;
+            if(member.ready) ++ready;
+            else players_waiting += (players_waiting.empty() ? "" : ", ") + member.username;
+        }
+    }
+    text += "\nCaptains approved: " + std::to_string(approved) + "/2\nSelected players Ready: " +
+        std::to_string(ready) + "/" + std::to_string(players);
+    if(!captains_waiting.empty()) text += "\nWaiting for captain approval: " + captains_waiting;
+    if(!players_waiting.empty()) text += "\nNot ready: " + players_waiting;
+    return text;
+}
+
 std::string battle_text(const account::Battle& battle)
 {
     const bool historical = battle.state == "cancelled" || battle.state == "completed";
@@ -1255,26 +1288,45 @@ std::string battle_text(const account::Battle& battle)
         }
     }
     text += "\n\nPlanning does not start a shared team battle.";
-    if(battle.state == "draft" || battle.state == "cancelled")
-        text += " A selected player can practise this saved lineup locally against the computer. "
+    text += "\n" + practice_availability_text(battle, current_session().profile);
+    if(battle.state == "draft")
+        text += "\nLocal practice requires a valid plan, both captains' approval and every selected player Ready. "
             "Practice grants no account experience, team experience or rating.";
     return text;
 }
 
 bool can_practice_plan(const account::Battle& battle, const account::Profile& player)
 {
-    if(player.account_id.empty() || (battle.state != "draft" && battle.state != "cancelled")) return false;
-    int selections = 0;
-    for(const auto& team : battle.teams)
-        for(const auto& member : team.players)
-            if(member.id == player.account_id) ++selections;
-    return selections == 1;
+    return practice_eligibility(battle, player) == PracticeEligibility::eligible;
+}
+
+bool load_practice_plan(const alliance::TrustedProfile& profile, const std::string& battle_id,
+                        const std::string& actor, account::Reply& output)
+{
+    account::Request input;
+    input.operation = "battle_detail";
+    input.battle_id = battle_id;
+    if(!team_request(profile, input, "Checking the latest plan and readiness…", output)) return false;
+    if(current_session().token.empty() || current_session().profile.account_id != actor) {
+        message("Your player changed while opening practice. Open Alliance again before continuing.");
+        return false;
+    }
+    if(!output.battle || output.battle->id != battle_id) {
+        message("The latest battle plan could not be verified. No practice was started. Open My battle plans and try again.");
+        return false;
+    }
+    if(!can_practice_plan(*output.battle, current_session().profile)) {
+        message("No practice was started.\n" + practice_availability_text(*output.battle, current_session().profile));
+        return false;
+    }
+    return true;
 }
 
 void practice_plan(const alliance::TrustedProfile& profile, const account::Battle& battle)
 {
     const std::string actor = current_session().profile.account_id;
     if(current_session().token.empty() || !can_practice_plan(battle, current_session().profile)) return;
+    const std::string battle_id = battle.id;
     account::Request input;
     input.operation = "me";
     account::Reply output;
@@ -1285,22 +1337,32 @@ void practice_plan(const alliance::TrustedProfile& profile, const account::Battl
         return;
     }
     current_session().profile = output.profile;
+    account::Reply preview;
+    if(!load_practice_plan(profile, battle_id, actor, preview)) return;
     int human_side = 0;
-    for(const auto& team : battle.teams)
+    for(const auto& team : preview.battle->teams)
         for(const auto& member : team.players)
             if(member.id == actor) human_side = member.side;
     const std::string explanation = "Start a local practice game from this saved plan?\n\n"
         "You control side " + std::to_string(human_side) + ". The computer controls every other side, "
         "including your teammates. All sides use the saved leaders and alliances shown above.\n\n"
-        "This uses the saved snapshot even if membership, leaders or approvals have changed, or the plan was cancelled. "
+        "The server currently confirms this draft is valid, both captains approved and every selected player is Ready. "
+        "The plan and readiness will be checked again after you confirm. "
         "It does not start or change the shared battle plan. No players or teams are reserved.\n\n"
         "Practice grants no account experience, team experience or rating. Other players do not join this game.";
-    if(select_change("Confirm local team practice", battle_text(battle) + "\n\n" + explanation,
+    if(select_change("Confirm local team practice", battle_text(*preview.battle) + "\n\n" + explanation,
                      {"Start local practice"}) != 0) return;
+    account::Reply latest;
+    if(!load_practice_plan(profile, battle_id, actor, latest)) return;
+    if(!same_practice_snapshot(*preview.battle, *latest.battle)) {
+        message("The battle plan changed while you were confirming practice. No practice was started. "
+            "Open the plan again to review its current lineups and readiness.");
+        return;
+    }
     try {
         // Queue data only. The title-screen caller launches after every modal
         // account window has unwound; no combat runs inside this dialog.
-        queue_practice(battle, output.profile);
+        queue_practice(*latest.battle, output.profile);
     } catch(...) {
         message("This saved plan could not prepare a local practice game. No battle plan or account data was changed.");
     }
@@ -1379,13 +1441,15 @@ void battle_detail(const alliance::TrustedProfile& profile, const std::string& b
             ? "This plan is cancelled and inactive. Readiness is saved history; captain approval is inactive."
             : battle.state == "completed"
             ? "This battle is complete and inactive. Readiness is saved history; captain approval is inactive."
+            : battle.state == "running"
+            ? "This Alliance battle has already started. Its saved planning consent cannot be changed here."
             : draft && battle.validity != "valid"
             ? "This draft is not eligible for a shared battle. Captain approval and saved readiness are inactive."
             : "Both captains must approve the saved lineups before selected players can become ready.";
         const int choice = select_change("Battle plan", battle.teams[0].name + " vs " + battle.teams[1].name +
             "\nBattle plan ID: " + battle.id +
             "\n" + battle.map.name + " — " + battle.state + "\n" + battle_validity_text(battle.validity) +
-            "\n" + consent + (practice >= 0
+            "\n" + consent + "\n" + practice_availability_text(battle, current_session().profile) + (practice >= 0
                 ? "\nPractice this plan opens a separate local game against the computer with no account rewards." : ""), actions);
         if(choice < 0) return;
         if(choice == 0) {
@@ -1570,7 +1634,8 @@ void battle_plans(const alliance::TrustedProfile& profile)
     while(!current_session().token.empty()) {
         const int choice = select("Battle plans", "Prepare maps and fixed lineups with another team in your area.\n"
             "Both captains approve, then selected players set their readiness.\n"
-            "Open a saved plan to practise your side locally with computer teammates and opponents. "
+            "A valid draft with both approvals and every selected player Ready can be practised locally against the computer. "
+            "Cancelled and completed plans cannot start practice. "
             "Practice does not change the plan or award account experience or rating.", {"My battle plans", "Propose battle"});
         if(choice < 0) return;
         if(choice == 0) my_battles(profile);

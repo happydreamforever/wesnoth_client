@@ -1,5 +1,6 @@
 // Actual planning controllers; only modal selection and request boundaries are scripted.
 #include "alliance_native/account_client.hpp"
+#include "alliance_game/practice_plan.hpp"
 #include <algorithm>
 #include <deque>
 #include <iostream>
@@ -69,7 +70,7 @@ bool battle_mutation(const alliance::TrustedProfile&, account::Request,
 }
 void practice_plan(const alliance::TrustedProfile&, const account::Battle& battle)
 {
-    require(battle.state == "cancelled", "This case expects a cancelled practice snapshot");
+    require(battle.state == "draft", "Only an eligible draft may practice");
     ++practice_calls;
 }
 bool practice_pending() { return practice_calls != 0; }
@@ -86,13 +87,13 @@ void reset()
     server_plan.state = "draft"; server_plan.validity = "valid";
     server_plan.created_at = "2026-10-22T12:00:00Z";
     server_plan.map = {"isars-cross", "Isar's Cross", "multiplayer_Isars_Cross", 2, {{1,4},{2,3}}};
-    server_plan.teams = {{"team-a", "Koichi", "captain-a", true,
-        {{"captain-a", "UniPlayer", "Spearman", 1, 1, true},
-         {"member-a", "UniRecruit", "Spearman", 1, 4, true}}},
-        {"team-b", "RivalPlan", "captain-b", true,
-        {{"captain-b", "UniSolo", "Elvish Fighter", 1, 2, false},
-         {"member-b", "UniRival", "Spearman", 1, 3, true}}}};
-    alliance_game::session = {"fixture-token", {"captain-a", "UniPlayer", "Spearman", "spearman", 1, 0, 0}};
+    server_plan.teams = {{"00000000-0000-0000-0000-000000000020", "Koichi", "00000000-0000-0000-0000-000000000001", true,
+        {{"00000000-0000-0000-0000-000000000001", "UniPlayer", "Spearman", 1, 1, true},
+         {"00000000-0000-0000-0000-000000000002", "UniRecruit", "Spearman", 1, 4, true}}},
+        {"00000000-0000-0000-0000-000000000021", "RivalPlan", "00000000-0000-0000-0000-000000000003", true,
+        {{"00000000-0000-0000-0000-000000000003", "UniSolo", "Elvish Fighter", 1, 2, false},
+         {"00000000-0000-0000-0000-000000000004", "UniRival", "Spearman", 1, 3, true}}}};
+    alliance_game::session = {"fixture-token", {"00000000-0000-0000-0000-000000000001", "UniPlayer", "Spearman", "spearman", 1, 0, 0}};
 }
 void contains(const std::string& text, const std::string& needle)
 {
@@ -169,8 +170,8 @@ int main()
             absent(text, "level 1 — Ready");
             require(server_plan.teams[1].players[1].ready && server_plan.teams[1].approved,
                     "Rendering must not rewrite server history");
-            require(alliance_game::can_practice_plan(server_plan, alliance_game::session.profile), "Cancelled practice lost");
-            contains(text, "practise this saved lineup locally against the computer");
+            require(!alliance_game::can_practice_plan(server_plan, alliance_game::session.profile), "Cancelled practice must be unavailable");
+            contains(text, "Cancelled plans are history only. Local practice is unavailable.");
         });
         check("completed consent is historical and practice is not offered", [] {
             server_plan.state = "completed";
@@ -186,10 +187,10 @@ int main()
         });
         check("current captain approval is not invented from historical ready players", [] {
             server_plan.state = "cancelled";
-            server_plan.teams[0].captain_id = "member-a";
+            server_plan.teams[0].captain_id = "00000000-0000-0000-0000-000000000002";
             server_plan.teams[0].approved = false;
             const auto text = alliance_game::battle_text(server_plan);
-            contains(text, "Team: Koichi\nTeam ID: team-a\nCaptain approval (inactive): Waiting");
+            contains(text, "Team: Koichi\nTeam ID: 00000000-0000-0000-0000-000000000020\nCaptain approval (inactive): Waiting");
             contains(text, "UniPlayer — Spearman, level 1 — Saved readiness (history): Ready");
             absent(text, "Saved captain approval (history)");
             require(!server_plan.teams[0].approved, "UI changed the protocol approval projection");
@@ -223,13 +224,13 @@ int main()
                     !offered(menus[0], "Approve this plan"), "Invalid draft consent actions changed");
             contains(menus[0].text, "Captain approval and saved readiness are inactive.");
         });
-        check("cancelled local practice remains a separate available action", [] {
+        check("cancelled plan stays history only without a practice action", [] {
             server_plan.state = "cancelled"; server_plan.validity = "roster_changed";
-            steps = {{"Battle plan", "Practice this plan", ""}};
+            steps = {{"Battle plan", "<close>", ""}};
             alliance_game::battle_detail({}, server_plan.id);
-            require(practice_calls == 1 && detail_reads == 1, "Cancelled practice was blocked or repeated");
+            require(practice_calls == 0 && detail_reads == 1 && !offered(menus[0], "Practice this plan"), "Cancelled practice was offered");
             contains(menus[0].text, "cancelled and inactive");
-            contains(menus[0].text, "separate local game against the computer");
+            contains(menus[0].text, "Cancelled plans are history only. Local practice is unavailable.");
         });
         check("identical names and timestamps remain distinguishable by plan IDs", [] {
             steps = {{"My battle plans", "<close>", ""}};

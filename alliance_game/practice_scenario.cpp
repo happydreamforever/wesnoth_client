@@ -18,7 +18,7 @@ config make_practice_scenario(const PracticePlan& plan, const config& original, 
     scenario["experience_modifier"] = 100;
     scenario["random_start_time"] = false;
     scenario["force_lock_settings"] = true;
-    scenario["objectives"] = "<big>Local team practice</big>\nDefeat the opposing team's leaders.\nYou control only your saved side; every other side is controlled by the computer.\nThis is a saved lineup, not a live membership check.\nNo persistent experience or ratings are awarded. Leaders keep their saved type; recruited units may advance locally.";
+    scenario["objectives"] = "<big>Local team practice</big>\nDefeat the opposing team's leaders.\nYou control only your saved side; every other side is controlled by the computer.\nThe draft's approvals and readiness were checked before starting. Later changes to the plan do not alter this local game or its saves.\nNo persistent experience or ratings are awarded. Leaders keep their saved type; recruited units may advance locally.\nFinishing this practice does not complete the Alliance battle plan.";
     scenario.clear_children("side", "options");
     auto& marker = scenario.child_or_add("variables");
     marker["alliance_practice"] = true;

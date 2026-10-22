@@ -16,8 +16,18 @@ struct PracticePlan {
     int size = 0, controlled_side = 0;
     std::vector<PracticeSeat> seats;
 };
-// Local copies only. The saved plan is historical; no current membership or
-// readiness claim is made and no account credential enters this descriptor.
+enum class PracticeEligibility {
+    eligible, inactive_plan, invalid_plan, unavailable_plan,
+    captain_approval_required, player_readiness_required, not_selected
+};
+// The UI and queue share full saved-lineup validation and the same policy:
+// a valid draft, both current captains' approval, every selected player ready.
+PracticeEligibility practice_eligibility(const alliance::account::Battle&, const alliance::account::Profile&);
+const char* practice_eligibility_reason(PracticeEligibility) noexcept;
+// Confirmation applies to exactly the refreshed response the player reviewed.
+bool same_practice_snapshot(const alliance::account::Battle&, const alliance::account::Battle&) noexcept;
+// Local copies only. Eligibility is checked at queue time, not reserved on the
+// server; no account credential enters this descriptor or local game.
 PracticePlan make_practice_plan(const alliance::account::Battle&, const alliance::account::Profile&);
 // Every permitted target type, for a persistent remove_advancement effect.
 // Using the same allowlist avoids a second, drifting progression tree.

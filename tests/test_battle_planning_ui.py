@@ -34,7 +34,7 @@ class BattlePlanningUiTests(unittest.TestCase):
     def test_actual_refresh_and_history_controllers(self):
         compiler = shutil.which(os.environ.get("CXX", "c++"))
         self.assertIsNotNone(compiler, "A C++17 compiler is required for planning UI behavior")
-        signatures = ("int select_change(", "std::string battle_validity_text(",
+        signatures = ("int select_change(", "std::string battle_validity_text(", "std::string practice_availability_text(",
                       "std::string battle_text(", "bool can_practice_plan(",
                       "void battle_detail(", "void my_battles(")
         functions = "\n\n".join(extract(signature) for signature in signatures)
@@ -46,9 +46,17 @@ class BattlePlanningUiTests(unittest.TestCase):
             directory.mkdir(parents=True, exist_ok=True)
             cpp, binary = directory / "planning_ui.cpp", directory / "planning_ui"
             cpp.write_text(fixture, encoding="utf-8")
+            policy = directory / "practice_policy.o"
+            policy_command = [compiler, "-std=c++17", "-Wall", "-Wextra", "-Werror", "-O0", "-g",
+                "-fsanitize=address,undefined", "-fno-omit-frame-pointer", "-I" + str(ROOT),
+                "-Dqueue_practice=unused_queue_practice", "-Dpractice_pending=unused_practice_pending",
+                "-Dtake_pending_practice=unused_take_pending_practice", "-c",
+                str(ROOT / "alliance_game/practice_plan.cpp"), "-o", str(policy)]
+            compiled = subprocess.run(policy_command, capture_output=True, text=True, timeout=120)
+            self.assertEqual(compiled.returncode, 0, compiled.stdout + compiled.stderr)
             command = [compiler, "-std=c++17", "-Wall", "-Wextra", "-Werror", "-O0", "-g",
                        "-fsanitize=address,undefined", "-fno-omit-frame-pointer", "-I" + str(ROOT),
-                       str(cpp), "-o", str(binary)]
+                       str(cpp), str(policy), "-o", str(binary)]
             built = subprocess.run(command, capture_output=True, text=True, timeout=120)
             self.assertEqual(built.returncode, 0, built.stdout + built.stderr)
             ran = subprocess.run([str(binary)], capture_output=True, text=True, timeout=30)
@@ -58,9 +66,10 @@ class BattlePlanningUiTests(unittest.TestCase):
             if audit:
                 (directory / "behavior.log").write_text(ran.stdout + ran.stderr, encoding="utf-8")
                 paths = ("alliance_game/account_ui.cpp", "alliance_native/account_client.hpp",
-                         "tests/battle_planning_ui_fixture.cpp.in", "tests/test_battle_planning_ui.py")
+                         "tests/battle_planning_ui_fixture.cpp.in", "tests/test_battle_planning_ui.py",
+                         "alliance_game/practice_plan.cpp", "alliance_game/practice_plan.hpp")
                 (directory / "source-evidence.json").write_text(json.dumps({
-                    "command": command, "exit_code": ran.returncode,
+                    "command": command, "policy_command": policy_command, "exit_code": ran.returncode,
                     "cases": ran.stdout.count("PASS ") - 1,
                     "source_sha256": {path: hashlib.sha256((ROOT / path).read_bytes()).hexdigest() for path in paths},
                     "limitations": __doc__,

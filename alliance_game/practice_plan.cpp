@@ -5,6 +5,7 @@
 #include <map>
 #include <set>
 #include <stdexcept>
+#include <tuple>
 #include <utility>
 
 namespace alliance_game {
@@ -47,17 +48,18 @@ const std::map<std::string, Unit> units = {
     {"Drake Fighter",{1,"Drakes"}}, {"Drake Warrior",{2,"Drakes"}}, {"Drake Blademaster",{3,"Drakes"}},
     {"Skeleton",{1,"Undead"}}, {"Revenant",{2,"Undead"}}, {"Deathblade",{2,"Undead"}}, {"Draug",{3,"Undead"}}
 };
-[[noreturn]] void invalid() { throw std::invalid_argument("This saved lineup cannot be used for local practice."); }
-}
-
-PracticePlan make_practice_plan(const alliance::account::Battle& battle, const alliance::account::Profile& viewer)
+PracticeEligibility evaluate_practice(const alliance::account::Battle& battle,
+                                     const alliance::account::Profile& viewer, PracticePlan& result)
 {
     if(!uuid(battle.id) || !uuid(viewer.account_id) ||
-       (battle.state != "draft" && battle.state != "cancelled") || battle.teams.size() != 2) invalid();
+       (battle.state != "draft" && battle.state != "cancelled" && battle.state != "running" && battle.state != "completed") ||
+       battle.teams.size() != 2) return PracticeEligibility::invalid_plan;
     const auto map = maps.find(battle.map.id);
     if(map == maps.end() || battle.map.scenario_id != map->second.scenario ||
-       battle.map.size != static_cast<int>(map->second.sides[0].size()) || battle.map.sides != map->second.sides) invalid();
-    PracticePlan result;
+       battle.map.size != static_cast<int>(map->second.sides[0].size()) || battle.map.sides != map->second.sides)
+        return PracticeEligibility::invalid_plan;
+    if(!battle.teams[0].captain_id.empty() && battle.teams[0].captain_id == battle.teams[1].captain_id)
+        return PracticeEligibility::invalid_plan;
     result.battle_id = battle.id;
     result.map_id = battle.map.id;
     result.map_name = map->second.name;
@@ -65,23 +67,83 @@ PracticePlan make_practice_plan(const alliance::account::Battle& battle, const a
     result.map_file = map->second.file;
     result.size = battle.map.size;
     std::set<std::string> teams, players;
+    bool approved = true, ready = true;
     for(std::size_t t = 0; t < battle.teams.size(); ++t) {
         const auto& team = battle.teams[t];
-        if(!uuid(team.id) || (!team.captain_id.empty() && !uuid(team.captain_id)) || !team_name(team.name) || !teams.insert(team.id).second ||
-           team.players.size() != static_cast<std::size_t>(result.size)) invalid();
+        if(!uuid(team.id) || (!team.captain_id.empty() && !uuid(team.captain_id)) || (team.approved && team.captain_id.empty()) ||
+           !team_name(team.name) || !teams.insert(team.id).second ||
+           team.players.size() != static_cast<std::size_t>(result.size)) return PracticeEligibility::invalid_plan;
+        approved = approved && !team.captain_id.empty() && team.approved;
         for(std::size_t p = 0; p < team.players.size(); ++p) {
             const auto& player = team.players[p];
             const auto unit = units.find(player.unit_type);
             if(!uuid(player.id) || !username(player.username) || !players.insert(player.id).second ||
-               player.side != map->second.sides[t][p] || unit == units.end() || player.level != unit->second.level) invalid();
+               player.side != map->second.sides[t][p] || unit == units.end() || player.level != unit->second.level)
+                return PracticeEligibility::invalid_plan;
+            ready = ready && player.ready;
             const bool human = player.id == viewer.account_id;
             if(human) result.controlled_side = player.side;
             result.seats.push_back({player.id, player.username, team.id, team.name, unit->second.faction,
                                     player.unit_type, player.level, player.side, human});
         }
     }
-    if(!result.controlled_side) invalid();
+    if(!result.controlled_side) return PracticeEligibility::not_selected;
+    if(battle.state != "draft") return PracticeEligibility::inactive_plan;
+    if(battle.validity != "valid") return PracticeEligibility::unavailable_plan;
+    if(!approved) return PracticeEligibility::captain_approval_required;
+    if(!ready) return PracticeEligibility::player_readiness_required;
     std::sort(result.seats.begin(), result.seats.end(), [](const auto& a, const auto& b) { return a.side < b.side; });
+    return PracticeEligibility::eligible;
+}
+}
+
+PracticeEligibility practice_eligibility(const alliance::account::Battle& battle, const alliance::account::Profile& viewer)
+{
+    PracticePlan result;
+    return evaluate_practice(battle, viewer, result);
+}
+
+const char* practice_eligibility_reason(PracticeEligibility status) noexcept
+{
+    switch(status) {
+    case PracticeEligibility::eligible: return "";
+    case PracticeEligibility::inactive_plan: return "Local practice is available only for a draft plan.";
+    case PracticeEligibility::unavailable_plan: return "This plan is unavailable or its teams or leaders have changed. Refresh the plan.";
+    case PracticeEligibility::captain_approval_required: return "Both current captains must approve this plan before local practice.";
+    case PracticeEligibility::player_readiness_required: return "Every selected player must be Ready before local practice.";
+    case PracticeEligibility::not_selected: return "Only a player in the fixed lineups can practice this plan.";
+    case PracticeEligibility::invalid_plan: break;
+    }
+    return "This plan has an invalid saved lineup and cannot be practiced.";
+}
+
+bool same_practice_snapshot(const alliance::account::Battle& first, const alliance::account::Battle& second) noexcept
+{
+    if(std::tie(first.id, first.area_id, first.state, first.created_at, first.validity,
+                first.map.id, first.map.name, first.map.scenario_id, first.map.size, first.map.sides) !=
+       std::tie(second.id, second.area_id, second.state, second.created_at, second.validity,
+                second.map.id, second.map.name, second.map.scenario_id, second.map.size, second.map.sides) ||
+       first.teams.size() != second.teams.size()) return false;
+    for(std::size_t t = 0; t < first.teams.size(); ++t) {
+        const auto& a = first.teams[t];
+        const auto& b = second.teams[t];
+        if(std::tie(a.id, a.name, a.captain_id, a.approved) != std::tie(b.id, b.name, b.captain_id, b.approved) ||
+           a.players.size() != b.players.size()) return false;
+        for(std::size_t p = 0; p < a.players.size(); ++p) {
+            const auto& left = a.players[p];
+            const auto& right = b.players[p];
+            if(std::tie(left.id, left.username, left.unit_type, left.level, left.side, left.ready) !=
+               std::tie(right.id, right.username, right.unit_type, right.level, right.side, right.ready)) return false;
+        }
+    }
+    return true;
+}
+
+PracticePlan make_practice_plan(const alliance::account::Battle& battle, const alliance::account::Profile& viewer)
+{
+    PracticePlan result;
+    const auto status = evaluate_practice(battle, viewer, result);
+    if(status != PracticeEligibility::eligible) throw std::invalid_argument(practice_eligibility_reason(status));
     return result;
 }
 
