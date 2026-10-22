@@ -13,8 +13,11 @@ _OLD = b'''	register_button("addons", hotkey::TITLE_SCREEN__ADDONS, [this]() {
 '''
 _NEW = b'''	find_widget<button>("addons").set_label("Alliance");
 	find_widget<button>("addons").set_tooltip("Player account and personal leader");
-	register_button("addons", hotkey::TITLE_SCREEN__ADDONS, []() {
+	register_button("addons", hotkey::TITLE_SCREEN__ADDONS, [this]() {
 		alliance_game::show_account_dialog();
+		if(alliance_game::practice_pending()) {
+			set_retval(alliance_game::practice_title_result);
+		}
 	});
 '''
 
@@ -26,5 +29,5 @@ def generate_title_overlay(source: bytes) -> bytes:
     if source.count(_INCLUDE) != 1 or source.count(_OLD) != 1:
         raise ValueError("Pinned title-screen anchors differ; original preserved.")
     return source.replace(
-        _INCLUDE, _INCLUDE + b'#include "alliance_game/account_ui.hpp"\n'
+        _INCLUDE, _INCLUDE + b'#include "alliance_game/account_ui.hpp"\n#include "alliance_game/battle_launch.hpp"\n'
     ).replace(_OLD, _NEW)

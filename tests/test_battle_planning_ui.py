@@ -55,11 +55,11 @@ class BattlePlanningUiTests(unittest.TestCase):
             self.assertIn(label, detail)
         self.assertIn('The change was confirmed, but the latest plan could not be loaded', detail)
 
-    def test_planning_has_no_start_combat_or_reward_mutation(self):
+    def test_planning_has_no_shared_start_or_reward_mutation(self):
         body = function("bool choose_battle_lineup(", "void teams(")
         for forbidden in ('"start_battle"', '"finish_battle"', '"start_campaign"', '"advance_leader"'):
             self.assertNotIn(forbidden, body)
-        self.assertIn('No battle starts and no experience or rating is awarded', body)
+        self.assertIn('Practice grants no account experience, team experience or rating', body)
         self.assertIn('"My battle plans", "Propose battle"', body)
 
 

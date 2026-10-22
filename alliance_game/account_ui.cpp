@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "alliance_game/account_ui.hpp"
+#include "alliance_game/battle_launch.hpp"
 #include "alliance_native/account_client.hpp"
 #include "alliance_native/account_protocol.hpp"
 
@@ -451,7 +452,8 @@ std::string profile_text(const account::Profile& profile)
         "Experience: " + std::to_string(profile.experience) + "\n"
         "Total experience: " + std::to_string(profile.total_experience) + "\n\n"
         "Your leader is saved on the Windows Alliance server.\n"
-        "Campaign rewards and team battles will be added in a later update.";
+        "Saved battle plans can be practised against the computer.\n"
+        "Campaign rewards and shared team battles will be added in a later update.";
 }
 
 void register_player(const alliance::TrustedProfile& profile)
@@ -749,7 +751,8 @@ std::string team_text(const account::Team& team)
         text += " — " + member.unit_type + ", leader level " + std::to_string(member.level);
     }
     text += "\n\nTeam experience is separate from personal leader experience.\n"
-            "Team battles will be added in a later update.";
+            "Open Battle plans to practise a saved lineup against the computer.\n"
+            "Shared team battles will be added in a later update.";
     return text;
 }
 
@@ -1144,7 +1147,7 @@ void create_team(const alliance::TrustedProfile& profile)
     }
     if(select("Confirm new team", "Team: " + input.name + "\nArea: " + area.name +
               "\n\nYou will become captain. A team can have up to 8 members.\n"
-              "Other players can apply to join your team. Team battles will follow later.", {"Create this team"}) != 0) return;
+              "Other players can apply to join your team. Shared team battles will follow later.", {"Create this team"}) != 0) return;
     input.token = current_session().token;
     account::Reply output;
     if(!request(profile, input, "Creating your team…", output)) {
@@ -1237,8 +1240,54 @@ std::string battle_text(const account::Battle& battle)
                 (player.ready ? " — Ready" : " — Not ready");
         }
     }
-    text += "\n\nThis update saves battle plans only. No battle starts and no experience or rating is awarded.";
+    text += "\n\nPlanning does not start a shared team battle. A selected player can practise this saved lineup "
+        "locally against the computer. Practice grants no account experience, team experience or rating.";
     return text;
+}
+
+bool can_practice_plan(const account::Battle& battle, const account::Profile& player)
+{
+    if(player.account_id.empty() || (battle.state != "draft" && battle.state != "cancelled")) return false;
+    int selections = 0;
+    for(const auto& team : battle.teams)
+        for(const auto& member : team.players)
+            if(member.id == player.account_id) ++selections;
+    return selections == 1;
+}
+
+void practice_plan(const alliance::TrustedProfile& profile, const account::Battle& battle)
+{
+    const std::string actor = current_session().profile.account_id;
+    if(current_session().token.empty() || !can_practice_plan(battle, current_session().profile)) return;
+    account::Request input;
+    input.operation = "me";
+    account::Reply output;
+    if(!team_request(profile, input, "Checking your player before practice…", output)) return;
+    if(current_session().token.empty() || current_session().profile.account_id != actor ||
+       output.profile.account_id != actor) {
+        message("Your player changed while opening practice. Open Alliance again before continuing.");
+        return;
+    }
+    current_session().profile = output.profile;
+    int human_side = 0;
+    for(const auto& team : battle.teams)
+        for(const auto& member : team.players)
+            if(member.id == actor) human_side = member.side;
+    const std::string explanation = "Start a local practice game from this saved plan?\n\n"
+        "You control side " + std::to_string(human_side) + ". The computer controls every other side, "
+        "including your teammates. All sides use the saved leaders and alliances shown above.\n\n"
+        "This uses the saved snapshot even if membership, leaders or approvals have changed, or the plan was cancelled. "
+        "It does not start or change the shared battle plan. No players or teams are reserved.\n\n"
+        "Practice grants no account experience, team experience or rating. Other players do not join this game.";
+    if(select_change("Confirm local team practice", battle_text(battle) + "\n\n" + explanation,
+                     {"Start local practice"}) != 0) return;
+    try {
+        // Queue data only. The title-screen caller launches after every modal
+        // account window has unwound; no combat runs inside this dialog.
+        queue_practice(battle, output.profile);
+    } catch(...) {
+        message("This saved plan could not prepare a local practice game. No battle plan or account data was changed.");
+    }
 }
 
 bool battle_mutation(const alliance::TrustedProfile& profile, account::Request input,
@@ -1298,6 +1347,9 @@ void battle_detail(const alliance::TrustedProfile& profile, const std::string& b
             for(const auto& player : team.players) if(player.id == actor) { selected = true; ready = player.ready; }
         }
         std::vector<std::string> actions{"View fixed lineups", "Refresh plan"};
+        const int practice = can_practice_plan(battle, current_session().profile)
+            ? static_cast<int>(actions.size()) : -1;
+        if(practice >= 0) actions.push_back("Practice this plan");
         const bool draft = battle.state == "draft";
         const int approve = draft && captain && !approved && battle.validity == "valid"
             ? static_cast<int>(actions.size()) : -1;
@@ -1310,10 +1362,11 @@ void battle_detail(const alliance::TrustedProfile& profile, const std::string& b
         const int choice = select_change("Battle plan", battle.teams[0].name + " vs " + battle.teams[1].name +
             "\n" + battle.map.name + " — " + battle.state + "\n" + battle_validity_text(battle.validity) +
             "\nBoth captains must approve the saved lineups before selected players can become ready.\n"
-            "Planning only: no combat starts in this update.", actions);
+            "Practice this plan opens a separate local game against the computer with no account rewards.", actions);
         if(choice < 0) return;
         if(choice == 0) { message(battle_text(battle)); continue; }
         if(choice == 1) continue;
+        if(choice == practice) { practice_plan(profile, battle); if(practice_pending()) return; continue; }
         account::Request mutation;
         mutation.battle_id = battle.id;
         std::string title, explanation, affirmative, success;
@@ -1371,6 +1424,7 @@ void my_battles(const alliance::TrustedProfile& profile)
         if(choice == previous) { cursors.pop_back(); continue; }
         if(choice == more) { cursors.push_back(output.next); continue; }
         if(static_cast<std::size_t>(choice) < output.battles.size()) battle_detail(profile, output.battles[choice].id);
+        if(practice_pending()) return;
     }
 }
 
@@ -1436,7 +1490,7 @@ void propose_battle(const alliance::TrustedProfile& profile)
     for(const auto& map : available.maps) rows.push_back(map.name + " — " + std::to_string(map.size) + "v" + std::to_string(map.size));
     if(rows.empty()) { message("No battle maps are enabled in this team's area."); return; }
     const int choice = select_change("Choose battle map", "Area: " + own.area_name +
-        "\nChoose a fixed lineup of 2, 3 or 4 players from each team. No battle starts in this update.", rows);
+        "\nChoose a fixed lineup of 2, 3 or 4 players from each team. Saving a plan does not start a game.", rows);
     if(choice < 0 || static_cast<std::size_t>(choice) >= available.maps.size()) return;
     const auto& map = available.maps[choice];
     if(own.members.size() < static_cast<std::size_t>(map.size)) {
@@ -1480,10 +1534,12 @@ void battle_plans(const alliance::TrustedProfile& profile)
     while(!current_session().token.empty()) {
         const int choice = select("Battle plans", "Prepare maps and fixed lineups with another team in your area.\n"
             "Both captains approve, then selected players set their readiness.\n"
-            "This update saves plans only; no battle starts or rewards are awarded.", {"My battle plans", "Propose battle"});
+            "Open a saved plan to practise your side locally with computer teammates and opponents. "
+            "Practice does not change the plan or award account experience or rating.", {"My battle plans", "Propose battle"});
         if(choice < 0) return;
         if(choice == 0) my_battles(profile);
         if(choice == 1) propose_battle(profile);
+        if(practice_pending()) return;
     }
 }
 
@@ -1505,6 +1561,7 @@ void teams(const alliance::TrustedProfile& profile)
         else if(action == 7) leave_team(profile);
         else if(action == 8) area_rankings(profile);
         else if(action == 9) battle_plans(profile);
+        if(practice_pending()) return;
     }
 }
 
@@ -1530,7 +1587,7 @@ void show_account_dialog()
     // A title-screen hotkey must not open another account flow while a modal
     // request is pumping events. This flag is used only by the game UI thread.
     static bool active = false;
-    if(active) return;
+    if(active || practice_pending()) return;
     struct ActiveFlow {
         bool& active;
         explicit ActiveFlow(bool& value) : active(value) { active = true; }
@@ -1575,6 +1632,7 @@ void show_account_dialog()
                 if(action == 0) register_player(profile);
                 else if(action == 1) login(profile);
             }
+            if(practice_pending()) return;
         }
     } catch(const account::ProfileReadError& error) {
         // This type accepts only an enum and returns fixed public strings.
