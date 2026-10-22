@@ -127,7 +127,19 @@ int main()
                 check_rejected(bad, viewer, PracticeEligibility::captain_approval_required);
                 for(int p = 0; p < size; ++p) {
                     bad = battle(size); bad.teams[t].players[p].ready = false;
-                    check_rejected(bad, viewer, PracticeEligibility::player_readiness_required);
+                    // The selected side's owner must consent personally. Every
+                    // other Ready flag is independent of this local AI game.
+                    auto owner = viewer; owner.account_id = bad.teams[t].players[p].id;
+                    check_rejected(bad, owner, PracticeEligibility::viewer_readiness_required);
+                    for(auto& team : bad.teams) for(auto& player : team.players) player.ready = false;
+                    bad.teams[t].players[p].ready = true;
+                    require(practice_eligibility(bad, owner) == PracticeEligibility::eligible);
+                    require(make_practice_plan(bad, owner).controlled_side == bad.teams[t].players[p].side);
+                    require(!practice_pending());
+                    queue_practice(bad, owner);
+                    const auto personal = take_pending_practice();
+                    require(personal && personal->controlled_side == bad.teams[t].players[p].side);
+                    require(!practice_pending());
                 }
             }
         }
@@ -160,15 +172,16 @@ int main()
         // Being an unselected current captain does not create a playable seat.
         check_rejected(b, outsider, PracticeEligibility::not_selected);
         outsider.account_id.clear(); check_rejected(battle(), outsider, PracticeEligibility::invalid_plan);
-        // Confirmation binds every public field, including changed-but-eligible
-        // leaders and names; equal plan IDs alone are insufficient.
+        // Confirmation binds the viewer and all practice-relevant fields,
+        // including changed-but-eligible leaders and names. Only other players'
+        // readiness is irrelevant; equal plan IDs alone are insufficient.
         const auto reviewed = battle();
-        require(same_practice_snapshot(reviewed, reviewed));
-        require(same_practice_snapshot(reviewed, Battle(reviewed)));
+        require(same_practice_snapshot(reviewed, reviewed, viewer.account_id));
+        require(same_practice_snapshot(reviewed, Battle(reviewed), viewer.account_id));
         auto changed_snapshot = [&](auto mutate) {
             auto changed = reviewed; mutate(changed);
-            require(!same_practice_snapshot(reviewed, changed));
-            require(!same_practice_snapshot(changed, reviewed));
+            require(!same_practice_snapshot(reviewed, changed, viewer.account_id));
+            require(!same_practice_snapshot(changed, reviewed, viewer.account_id));
         };
         changed_snapshot([](auto& v) { v.id = id(110); });
         changed_snapshot([](auto& v) { v.area_id = id(111); });
@@ -192,6 +205,35 @@ int main()
         changed_snapshot([](auto& v) { v.teams[0].players[0].level = 2; });
         changed_snapshot([](auto& v) { v.teams[0].players[0].side = 4; });
         changed_snapshot([](auto& v) { v.teams[0].players[0].ready = false; });
+        changed_snapshot([](auto& v) { v.teams[1].players[0].ready = false; v.teams[1].players[0].unit_type = "Elvish Fighter"; });
+        changed_snapshot([](auto& v) { v.teams[1].players[0].ready = false; v.teams[1].players[0].username = "OtherPlayer"; });
+        changed_snapshot([](auto& v) { v.teams[1].players[0].ready = false; v.teams[1].players[0].id = id(810); });
+        changed_snapshot([](auto& v) { v.teams[1].players[0].ready = false; v.teams[1].players[0].level = 2; });
+        require(!same_practice_snapshot(reviewed, reviewed, ""));
+        require(!same_practice_snapshot(reviewed, reviewed, "invalid-viewer"));
+        require(!same_practice_snapshot(reviewed, reviewed, id(900)));
+        auto duplicate_viewer = reviewed;
+        duplicate_viewer.teams[1].players[0].id = viewer.account_id;
+        require(!same_practice_snapshot(duplicate_viewer, duplicate_viewer, viewer.account_id));
+        for(int size : {2,3,4}) {
+            const auto first = battle(size);
+            for(const auto& team : first.teams) for(const auto& player : team.players) {
+                auto owner = viewer; owner.account_id = player.id;
+                auto refreshed = first;
+                for(auto& changed_team : refreshed.teams) for(auto& changed_player : changed_team.players)
+                    if(changed_player.id != owner.account_id) changed_player.ready = false;
+                require(same_practice_snapshot(first, refreshed, owner.account_id));
+                require(same_practice_snapshot(refreshed, first, owner.account_id));
+                require(practice_eligibility(refreshed, owner) == PracticeEligibility::eligible);
+                // A concurrent withdrawal of this player's own consent is a
+                // material change even when every other player remains Ready.
+                for(auto& changed_team : refreshed.teams) for(auto& changed_player : changed_team.players)
+                    if(changed_player.id == owner.account_id) changed_player.ready = false;
+                require(!same_practice_snapshot(first, refreshed, owner.account_id));
+                require(!same_practice_snapshot(refreshed, first, owner.account_id));
+                check_rejected(refreshed, owner, PracticeEligibility::viewer_readiness_required);
+            }
+        }
         require(!practice_pending() && !take_pending_practice());
         auto input = battle(); queue_practice(input,viewer);
         require(practice_pending()); input.teams[0].players[0].unit_type = "Ancient Lich";

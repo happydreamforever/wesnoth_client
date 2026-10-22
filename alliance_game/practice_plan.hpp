@@ -18,14 +18,16 @@ struct PracticePlan {
 };
 enum class PracticeEligibility {
     eligible, inactive_plan, invalid_plan, unavailable_plan,
-    captain_approval_required, player_readiness_required, not_selected
+    captain_approval_required, viewer_readiness_required, not_selected
 };
 // The UI and queue share full saved-lineup validation and the same policy:
-// a valid draft, both current captains' approval, every selected player ready.
+// a valid draft, both current captains' approval, and the selected viewer ready.
 PracticeEligibility practice_eligibility(const alliance::account::Battle&, const alliance::account::Profile&);
 const char* practice_eligibility_reason(PracticeEligibility) noexcept;
-// Confirmation applies to exactly the refreshed response the player reviewed.
-bool same_practice_snapshot(const alliance::account::Battle&, const alliance::account::Battle&) noexcept;
+// Confirmation binds the viewer and every reviewed field except other players'
+// Ready flags, which do not control this player's local AI practice.
+bool same_practice_snapshot(const alliance::account::Battle&, const alliance::account::Battle&,
+                            const std::string& viewer_account_id) noexcept;
 // Local copies only. Eligibility is checked at queue time, not reserved on the
 // server; no account credential enters this descriptor or local game.
 PracticePlan make_practice_plan(const alliance::account::Battle&, const alliance::account::Profile&);

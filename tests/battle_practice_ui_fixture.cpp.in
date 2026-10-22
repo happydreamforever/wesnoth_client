@@ -26,8 +26,12 @@ int modal_depth = 0, queue_count = 0;
 bool pending = false, queue_fails = false, network_fails = false, identity_changes = false;
 account::Battle saved, queued;
 account::Profile response_profile, queued_profile;
-enum class Change { none, cancelled, running, completed, not_ready, approval, roster, leader, name, actor, logout };
-Change confirmation_change = Change::none, menu_change = Change::none, read_change = Change::none;
+enum class Change { none, cancelled, running, completed, not_ready, other_not_ready, approval, roster, leader, name, actor, logout };
+enum class MutationResult { ok, rejected, unknown, wrong_id, wrong_actor };
+Change confirmation_change = Change::none, ready_confirmation_change = Change::none, menu_change = Change::none, read_change = Change::none,
+       mutation_session_change = Change::none;
+MutationResult mutation_result = MutationResult::ok;
+int mutations = 0;
 int detail_reads = 0, change_on_read = 0, fail_call = 0, empty_detail = 0, wrong_detail = 0;
 void apply_change(Change change);
 
@@ -51,6 +55,7 @@ public:
         require(title_ == event.title, "Unexpected menu: " + title_);
         seen.push_back({title_, description_, rows_});
         if(title_ == "Confirm local team practice") apply_change(confirmation_change);
+        if(title_ == "Confirm Ready and practice") apply_change(ready_confirmation_change);
         if(title_ == "Battle plan") { apply_change(menu_change); menu_change = Change::none; }
         if(event.action == "<close>") return false;
         if(event.action == "<default>") return true;
@@ -122,11 +127,24 @@ bool team_request(const alliance::TrustedProfile&, account::Request request,
     } else throw std::runtime_error("Unexpected network operation: " + request.operation);
     return true;
 }
-bool battle_mutation(const alliance::TrustedProfile&, account::Request,
-                     const std::string&, account::Battle&)
+bool request(const alliance::TrustedProfile&, account::Request& input,
+             const std::string&, account::Reply& output)
 {
-    throw std::runtime_error("Practice must never mutate the server");
+    require(input.operation == "battle_ready" && input.ready && input.battle_id == saved.id,
+            "Shortcut may only send own Ready for the selected plan");
+    calls.push_back(input.operation); ++mutations;
+    if(mutation_result == MutationResult::rejected) {
+        output.ok = false; output.error_code = "stale_proposal"; return true;
+    }
+    for(auto& team : saved.teams) for(auto& player : team.players)
+        if(player.id == current_session().profile.account_id && mutation_result != MutationResult::wrong_actor) player.ready = true;
+    if(mutation_result == MutationResult::unknown) return false;
+    output.ok = true; output.battle = saved;
+    if(mutation_result == MutationResult::wrong_id) output.battle->id = "00000000-0000-0000-0000-000000000999";
+    apply_change(mutation_session_change);
+    return true;
 }
+void show_failure(const account::Reply&) { message("The fixture request was rejected."); }
 void unrelated() { throw std::runtime_error("Unrelated account action"); }
 void browse_areas(const alliance::TrustedProfile&) { unrelated(); }
 void create_team(const alliance::TrustedProfile&) { unrelated(); }
@@ -153,7 +171,8 @@ void apply_change(Change change)
     case Change::cancelled: saved.state = "cancelled"; break;
     case Change::running: saved.state = "running"; break;
     case Change::completed: saved.state = "completed"; break;
-    case Change::not_ready: saved.teams[1].players[1].ready = false; break;
+    case Change::not_ready: saved.teams[0].players[1].ready = false; break;
+    case Change::other_not_ready: saved.teams[1].players[1].ready = false; break;
     case Change::approval: saved.teams[1].approved = false; break;
     case Change::roster: saved.validity = "roster_changed"; break;
     case Change::leader: saved.teams[1].players[1].unit_type = "Swordsman"; saved.teams[1].players[1].level = 2; break;
@@ -181,7 +200,8 @@ void reset()
     require(modal_depth == 0, "A previous test leaked a modal");
     events.clear(); seen.clear(); messages.clear(); calls.clear();
     pending = queue_fails = network_fails = identity_changes = false;
-    confirmation_change = menu_change = read_change = Change::none;
+    confirmation_change = ready_confirmation_change = menu_change = read_change = mutation_session_change = Change::none;
+    mutations = 0; mutation_result = MutationResult::ok;
     detail_reads = change_on_read = fail_call = empty_detail = wrong_detail = 0;
     queue_count = 0; queued = {}; queued_profile = {};
     saved = {};
@@ -206,6 +226,33 @@ void check(const std::string& name, void (*run)())
     std::cout << "PASS " << name << '\n';
 }
 
+void all_not_ready()
+{
+    for(auto& team : saved.teams) for(auto& player : team.players) player.ready = false;
+}
+
+bool has_message(const std::string& text)
+{
+    return std::any_of(messages.begin(), messages.end(), [&](const auto& item) {
+        return item.find(text) != std::string::npos;
+    });
+}
+
+void shortcut_events()
+{
+    events = {{"Battle plan", "Ready and practice"},
+              {"Confirm Ready and practice", "Save my Ready and continue"}};
+}
+
+void confirmed_ready_without_practice()
+{
+    require(mutations == 1 && !pending && queue_count == 0, "Ready was retried or a practice started");
+    require(has_message("Your Ready action was confirmed. No practice started; refresh to check current readiness."),
+            "Confirmed mutation was lost or described as current readiness");
+    require(!has_message("You are now ready") && !has_message("No server state was changed"),
+            "Historical acknowledgement promises current state or an undo");
+}
+
 int main()
 {
     try {
@@ -214,7 +261,7 @@ int main()
             events.push_back({"Battle plan", "<close>"});
             alliance_game::battle_detail({}, saved.id);
             require(std::find(seen[0].rows.begin(), seen[0].rows.end(), "Practice this plan") != seen[0].rows.end(), "Missing practice");
-            for(const auto* part : {"Captains approved: 2/2", "Selected players Ready: 4/4"})
+            for(const auto* part : {"Captains approved: 2/2", "Team readiness: 4/4 selected players Ready"})
                 require(seen[0].description.find(part) != std::string::npos, "Missing readiness count");
             require(!pending && queue_count == 0, "Closing must not queue");
         });
@@ -224,11 +271,101 @@ int main()
             events.push_back({"Battle plan", "<close>"});
             alliance_game::battle_detail({}, saved.id);
             require(std::find(seen[0].rows.begin(), seen[0].rows.end(), "Practice this plan") == seen[0].rows.end(), "Unready practice visible");
-            for(const auto* part : {"Captains approved: 1/2", "Selected players Ready: 3/4",
-                                   "Waiting for captain approval: RivalPlan", "Not ready: UniRival"})
+            for(const auto* part : {"Captains approved: 1/2", "Team readiness: 3/4 selected players Ready",
+                                   "Waiting for captain approval: RivalPlan", "Not ready for a shared battle: UniRival"})
                 require(seen[0].description.find(part) != std::string::npos, "Missing waiting explanation");
             saved.teams[1].approved = true;
-            require(!alliance_game::can_practice_plan(saved, response_profile), "One Not ready player accepted");
+            require(alliance_game::can_practice_plan(saved, response_profile), "Another Not ready player blocked personal practice");
+            saved.teams[0].players[1].ready = false;
+            require(!alliance_game::can_practice_plan(saved, response_profile), "Own Not ready was accepted");
+        });
+        check("personal Ready permits practice while every other player is Not ready", [] {
+            all_not_ready(); saved.teams[0].players[1].ready = true;
+            events.push_back({"Battle plan", "<close>"});
+            alliance_game::battle_detail({}, saved.id);
+            require(alliance_game::can_practice_plan(saved, response_profile), "Own readiness was not sufficient");
+            require(std::find(seen[0].rows.begin(), seen[0].rows.end(), "Practice this plan") != seen[0].rows.end(), "Missing personal practice");
+            require(std::find(seen[0].rows.begin(), seen[0].rows.end(), "Ready and practice") == seen[0].rows.end(), "Already Ready offered redundant mutation");
+            for(const auto* part : {"Your personal practice is available", "Other players do not need to be Ready",
+                                   "Team readiness: 1/4 selected players Ready", "future shared battle requires everyone Ready"})
+                require(seen[0].description.find(part) != std::string::npos, "Personal/team readiness explanation lost");
+            require(mutations == 0 && !pending, "Read-only preview changed Ready or launched");
+        });
+        check("Not ready selected member sees shortcut and ordinary readiness control", [] {
+            all_not_ready();
+            events.push_back({"Battle plan", "<close>"});
+            alliance_game::battle_detail({}, saved.id);
+            for(const auto* action : {"Ready and practice", "Set myself ready"})
+                require(std::find(seen[0].rows.begin(), seen[0].rows.end(), action) != seen[0].rows.end(), "Missing readiness choice");
+            require(std::find(seen[0].rows.begin(), seen[0].rows.end(), "Practice this plan") == seen[0].rows.end(), "Not ready can directly practice");
+            require(seen[0].description.find("Choose Ready for your own assigned side") != std::string::npos, "Own consent requirement not explained");
+            require(mutations == 0 && !pending, "Read-only menu saved Ready");
+        });
+        for(const auto* cancel : {"<default>", "<close>", "Back without changes"}) {
+            reset(); all_not_ready(); shortcut_events(); events.back().action = cancel;
+            alliance_game::battle_detail({}, saved.id);
+            require(mutations == 0 && !pending && !saved.teams[0].players[1].ready, "Ready confirmation Back changed state");
+            require(calls == std::vector<std::string>({"battle_detail"}), "Back queried or mutated after refusal");
+            require(seen.back().rows.front() == "Back without changes", "Ready consent did not default to Back");
+        }
+        std::cout << "PASS three Ready shortcut Back and close cases\n";
+        for(const auto change : {Change::actor, Change::logout}) {
+            reset(); all_not_ready(); shortcut_events(); ready_confirmation_change = change;
+            alliance_game::battle_detail({}, saved.id);
+            require(mutations == 0 && !pending && has_message("No Ready request was sent"), "Changed actor sent Ready");
+        }
+        std::cout << "PASS two actor/session changes before Ready mutation\n";
+        for(const auto change : {Change::actor, Change::logout}) {
+            reset(); all_not_ready(); shortcut_events(); mutation_session_change = change;
+            alliance_game::battle_detail({}, saved.id);
+            confirmed_ready_without_practice();
+            require(calls == std::vector<std::string>({"battle_detail", "battle_ready"}), "Changed actor entered practice flow after Ready");
+        }
+        std::cout << "PASS two actor/session changes during confirmed Ready mutation\n";
+        for(const auto result : {MutationResult::rejected, MutationResult::unknown, MutationResult::wrong_id, MutationResult::wrong_actor}) {
+            reset(); all_not_ready(); shortcut_events(); mutation_result = result;
+            alliance_game::battle_detail({}, saved.id);
+            require(mutations == 1 && !pending && calls.size() == 2, "Unconfirmed Ready retried or entered launch flow");
+            require(!has_message("Your Ready action was confirmed"), "Unconfirmed mutation claimed success");
+            require(!messages.empty(), "Unconfirmed Ready gave no feedback");
+            if(result == MutationResult::unknown || result == MutationResult::wrong_actor)
+                require(has_message("may have reached the server"), "Uncertain mutation did not explain possible save");
+            if(result == MutationResult::wrong_id)
+                require(has_message("did not confirm Ready for the requested plan"), "Wrong plan acknowledgement accepted");
+        }
+        std::cout << "PASS four rejected unknown and mismatched Ready acknowledgements\n";
+        for(int failed_read : {3, 4, 5}) {
+            reset(); all_not_ready(); shortcut_events(); fail_call = failed_read;
+            if(failed_read == 5) events.push_back({"Confirm local team practice", "Start local practice"});
+            alliance_game::battle_detail({}, saved.id);
+            confirmed_ready_without_practice();
+            require(saved.teams[0].players[1].ready && calls.size() == static_cast<std::size_t>(failed_read),
+                    "Failed launch read undid or retried Ready");
+        }
+        std::cout << "PASS three confirmed Ready then account/plan read failures\n";
+        check("Ready remains saved when separate practice confirmation is declined", [] {
+            all_not_ready(); shortcut_events();
+            events.push_back({"Confirm local team practice", "<default>"});
+            alliance_game::battle_detail({}, saved.id);
+            confirmed_ready_without_practice();
+            require(saved.teams[0].players[1].ready && calls.size() == 4, "Later Back undid Ready or performed final read");
+            for(const auto* text : {"No other player's readiness will change", "separate confirmation",
+                                   "does not undo this Ready action"})
+                require(seen[1].description.find(text) != std::string::npos, "Shortcut consequence missing");
+        });
+        for(const auto change : {Change::cancelled, Change::not_ready, Change::approval, Change::roster}) {
+            reset(); all_not_ready(); shortcut_events(); change_on_read = 2; read_change = change;
+            alliance_game::battle_detail({}, saved.id);
+            confirmed_ready_without_practice();
+            require(seen.size() == 2 && calls.size() == 4, "Lost eligibility reached launch confirmation");
+        }
+        std::cout << "PASS four saved Ready then changed eligibility races\n";
+        check("queue failure after confirmed Ready retains historical result without retry", [] {
+            all_not_ready(); shortcut_events(); queue_fails = true;
+            events.push_back({"Confirm local team practice", "Start local practice"});
+            alliance_game::battle_detail({}, saved.id);
+            confirmed_ready_without_practice();
+            require(!has_message("private diagnostic") && calls.size() == 5, "Queue failure leaked or retried");
         });
         check("cancelled running and completed plans have no practice or dummy replay action", [] {
             for(const auto* state : {"cancelled", "running", "completed"}) {
@@ -315,6 +452,15 @@ int main()
                     "Confirmation race launched stale or substituted game");
         }
         std::cout << "PASS ten post-confirmation state consent snapshot and actor races\n";
+        check("another player's readiness change during confirmation preserves personal launch", [] {
+            confirmation_change = Change::other_not_ready;
+            events.push_back({"Confirm local team practice", "Start local practice"});
+            alliance_game::practice_plan({}, saved);
+            require(pending && queue_count == 1 && !queued.teams[1].players[1].ready,
+                    "Another player's readiness invalidated practice or stale data was queued");
+            require(queued.teams[0].players[1].ready && mutations == 0 && messages.empty(),
+                    "Personal launch changed consent or reported an error");
+        });
         for(int read : {1, 2}) {
             for(int failure : {0, 1, 2}) {
                 reset();
@@ -347,7 +493,7 @@ int main()
             events.push_back({"Confirm local team practice", "Start local practice"});
             alliance_game::practice_plan({}, saved);
             require(pending && queue_count == 1 && queued_profile.experience == 5 &&
-                    alliance_game::same_practice_snapshot(queued, saved), "Fresh consented data was not queued");
+                    alliance_game::same_practice_snapshot(queued, saved, response_profile.account_id), "Fresh consented data was not queued");
             const auto& text = seen[0].description;
             for(const auto* required : {"You control side 4", "computer controls every other side", "saved leaders and alliances",
                                        "No players or teams are reserved", "no account experience, team experience or rating",
@@ -375,6 +521,24 @@ int main()
             require(messages.empty(), "An ancestor reopened or failed while unwinding");
             alliance_game::show_account_dialog();
             require(queue_count == 1 && events.empty(), "Pending request permitted a second account flow");
+        });
+        check("full Ready shortcut saves once then confirms personal practice and unwinds", [] {
+            all_not_ready();
+            events = {{"Alliance", "Teams"}, {"Alliance teams", "Battle plans"},
+                      {"Battle plans", "My battle plans"}, {"My battle plans", "", 0},
+                      {"Battle plan", "Ready and practice"},
+                      {"Confirm Ready and practice", "Save my Ready and continue"},
+                      {"Confirm local team practice", "Start local practice"}};
+            TitleFixture title; title.open();
+            require(events.empty() && pending && queue_count == 1 && mutations == 1, "Shortcut did not save and queue exactly once");
+            require(title.retval == alliance_game::practice_title_result && modal_depth == 0, "Shortcut failed title handoff");
+            require(calls == std::vector<std::string>({"my_battles", "battle_detail", "battle_ready", "me", "battle_detail", "battle_detail"}),
+                    "Shortcut retried or skipped a freshness read");
+            for(const auto& team : queued.teams) for(const auto& player : team.players)
+                require(player.ready == (player.id == response_profile.account_id), "Shortcut changed another player's readiness");
+            require(messages.empty(), "Successful shortcut reported failure or reopened a menu");
+            alliance_game::show_account_dialog();
+            require(queue_count == 1 && mutations == 1 && events.empty(), "Pending launch allowed another action");
         });
         check("cancelled confirmation returns to menus without title handoff", [] {
             events = {{"Alliance", "Teams"}, {"Alliance teams", "Battle plans"},

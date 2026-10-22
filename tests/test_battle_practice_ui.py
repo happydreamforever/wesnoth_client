@@ -36,7 +36,7 @@ class PracticeUiBehavior(unittest.TestCase):
         signatures = [
             "int select(", "int select_change(", "std::string battle_validity_text(",
             "std::string practice_availability_text(", "std::string battle_text(",
-            "bool can_practice_plan(", "bool load_practice_plan(", "void practice_plan(",
+            "bool can_practice_plan(", "bool load_practice_plan(", "void practice_plan(", "bool battle_mutation(",
             "void battle_detail(", "void my_battles(", "void battle_plans(",
             "void teams(", "void show_account_dialog(",
         ]

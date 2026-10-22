@@ -72,6 +72,10 @@ extern "C" int __wrap_main(int argc, char** argv) {
             }
             alliance::account::Profile viewer;
             viewer.account_id=uuid(index%2?battle.map.size*2:1);
+            // Individual practice must work with only the viewer Ready. Other
+            // cases retain a mixture of teammate/opponent readiness flags.
+            for(auto& team : battle.teams) for(auto& player : team.players)
+                player.ready = player.id == viewer.account_id || (index%2 && player.side%2 == 0);
             const auto plan=alliance_game::make_practice_plan(battle,viewer);
             auto generated=alliance_game::make_practice_scenario(plan,*source,*era);
             require(generated.child_count("side")==plan.seats.size(),"wrong side count");
