@@ -1227,21 +1227,37 @@ std::string battle_validity_text(const std::string& value)
 
 std::string battle_text(const account::Battle& battle)
 {
+    const bool historical = battle.state == "cancelled" || battle.state == "completed";
+    const bool invalid_draft = battle.state == "draft" && battle.validity != "valid";
     std::string text = "Battle plan ID: " + battle.id + "\nState: " + battle.state +
         "\nCreated (UTC): " + battle.created_at + "\nMap: " + battle.map.name +
         " (" + std::to_string(battle.map.size) + "v" + std::to_string(battle.map.size) + ")\n" +
         battle_validity_text(battle.validity);
+    if(battle.state == "cancelled")
+        text += "\nThis Alliance battle plan is cancelled and inactive. It cannot start a shared battle. "
+            "Readiness below is saved history; captain approval is inactive.";
+    else if(battle.state == "completed")
+        text += "\nThis Alliance battle is complete and inactive. It cannot start again. "
+            "Readiness below is saved history; captain approval is inactive.";
+    else if(invalid_draft)
+        text += "\nThis draft cannot start a shared battle while these changes remain. "
+            "Captain approval and saved readiness below are inactive.";
     for(const auto& team : battle.teams) {
-        text += "\n\nTeam: " + team.name + "\nTeam ID: " + team.id +
-            "\nCaptain approval: " + (team.approved ? "Approved" : "Waiting");
+        text += "\n\nTeam: " + team.name + "\nTeam ID: " + team.id;
+        text += historical || invalid_draft ? "\nCaptain approval (inactive): " : "\nCaptain approval: ";
+        text += team.approved ? "Approved" : "Waiting";
         for(const auto& player : team.players) {
             text += "\nSide " + std::to_string(player.side) + ": " + player.username + " — " +
-                player.unit_type + ", level " + std::to_string(player.level) +
-                (player.ready ? " — Ready" : " — Not ready");
+                player.unit_type + ", level " + std::to_string(player.level);
+            text += historical ? " — Saved readiness (history): " :
+                invalid_draft ? " — Saved readiness (inactive): " : " — ";
+            text += player.ready ? "Ready" : "Not ready";
         }
     }
-    text += "\n\nPlanning does not start a shared team battle. A selected player can practise this saved lineup "
-        "locally against the computer. Practice grants no account experience, team experience or rating.";
+    text += "\n\nPlanning does not start a shared team battle.";
+    if(battle.state == "draft" || battle.state == "cancelled")
+        text += " A selected player can practise this saved lineup locally against the computer. "
+            "Practice grants no account experience, team experience or rating.";
     return text;
 }
 
@@ -1359,12 +1375,32 @@ void battle_detail(const alliance::TrustedProfile& profile, const std::string& b
         if(readiness >= 0) actions.push_back(ready ? "Set myself not ready" : "Set myself ready");
         const int cancel = draft && captain ? static_cast<int>(actions.size()) : -1;
         if(cancel >= 0) actions.push_back("Cancel this battle plan");
+        const std::string consent = battle.state == "cancelled"
+            ? "This plan is cancelled and inactive. Readiness is saved history; captain approval is inactive."
+            : battle.state == "completed"
+            ? "This battle is complete and inactive. Readiness is saved history; captain approval is inactive."
+            : draft && battle.validity != "valid"
+            ? "This draft is not eligible for a shared battle. Captain approval and saved readiness are inactive."
+            : "Both captains must approve the saved lineups before selected players can become ready.";
         const int choice = select_change("Battle plan", battle.teams[0].name + " vs " + battle.teams[1].name +
+            "\nBattle plan ID: " + battle.id +
             "\n" + battle.map.name + " — " + battle.state + "\n" + battle_validity_text(battle.validity) +
-            "\nBoth captains must approve the saved lineups before selected players can become ready.\n"
-            "Practice this plan opens a separate local game against the computer with no account rewards.", actions);
+            "\n" + consent + (practice >= 0
+                ? "\nPractice this plan opens a separate local game against the computer with no account rewards." : ""), actions);
         if(choice < 0) return;
-        if(choice == 0) { message(battle_text(battle)); continue; }
+        if(choice == 0) {
+            // Another player may have changed membership, consent or state
+            // while the action selector was open. Never display its old copy
+            // as the newly opened detail, even if this read fails.
+            account::Reply latest;
+            if(!team_request(profile, input, "Refreshing the fixed lineups…", latest)) return;
+            if(!latest.battle) {
+                message("The latest fixed lineups could not be loaded. Open My battle plans to try viewing them again.");
+                return;
+            }
+            message(battle_text(*latest.battle));
+            continue;
+        }
         if(choice == 1) continue;
         if(choice == practice) { practice_plan(profile, battle); if(practice_pending()) return; continue; }
         account::Request mutation;
@@ -1412,7 +1448,7 @@ void my_battles(const alliance::TrustedProfile& profile)
         if(!team_request(profile, input, "Loading your battle plans…", output)) return;
         std::vector<std::string> rows;
         for(const auto& battle : output.battles) rows.push_back(battle.teams[0].name + " vs " +
-            battle.teams[1].name + " — " + battle.state + " — " + battle.created_at);
+            battle.teams[1].name + " — " + battle.state + " — " + battle.created_at + " — " + battle.id);
         const int previous = cursors.size() > 1 ? static_cast<int>(rows.size()) : -1;
         if(previous >= 0) rows.push_back("Previous page");
         const int more = output.next.empty() ? -1 : static_cast<int>(rows.size());

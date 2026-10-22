@@ -1,15 +1,71 @@
-"""Consent and scope guards in the shipped game source; not GUI runtime tests."""
+"""Planning source guards and actual controllers with scripted request/modal boundaries.
+
+The C++ fixture exercises the shipped detail/rendering functions. It does not
+render Android widgets, contact a live server or execute the game engine.
+"""
 from pathlib import Path
+import hashlib
+import json
+import os
+import shutil
+import subprocess
+import tempfile
 import unittest
 
-SOURCE = (Path(__file__).resolve().parents[1] / "alliance_game/account_ui.cpp").read_text(encoding="utf-8")
+ROOT = Path(__file__).resolve().parents[1]
+SOURCE = (ROOT / "alliance_game/account_ui.cpp").read_text(encoding="utf-8")
 
 
 def function(name, following):
     return SOURCE.split(name, 1)[1].split(following, 1)[0]
 
 
+def extract(signature):
+    start = SOURCE.index(signature)
+    opening = SOURCE.index("\n{", start) + 1
+    end, depth = opening + 1, 1
+    while depth:
+        depth += (SOURCE[end] == "{") - (SOURCE[end] == "}")
+        end += 1
+    return SOURCE[start:end]
+
+
 class BattlePlanningUiTests(unittest.TestCase):
+    def test_actual_refresh_and_history_controllers(self):
+        compiler = shutil.which(os.environ.get("CXX", "c++"))
+        self.assertIsNotNone(compiler, "A C++17 compiler is required for planning UI behavior")
+        signatures = ("int select_change(", "std::string battle_validity_text(",
+                      "std::string battle_text(", "bool can_practice_plan(",
+                      "void battle_detail(", "void my_battles(")
+        functions = "\n\n".join(extract(signature) for signature in signatures)
+        template = ROOT / "tests/battle_planning_ui_fixture.cpp.in"
+        fixture = template.read_text(encoding="utf-8").replace("// @FUNCTIONS@", functions)
+        audit = os.environ.get("ALLIANCE_PLANNING_UI_AUDIT")
+        with tempfile.TemporaryDirectory(prefix="alliance-planning-ui-") as temporary:
+            directory = Path(audit) if audit else Path(temporary)
+            directory.mkdir(parents=True, exist_ok=True)
+            cpp, binary = directory / "planning_ui.cpp", directory / "planning_ui"
+            cpp.write_text(fixture, encoding="utf-8")
+            command = [compiler, "-std=c++17", "-Wall", "-Wextra", "-Werror", "-O0", "-g",
+                       "-fsanitize=address,undefined", "-fno-omit-frame-pointer", "-I" + str(ROOT),
+                       str(cpp), "-o", str(binary)]
+            built = subprocess.run(command, capture_output=True, text=True, timeout=120)
+            self.assertEqual(built.returncode, 0, built.stdout + built.stderr)
+            ran = subprocess.run([str(binary)], capture_output=True, text=True, timeout=30)
+            self.assertEqual(ran.returncode, 0, ran.stdout + ran.stderr)
+            self.assertIn("PASS all planning refresh and history cases", ran.stdout)
+            print(ran.stdout, end="")
+            if audit:
+                (directory / "behavior.log").write_text(ran.stdout + ran.stderr, encoding="utf-8")
+                paths = ("alliance_game/account_ui.cpp", "alliance_native/account_client.hpp",
+                         "tests/battle_planning_ui_fixture.cpp.in", "tests/test_battle_planning_ui.py")
+                (directory / "source-evidence.json").write_text(json.dumps({
+                    "command": command, "exit_code": ran.returncode,
+                    "cases": ran.stdout.count("PASS ") - 1,
+                    "source_sha256": {path: hashlib.sha256((ROOT / path).read_bytes()).hexdigest() for path in paths},
+                    "limitations": __doc__,
+                }, indent=2) + "\n", encoding="utf-8")
+
     def test_local_lineup_selection_is_bounded_unique_ordered_and_has_safe_back(self):
         body = function("bool choose_battle_lineup(", "std::string battle_validity_text(")
         self.assertIn('select_change("Choose lineup — "', body)

@@ -1,0 +1,247 @@
+// Actual planning controllers; only modal selection and request boundaries are scripted.
+#include "alliance_native/account_client.hpp"
+#include <algorithm>
+#include <deque>
+#include <iostream>
+#include <stdexcept>
+#include <string>
+#include <vector>
+
+namespace account = alliance::account;
+void require(bool condition, const std::string& reason)
+{
+    if(!condition) throw std::runtime_error(reason);
+}
+struct Step { std::string title, action, concurrent_change; };
+struct Menu { std::string title, text; std::vector<std::string> rows; };
+std::deque<Step> steps;
+std::vector<Menu> menus;
+std::vector<std::string> messages, requests;
+account::Battle server_plan;
+int detail_reads = 0, fail_read = 0, empty_read = 0, practice_calls = 0;
+
+namespace alliance_game {
+struct Session { std::string token; account::Profile profile; } session;
+Session& current_session() { return session; }
+void message(const std::string& text) { messages.push_back(text); }
+int select(const std::string& title, const std::string& text, const std::vector<std::string>& rows)
+{
+    require(!steps.empty(), "Unexpected modal: " + title);
+    const Step step = steps.front(); steps.pop_front();
+    require(step.title == title, "Wrong modal: " + title);
+    menus.push_back({title, text, rows});
+    if(step.concurrent_change == "leave") {
+        server_plan.validity = "roster_changed";
+        server_plan.teams[1].players[1].ready = false;
+    } else if(step.concurrent_change == "cancel") {
+        server_plan.state = "cancelled";
+        for(auto& team : server_plan.teams) for(auto& player : team.players) player.ready = false;
+    } else require(step.concurrent_change.empty(), "Unknown concurrent change");
+    if(step.action == "<close>") return -1;
+    const auto item = std::find(rows.begin(), rows.end(), step.action);
+    require(item != rows.end(), "Missing action: " + step.action);
+    return static_cast<int>(item - rows.begin());
+}
+bool team_request(const alliance::TrustedProfile&, account::Request input,
+                  const std::string&, account::Reply& output)
+{
+    requests.push_back(input.operation);
+    if(input.operation == "battle_detail") {
+        require(input.battle_id == server_plan.id, "Requested a different plan");
+        ++detail_reads;
+        if(detail_reads == fail_read) return false;
+        if(detail_reads != empty_read) output.battle = server_plan;
+    } else if(input.operation == "my_battles") {
+        account::BattleSummary summary;
+        summary.id = server_plan.id; summary.state = server_plan.state; summary.created_at = server_plan.created_at;
+        for(const auto& team : server_plan.teams) summary.teams.push_back({team.id, team.name});
+        output.battles.push_back(summary);
+        summary.id = "200599c9-610f-4d81-b8bb-1cb1b79e5f27";
+        output.battles.push_back(summary);
+    } else throw std::runtime_error("Unexpected request: " + input.operation);
+    output.ok = true;
+    return true;
+}
+bool battle_mutation(const alliance::TrustedProfile&, account::Request,
+                     const std::string&, account::Battle&)
+{
+    throw std::runtime_error("Viewing planning state must not mutate the server");
+}
+void practice_plan(const alliance::TrustedProfile&, const account::Battle& battle)
+{
+    require(battle.state == "cancelled", "This case expects a cancelled practice snapshot");
+    ++practice_calls;
+}
+bool practice_pending() { return practice_calls != 0; }
+
+// @FUNCTIONS@
+}
+
+void reset()
+{
+    steps.clear(); menus.clear(); messages.clear(); requests.clear();
+    detail_reads = fail_read = empty_read = practice_calls = 0;
+    server_plan = {};
+    server_plan.id = "100599c9-610f-4d81-b8bb-1cb1b79e5f27";
+    server_plan.state = "draft"; server_plan.validity = "valid";
+    server_plan.created_at = "2026-10-22T12:00:00Z";
+    server_plan.map = {"isars-cross", "Isar's Cross", "multiplayer_Isars_Cross", 2, {{1,4},{2,3}}};
+    server_plan.teams = {{"team-a", "Koichi", "captain-a", true,
+        {{"captain-a", "UniPlayer", "Spearman", 1, 1, true},
+         {"member-a", "UniRecruit", "Spearman", 1, 4, true}}},
+        {"team-b", "RivalPlan", "captain-b", true,
+        {{"captain-b", "UniSolo", "Elvish Fighter", 1, 2, false},
+         {"member-b", "UniRival", "Spearman", 1, 3, true}}}};
+    alliance_game::session = {"fixture-token", {"captain-a", "UniPlayer", "Spearman", "spearman", 1, 0, 0}};
+}
+void contains(const std::string& text, const std::string& needle)
+{
+    require(text.find(needle) != std::string::npos, "Missing text: " + needle);
+}
+void absent(const std::string& text, const std::string& needle)
+{
+    require(text.find(needle) == std::string::npos, "Unexpected text: " + needle);
+}
+bool offered(const Menu& menu, const std::string& action)
+{
+    return std::find(menu.rows.begin(), menu.rows.end(), action) != menu.rows.end();
+}
+void check(const std::string& name, void (*run)())
+{
+    reset(); run();
+    require(steps.empty(), "Scripted actions remain after case: " + name);
+    std::cout << "PASS " << name << '\n';
+}
+int main()
+{
+    try {
+        check("concurrent member leave is fetched when fixed lineups opens", [] {
+            steps = {{"Battle plan", "View fixed lineups", "leave"}, {"Battle plan", "<close>", ""}};
+            alliance_game::battle_detail({}, server_plan.id);
+            require(detail_reads == 3 && messages.size() == 1, "The view needs its own fresh read");
+            contains(messages[0], "Team membership changed after this plan was saved.");
+            contains(messages[0], "UniRival — Spearman, level 1 — Saved readiness (inactive): Not ready");
+            contains(messages[0], "UniPlayer — Spearman, level 1 — Saved readiness (inactive): Ready");
+            absent(messages[0], "The saved lineups match the current teams and leaders.");
+        });
+        check("concurrent cancellation is visible in the first opened detail", [] {
+            steps = {{"Battle plan", "View fixed lineups", "cancel"}, {"Battle plan", "<close>", ""}};
+            alliance_game::battle_detail({}, server_plan.id);
+            require(detail_reads == 3 && messages.size() == 1, "Cancellation was not refreshed");
+            contains(messages[0], "State: cancelled");
+            contains(messages[0], "cancelled and inactive. It cannot start a shared battle.");
+            contains(messages[0], "Saved readiness (history): Not ready");
+            absent(messages[0], "Saved readiness (history): Ready");
+            require(!offered(menus.back(), "Cancel this battle plan") &&
+                    !offered(menus.back(), "Set myself not ready"), "Cancelled plan offers mutations");
+        });
+        check("failed detail refresh never displays the cached ready plan or retries", [] {
+            fail_read = 2;
+            steps = {{"Battle plan", "View fixed lineups", "leave"}};
+            alliance_game::battle_detail({}, server_plan.id);
+            require(detail_reads == 2 && messages.empty() && menus.size() == 1, "Failure used stale detail or retried");
+            require(practice_calls == 0, "Refresh failure launched practice");
+        });
+        check("missing detail response gives fixed failure without cached fallback", [] {
+            empty_read = 2;
+            steps = {{"Battle plan", "View fixed lineups", "cancel"}};
+            alliance_game::battle_detail({}, server_plan.id);
+            require(detail_reads == 2 && messages.size() == 1, "Missing response was not bounded");
+            contains(messages[0], "The latest fixed lineups could not be loaded.");
+            absent(messages[0], "UniRival");
+            absent(messages[0], "State: draft");
+        });
+        check("manual refresh still refreshes again when a later view opens", [] {
+            steps = {{"Battle plan", "Refresh plan", ""},
+                     {"Battle plan", "View fixed lineups", "leave"}, {"Battle plan", "<close>", ""}};
+            alliance_game::battle_detail({}, server_plan.id);
+            require(detail_reads == 4 && messages.size() == 1, "Manual refresh incorrectly replaced view-time refresh");
+            contains(messages[0], "Team membership changed after this plan was saved.");
+        });
+        check("cancelled valid old readiness is retained and explicitly historical", [] {
+            server_plan.state = "cancelled";
+            const auto text = alliance_game::battle_text(server_plan);
+            contains(text, "The saved lineups match the current teams and leaders.");
+            contains(text, "cancelled and inactive");
+            contains(text, "Captain approval (inactive): Approved");
+            contains(text, "UniRival — Spearman, level 1 — Saved readiness (history): Ready");
+            contains(text, "UniSolo — Elvish Fighter, level 1 — Saved readiness (history): Not ready");
+            absent(text, "level 1 — Ready");
+            require(server_plan.teams[1].players[1].ready && server_plan.teams[1].approved,
+                    "Rendering must not rewrite server history");
+            require(alliance_game::can_practice_plan(server_plan, alliance_game::session.profile), "Cancelled practice lost");
+            contains(text, "practise this saved lineup locally against the computer");
+        });
+        check("completed consent is historical and practice is not offered", [] {
+            server_plan.state = "completed";
+            const auto text = alliance_game::battle_text(server_plan);
+            contains(text, "complete and inactive. It cannot start again.");
+            contains(text, "Saved readiness (history): Ready");
+            contains(text, "Captain approval (inactive): Approved");
+            absent(text, "practise this saved lineup");
+            steps = {{"Battle plan", "<close>", ""}};
+            alliance_game::battle_detail({}, server_plan.id);
+            contains(menus[0].text, "complete and inactive");
+            require(menus[0].rows.size() == 3 && !offered(menus[0], "Practice this plan"), "Completed plan offers actions");
+        });
+        check("current captain approval is not invented from historical ready players", [] {
+            server_plan.state = "cancelled";
+            server_plan.teams[0].captain_id = "member-a";
+            server_plan.teams[0].approved = false;
+            const auto text = alliance_game::battle_text(server_plan);
+            contains(text, "Team: Koichi\nTeam ID: team-a\nCaptain approval (inactive): Waiting");
+            contains(text, "UniPlayer — Spearman, level 1 — Saved readiness (history): Ready");
+            absent(text, "Saved captain approval (history)");
+            require(!server_plan.teams[0].approved, "UI changed the protocol approval projection");
+        });
+        check("every invalid draft labels saved consent inactive without inventing a reset", [] {
+            for(const auto* reason : {"roster_changed", "area_changed", "map_unavailable", "leader_changed",
+                    "player_unavailable", "team_unavailable", "busy", "rules_changed"}) {
+                server_plan.validity = reason;
+                const auto text = alliance_game::battle_text(server_plan);
+                contains(text, "This draft cannot start a shared battle while these changes remain.");
+                contains(text, "Captain approval (inactive): Approved");
+                contains(text, "UniRival — Spearman, level 1 — Saved readiness (inactive): Ready");
+                absent(text, "level 1 — Ready");
+                require(server_plan.teams[1].players[1].ready, "Rendering rewrote saved consent");
+            }
+        });
+        check("valid draft displays the server's exact current ready values", [] {
+            const auto text = alliance_game::battle_text(server_plan);
+            contains(text, "Captain approval: Approved");
+            contains(text, "UniRival — Spearman, level 1 — Ready");
+            contains(text, "UniSolo — Elvish Fighter, level 1 — Not ready");
+            absent(text, "inactive");
+            absent(text, "(history)");
+        });
+        check("invalid draft may withdraw saved readiness but never add or approve it", [] {
+            server_plan.validity = "roster_changed";
+            server_plan.teams[0].approved = false;
+            steps = {{"Battle plan", "<close>", ""}};
+            alliance_game::battle_detail({}, server_plan.id);
+            require(offered(menus[0], "Set myself not ready") && !offered(menus[0], "Set myself ready") &&
+                    !offered(menus[0], "Approve this plan"), "Invalid draft consent actions changed");
+            contains(menus[0].text, "Captain approval and saved readiness are inactive.");
+        });
+        check("cancelled local practice remains a separate available action", [] {
+            server_plan.state = "cancelled"; server_plan.validity = "roster_changed";
+            steps = {{"Battle plan", "Practice this plan", ""}};
+            alliance_game::battle_detail({}, server_plan.id);
+            require(practice_calls == 1 && detail_reads == 1, "Cancelled practice was blocked or repeated");
+            contains(menus[0].text, "cancelled and inactive");
+            contains(menus[0].text, "separate local game against the computer");
+        });
+        check("identical names and timestamps remain distinguishable by plan IDs", [] {
+            steps = {{"My battle plans", "<close>", ""}};
+            alliance_game::my_battles({});
+            require(menus[0].rows.size() == 2 && menus[0].rows[0] != menus[0].rows[1], "Identical plans ambiguous");
+            contains(menus[0].rows[0], server_plan.id);
+            contains(menus[0].rows[1], "200599c9-610f-4d81-b8bb-1cb1b79e5f27");
+        });
+        std::cout << "PASS all planning refresh and history cases\n";
+        return 0;
+    } catch(const std::exception& error) {
+        std::cerr << "FAIL " << error.what() << '\n';
+        return 1;
+    }
+}
