@@ -6,6 +6,17 @@
 #include <vector>
 
 namespace alliance_game {
+enum class PracticeControl { own_side, own_team, hotseat };
+struct PracticeSettings {
+    PracticeControl control = PracticeControl::own_side;
+    int starting_gold = 100;
+    int turn_limit = -1;
+    bool fog = true;
+};
+// Settings affect only this local game. They never alter the saved battle plan
+// or consent, and never reserve another player's account.
+bool valid_practice_settings(const PracticeSettings&) noexcept;
+const char* practice_control_name(PracticeControl) noexcept;
 struct PracticeSeat {
     std::string id, username, team_id, team_name, faction, unit_type;
     int level = 0, side = 0;
@@ -14,6 +25,7 @@ struct PracticeSeat {
 struct PracticePlan {
     std::string battle_id, map_id, map_name, scenario_id, map_file;
     int size = 0, controlled_side = 0;
+    PracticeSettings settings;
     std::vector<PracticeSeat> seats;
 };
 enum class PracticeEligibility {
@@ -30,7 +42,8 @@ bool same_practice_snapshot(const alliance::account::Battle&, const alliance::ac
                             const std::string& viewer_account_id) noexcept;
 // Local copies only. Eligibility is checked at queue time, not reserved on the
 // server; no account credential enters this descriptor or local game.
-PracticePlan make_practice_plan(const alliance::account::Battle&, const alliance::account::Profile&);
+PracticePlan make_practice_plan(const alliance::account::Battle&, const alliance::account::Profile&,
+                                const PracticeSettings& = {});
 // Every permitted target type, for a persistent remove_advancement effect.
 // Using the same allowlist avoids a second, drifting progression tree.
 std::string practice_advancement_targets();

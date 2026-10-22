@@ -45,11 +45,11 @@ void run_pending_practice()
         state.mp_settings().mp_scenario = scenario["id"].str();
         state.mp_settings().use_map_settings = true;
         state.mp_settings().shuffle_sides = false;
-        state.mp_settings().num_turns = -1;
+        state.mp_settings().num_turns = plan->settings.turn_limit;
         state.mp_settings().village_gold = 2;
         state.mp_settings().village_support = 1;
         state.mp_settings().xp_modifier = 100;
-        state.mp_settings().fog_game = true;
+        state.mp_settings().fog_game = plan->settings.fog;
         state.mp_settings().shroud_game = false;
         state.mp_settings().allow_observers = false;
         state.mp_settings().private_replay = true;

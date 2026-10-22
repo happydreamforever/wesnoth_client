@@ -68,6 +68,59 @@ int main()
             }
         }
         viewer.account_id = id(1);
+        // Every local mode uses the viewer's actual team/side, even on the
+        // second team or a non-first seat. Settings never change consent or
+        // require the other copied players to be Ready.
+        for(int size : {2,3,4}) {
+            auto saved = battle(size);
+            for(const auto& team : saved.teams) for(const auto& member : team.players) {
+                auto personal = saved;
+                auto owner = viewer; owner.account_id = member.id;
+                for(auto& t : personal.teams) for(auto& p : t.players) p.ready = p.id == member.id;
+                for(auto control : {PracticeControl::own_side, PracticeControl::own_team, PracticeControl::hotseat})
+                for(int gold : {75,100,150,200}) for(int turns : {-1,20,30,50}) for(bool fog : {true,false}) {
+                    PracticeSettings settings{control,gold,turns,fog};
+                    require(valid_practice_settings(settings));
+                    const auto plan = make_practice_plan(personal,owner,settings);
+                    require(plan.controlled_side == member.side);
+                    require(plan.settings.control == control && plan.settings.starting_gold == gold &&
+                            plan.settings.turn_limit == turns && plan.settings.fog == fog);
+                    int humans = 0;
+                    for(const auto& seat : plan.seats) {
+                        const bool expected = control == PracticeControl::hotseat ||
+                            (control == PracticeControl::own_team ? seat.team_id == team.id : seat.id == owner.account_id);
+                        require(seat.human == expected);
+                        if(seat.human) ++humans;
+                    }
+                    require(humans == (control == PracticeControl::hotseat ? 2*size : control == PracticeControl::own_team ? size : 1));
+                    require(personal.teams[0].players[0].ready == (personal.teams[0].players[0].id == member.id));
+                }
+                personal.teams[0].approved = false;
+                for(auto mode : {PracticeControl::own_side,PracticeControl::own_team,PracticeControl::hotseat})
+                    rejects([&] { make_practice_plan(personal, owner, PracticeSettings{mode,100,-1,true}); });
+            }
+        }
+        for(const auto settings : {PracticeSettings{static_cast<PracticeControl>(-1),100,-1,true},
+                                   PracticeSettings{PracticeControl::own_side,0,-1,true},
+                                   PracticeSettings{PracticeControl::hotseat,101,-1,false},
+                                   PracticeSettings{PracticeControl::own_team,100,0,true},
+                                   PracticeSettings{PracticeControl::own_team,100,-2,true},
+                                   PracticeSettings{PracticeControl::own_team,100,100000,true}}) {
+            require(!valid_practice_settings(settings));
+            rejects([&] { queue_practice(battle(), viewer, settings); });
+            require(!practice_pending());
+        }
+        require(std::string(practice_control_name(PracticeControl::own_side)) == "My side");
+        require(std::string(practice_control_name(PracticeControl::own_team)) == "Command my team");
+        require(std::string(practice_control_name(PracticeControl::hotseat)) == "Local hotseat");
+        require(std::string(practice_control_name(static_cast<PracticeControl>(99))) == "Unknown practice mode");
+        PracticeSettings selected{PracticeControl::own_team,200,30,false};
+        queue_practice(battle(),viewer,selected);
+        selected = {}; // Queued settings are copies, not a live reference.
+        const auto training = take_pending_practice();
+        require(training && training->settings.control == PracticeControl::own_team &&
+                training->settings.starting_gold == 200 && training->settings.turn_limit == 30 && !training->settings.fog);
+        require(!practice_pending() && !take_pending_practice());
         const std::pair<const char*, int> branches[] = {
             {"Spearman",1},{"Swordsman",2},{"Pikeman",2},{"Javelineer",2},{"Royal Guard",3},{"Halberdier",3},
             {"Elvish Fighter",1},{"Elvish Captain",2},{"Elvish Hero",2},{"Elvish Marshal",3},{"Elvish Champion",3},

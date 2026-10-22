@@ -1,29 +1,60 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "alliance_game/practice_scenario.hpp"
+#include <algorithm>
 #include <stdexcept>
 
 namespace alliance_game {
 config make_practice_scenario(const PracticePlan& plan, const config& original, const config& era)
 {
+    if(!valid_practice_settings(plan.settings))
+        throw std::invalid_argument("Unsupported local practice settings.");
+    const auto owner = std::find_if(plan.seats.begin(), plan.seats.end(),
+        [&](const auto& seat) { return seat.side == plan.controlled_side; });
+    if(owner == plan.seats.end()) throw std::invalid_argument("The practice viewer has no saved side.");
+    for(const auto& seat : plan.seats) {
+        const bool expected = plan.settings.control == PracticeControl::hotseat ||
+            (plan.settings.control == PracticeControl::own_team ? seat.team_id == owner->team_id : seat.side == plan.controlled_side);
+        if(seat.human != expected) throw std::invalid_argument("Practice controls do not match the selected mode.");
+    }
     if(original["id"].str() != plan.scenario_id || original["map_file"].str() != plan.map_file ||
        original.child_count("side") != plan.seats.size() || era["id"].str() != "era_default")
         throw std::invalid_argument("The installed map or era does not match this practice plan.");
     config scenario = original;
-    scenario["id"] = "alliance_practice_" + plan.battle_id + "_" + std::to_string(plan.controlled_side);
-    scenario["name"] = "Alliance practice - " + plan.map_name + " - side " + std::to_string(plan.controlled_side);
-    scenario["description"] = "Unranked local practice using a saved lineup. All other sides are computer players. No account experience, team experience, rating or battle-plan changes are saved.";
+    const std::string mode = plan.settings.control == PracticeControl::own_side ? "own_side" :
+        plan.settings.control == PracticeControl::own_team ? "own_team" : "hotseat";
+    const std::string controls = plan.settings.control == PracticeControl::own_side
+        ? "You control your assigned side. The computer controls every other side, including your teammates."
+        : plan.settings.control == PracticeControl::own_team
+        ? "You control every side on your team. The computer controls the opposing team."
+        : "All sides are controlled locally. Take turns on this device in side-number order; there are no computer-controlled sides.";
+    const std::string settings = "Mode: " + std::string(practice_control_name(plan.settings.control)) +
+        ". Starting gold: " + std::to_string(plan.settings.starting_gold) + " per side. Turns: " +
+        (plan.settings.turn_limit == -1 ? std::string("unlimited") : std::to_string(plan.settings.turn_limit)) +
+        ". Fog: " + (plan.settings.fog ? "on." : "off.");
+    const std::string timeout = plan.settings.turn_limit == -1 ? "" :
+        "\nIf no team wins before the turn limit, the standard game displays Defeat. This is only a local practice result.";
+    scenario["id"] = "alliance_practice_" + plan.battle_id + "_" + std::to_string(plan.controlled_side) + "_" + mode;
+    scenario["name"] = "Alliance practice - " + plan.map_name + " - " + practice_control_name(plan.settings.control) +
+        " - side " + std::to_string(plan.controlled_side);
+    scenario["description"] = "Local practice using copies of the saved leaders. " + controls + " " + settings +
+        " Other players are not connected. No account experience, team experience, rating or battle-plan changes are saved.";
     scenario["next_scenario"] = "";
-    scenario["turns"] = -1;
+    scenario["turns"] = plan.settings.turn_limit;
     scenario["victory_when_enemies_defeated"] = true;
     scenario["experience_modifier"] = 100;
     scenario["random_start_time"] = false;
     scenario["force_lock_settings"] = true;
-    scenario["objectives"] = "<big>Local team practice</big>\nDefeat the opposing team's leaders.\nYou control only your saved side; every other side is controlled by the computer.\nYour readiness and both captains' approvals were checked before starting. Later changes to the plan do not alter this local game or its saves.\nNo persistent experience or ratings are awarded. Leaders keep their saved type; recruited units may advance locally.\nFinishing this practice does not complete the Alliance battle plan.";
+    scenario["objectives"] = "<big>Local team practice</big>\nDefeat the opposing team's leaders.\n" + controls + "\n" + settings +
+        "\nTurns follow side-number order, not the logged-in player's position. Other players are not connected; these are local copies of their leaders.\nYour readiness and both captains' approvals were checked before starting. Later changes to the plan do not alter this local game or its saves.\nNo persistent experience or ratings are awarded. Leaders keep their saved type; recruited units may advance locally.\nFinishing this practice does not complete the Alliance battle plan." + timeout;
     scenario.clear_children("side", "options");
     auto& marker = scenario.child_or_add("variables");
     marker["alliance_practice"] = true;
     marker["alliance_practice_plan_id"] = plan.battle_id;
     marker["alliance_practice_viewer_side"] = plan.controlled_side;
+    marker["alliance_practice_control"] = mode;
+    marker["alliance_practice_starting_gold"] = plan.settings.starting_gold;
+    marker["alliance_practice_turn_limit"] = plan.settings.turn_limit;
+    marker["alliance_practice_fog"] = plan.settings.fog;
     marker["simple_background"] = false;
     for(const auto& seat : plan.seats) {
         const auto faction = era.find_child("multiplayer_side", "id", seat.faction);
@@ -43,12 +74,12 @@ config make_practice_scenario(const PracticePlan& plan, const config& original, 
         side["user_description"] = seat.username;
         side["faction"] = seat.faction;
         side["recruit"] = (*faction)["recruit"];
-        side["gold"] = 100;
+        side["gold"] = plan.settings.starting_gold;
         // WML income is added to the core base income (2).
         side["income"] = 0;
         side["village_gold"] = 2;
         side["village_support"] = 1;
-        side["fog"] = true;
+        side["fog"] = plan.settings.fog;
         side["shroud"] = false;
         side["share_view"] = true;
         side["share_maps"] = true;

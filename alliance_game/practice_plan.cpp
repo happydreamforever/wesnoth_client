@@ -148,11 +148,40 @@ bool same_practice_snapshot(const alliance::account::Battle& first, const allian
     return viewer_found;
 }
 
-PracticePlan make_practice_plan(const alliance::account::Battle& battle, const alliance::account::Profile& viewer)
+bool valid_practice_settings(const PracticeSettings& settings) noexcept
 {
+    const bool control = settings.control == PracticeControl::own_side ||
+        settings.control == PracticeControl::own_team || settings.control == PracticeControl::hotseat;
+    return control && (settings.starting_gold == 75 || settings.starting_gold == 100 ||
+        settings.starting_gold == 150 || settings.starting_gold == 200) &&
+        (settings.turn_limit == -1 || settings.turn_limit == 20 || settings.turn_limit == 30 || settings.turn_limit == 50);
+}
+
+const char* practice_control_name(PracticeControl control) noexcept
+{
+    switch(control) {
+    case PracticeControl::own_side: return "My side";
+    case PracticeControl::own_team: return "Command my team";
+    case PracticeControl::hotseat: return "Local hotseat";
+    }
+    return "Unknown practice mode";
+}
+
+PracticePlan make_practice_plan(const alliance::account::Battle& battle, const alliance::account::Profile& viewer,
+                                const PracticeSettings& settings)
+{
+    if(!valid_practice_settings(settings)) throw std::invalid_argument("Unsupported local practice settings.");
     PracticePlan result;
     const auto status = evaluate_practice(battle, viewer, result);
     if(status != PracticeEligibility::eligible) throw std::invalid_argument(practice_eligibility_reason(status));
+    result.settings = settings;
+    const auto owner = std::find_if(result.seats.begin(), result.seats.end(),
+        [&](const auto& seat) { return seat.id == viewer.account_id; });
+    const std::string own_team = owner->team_id;
+    for(auto& seat : result.seats) {
+        seat.human = settings.control == PracticeControl::hotseat ||
+            (settings.control == PracticeControl::own_team ? seat.team_id == own_team : seat.id == viewer.account_id);
+    }
     return result;
 }
 
@@ -166,10 +195,11 @@ std::string practice_advancement_targets()
     return result;
 }
 
-void queue_practice(const alliance::account::Battle& battle, const alliance::account::Profile& viewer)
+void queue_practice(const alliance::account::Battle& battle, const alliance::account::Profile& viewer,
+                    const PracticeSettings& settings)
 {
     if(pending) throw std::logic_error("A local practice launch is already pending.");
-    pending = make_practice_plan(battle, viewer);
+    pending = make_practice_plan(battle, viewer, settings);
 }
 bool practice_pending() noexcept { return pending.has_value(); }
 std::optional<PracticePlan> take_pending_practice()

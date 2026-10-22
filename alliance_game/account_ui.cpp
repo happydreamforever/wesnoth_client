@@ -1325,6 +1325,69 @@ bool load_practice_plan(const alliance::TrustedProfile& profile, const std::stri
     return true;
 }
 
+std::string practice_settings_text(const PracticeSettings& settings)
+{
+    return std::string("Control: ") + practice_control_name(settings.control) +
+        "\nStarting gold: " + std::to_string(settings.starting_gold) + " per side" +
+        "\nTurn limit: " + (settings.turn_limit == -1 ? std::string("Unlimited") : std::to_string(settings.turn_limit)) +
+        "\nFog: " + (settings.fog ? "On" : "Off");
+}
+
+bool choose_practice_settings(PracticeSettings& settings)
+{
+    while(true) {
+        const int choice = select_change("Practice setup", practice_settings_text(settings) +
+            "\n\nThese settings affect only this local game. All sides receive the same starting gold. "
+            "Your saved lineup and alliances stay fixed. No other devices or players connect. "
+            "Review and start opens a separate confirmation; choosing settings does not start a game.",
+            {"Control mode", "Starting gold", "Turn limit", "Fog", "Reset to defaults", "Review and start"});
+        if(choice < 0) return false;
+        if(choice == 0) {
+            const int mode = select_change("Practice control",
+                "My side: control your assigned side; every other side is computer-controlled.\n"
+                "Command my team: control every side on your team; the opposing team is computer-controlled.\n"
+                "Local hotseat: take turns controlling every side on this device. You can pass the device between local players. "
+                "This is not remote multiplayer and does not sign in to other players' accounts.",
+                {"My side", "Command my team", "Local hotseat"});
+            if(mode >= 0 && mode < 3)
+                settings.control = std::array<PracticeControl, 3>{PracticeControl::own_side,
+                    PracticeControl::own_team, PracticeControl::hotseat}[mode];
+        } else if(choice == 1) {
+            const int gold = select_change("Practice starting gold",
+                "Every side receives the same starting gold. Village income and recruitment costs use the normal game rules.",
+                {"75 gold per side", "100 gold per side", "150 gold per side", "200 gold per side"});
+            if(gold >= 0 && gold < 4) settings.starting_gold = std::array<int, 4>{75, 100, 150, 200}[gold];
+        } else if(choice == 2) {
+            const int turns = select_change("Practice turn limit",
+                "A turn includes each side's move. If no team wins before a finite limit, the stock game ends practice "
+                "and shows Defeat. This does not record an Alliance loss or change account experience, team experience or rating.",
+                {"20 turns", "30 turns", "50 turns", "Unlimited"});
+            if(turns >= 0 && turns < 4) settings.turn_limit = std::array<int, 4>{20, 30, 50, -1}[turns];
+        } else if(choice == 3) {
+            const int fog = select_change("Practice fog",
+                "Fog on hides enemies outside your team's current vision. Fog off shows the battlefield. "
+                "Local hotseat players share this device; fog is not a privacy boundary between them.",
+                {"Fog on", "Fog off"});
+            if(fog >= 0 && fog < 2) settings.fog = fog == 0;
+        } else if(choice == 4) {
+            settings = PracticeSettings{};
+        } else if(choice == 5) {
+            return valid_practice_settings(settings);
+        }
+    }
+}
+
+std::string practice_lineup_text(const PracticePlan& plan)
+{
+    std::string text = "Local control of saved lineup copies:";
+    for(const auto& seat : plan.seats) {
+        text += "\nSide " + std::to_string(seat.side) + ": " + seat.username + " — " +
+            seat.unit_type + ", level " + std::to_string(seat.level) + " — " + seat.team_name + " — ";
+        text += seat.human ? "Local player on this device" : "Computer";
+    }
+    return text;
+}
+
 void practice_plan(const alliance::TrustedProfile& profile, const account::Battle& battle)
 {
     const std::string actor = current_session().profile.account_id;
@@ -1342,19 +1405,28 @@ void practice_plan(const alliance::TrustedProfile& profile, const account::Battl
     current_session().profile = output.profile;
     account::Reply preview;
     if(!load_practice_plan(profile, battle_id, actor, preview)) return;
-    int human_side = 0;
-    for(const auto& team : preview.battle->teams)
-        for(const auto& member : team.players)
-            if(member.id == actor) human_side = member.side;
-    const std::string explanation = "Start a local practice game from this saved plan?\n\n"
-        "You control side " + std::to_string(human_side) + ". The computer controls every other side, "
-        "including your teammates. All sides use the saved leaders and alliances shown above.\n\n"
-        "The server currently confirms this draft is valid, both captains approved and you are Ready. "
-        "Other players do not need to be Ready for your personal practice. "
+    PracticeSettings settings;
+    if(!choose_practice_settings(settings)) return;
+    PracticePlan local_plan;
+    try {
+        local_plan = make_practice_plan(*preview.battle, output.profile, settings);
+    } catch(...) {
+        message("Local practice could not be prepared. No practice was started. Refresh the plan to check its current state.");
+        return;
+    }
+    std::string review = "Battle plan ID: " + local_plan.battle_id + "\nMap: " + local_plan.map_name +
+        "\nValid draft; both captains approved; you are Ready on side " + std::to_string(local_plan.controlled_side) +
+        ".\n\n" + practice_settings_text(settings) + "\n\n" + practice_lineup_text(local_plan) +
+        "\n\nAll sides use local copies of the saved leaders and alliances. Turns begin with side 1, "
+        "which may be a computer side; local sides take turns on this device. Hotseat shares this device and its visible turns. "
+        "Other players do not join this game or need to be Ready.\n\n"
         "The plan and your readiness will be checked again after you confirm. "
-        "It does not start or change the shared battle plan. No players or teams are reserved.\n\n"
-        "Practice grants no account experience, team experience or rating. Other players do not join this game.";
-    if(select_change("Confirm local team practice", battle_text(*preview.battle) + "\n\n" + explanation,
+        "This does not start or change the shared battle plan. No players or teams are reserved. "
+        "Practice grants no account experience, team experience or rating.";
+    if(settings.turn_limit != -1)
+        review += "\nIf neither team wins within " + std::to_string(settings.turn_limit) +
+            " turns, practice ends with the stock Defeat screen; it records no Alliance loss.";
+    if(select_change("Confirm local team practice", review,
                      {"Start local practice"}) != 0) return;
     account::Reply latest;
     if(!load_practice_plan(profile, battle_id, actor, latest)) return;
@@ -1366,7 +1438,7 @@ void practice_plan(const alliance::TrustedProfile& profile, const account::Battl
     try {
         // Queue data only. The title-screen caller launches after every modal
         // account window has unwound; no combat runs inside this dialog.
-        queue_practice(*latest.battle, output.profile);
+        queue_practice(*latest.battle, output.profile, settings);
     } catch(...) {
         message("Local practice could not be prepared. No practice was started. Refresh the plan to check its current state.");
     }
@@ -1454,7 +1526,7 @@ void battle_detail(const alliance::TrustedProfile& profile, const std::string& b
             "\nBattle plan ID: " + battle.id +
             "\n" + battle.map.name + " — " + battle.state + "\n" + battle_validity_text(battle.validity) +
             "\n" + consent + "\n" + practice_availability_text(battle, current_session().profile) + (practice >= 0
-                ? "\nPractice this plan opens a separate local game against the computer with no account rewards." : ""), actions);
+                ? "\nPractice this plan lets you choose My side, Command my team or Local hotseat, plus local game settings. No account rewards are awarded." : ""), actions);
         if(choice < 0) return;
         if(choice == 0) {
             // Another player may have changed membership, consent or state
@@ -1640,6 +1712,7 @@ void battle_plans(const alliance::TrustedProfile& profile)
             "Both captains approve, then selected players set their readiness.\n"
             "For personal practice, a selected player needs a valid draft, both captain approvals and only their own Ready. "
             "Choose Set myself ready first, then choose Practice this plan separately. "
+            "Control your side, command your whole team against the computer, or play all sides locally in hotseat. "
             "Cancelled and completed plans cannot start practice. "
             "Practice does not change the plan or award account experience or rating.", {"My battle plans", "Propose battle"});
         if(choice < 0) return;

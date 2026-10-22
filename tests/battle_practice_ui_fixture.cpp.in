@@ -26,6 +26,7 @@ int modal_depth = 0, queue_count = 0;
 bool pending = false, queue_fails = false, network_fails = false, identity_changes = false;
 account::Battle saved, queued;
 account::Profile response_profile, queued_profile;
+alliance_game::PracticeSettings queued_settings;
 enum class Change { none, cancelled, running, completed, not_ready, other_not_ready, approval, roster, leader, name, actor, logout };
 enum class MutationResult { ok, rejected, unknown, wrong_actor };
 Change confirmation_change = Change::none, menu_change = Change::none, read_change = Change::none;
@@ -91,12 +92,13 @@ struct Session {
 } fixture_session;
 Session& current_session() { return fixture_session; }
 void message(const std::string& value) { messages.push_back(value); }
-void queue_practice(const account::Battle& battle, const account::Profile& player)
+void queue_practice(const account::Battle& battle, const account::Profile& player, const PracticeSettings& settings)
 {
     require(modal_depth == 1 || modal_depth == 0, "Unexpected nested live selector on queue");
     if(queue_fails) throw std::invalid_argument("private diagnostic text must not be displayed");
     require(!pending, "A launch is already pending");
-    queued = battle; queued_profile = player; pending = true; ++queue_count;
+    require(valid_practice_settings(settings), "Invalid practice settings reached queue");
+    queued = battle; queued_profile = player; queued_settings = settings; pending = true; ++queue_count;
 }
 bool practice_pending() noexcept { return pending; }
 constexpr int practice_title_result = 18101;
@@ -201,7 +203,7 @@ void reset()
     confirmation_change = menu_change = read_change = Change::none;
     mutations = 0; mutation_result = MutationResult::ok;
     detail_reads = change_on_read = fail_call = empty_detail = wrong_detail = 0;
-    queue_count = 0; queued = {}; queued_profile = {};
+    queue_count = 0; queued = {}; queued_profile = {}; queued_settings = {};
     saved = {};
     saved.id = "00000000-0000-0000-0000-000000000100"; saved.area_id = "area"; saved.state = "draft";
     saved.created_at = "2026-10-22T12:00:00Z"; saved.validity = "valid";
@@ -240,6 +242,24 @@ void ready_events()
 {
     events = {{"Battle plan", "Set myself ready"},
               {"Confirm ready", "Set myself ready"}};
+}
+
+void settings_events(const std::string& mode, int gold, int turns, bool fog)
+{
+    events.push_back({"Practice setup", "Control mode"});
+    events.push_back({"Practice control", mode});
+    events.push_back({"Practice setup", "Starting gold"});
+    events.push_back({"Practice starting gold", std::to_string(gold) + " gold per side"});
+    events.push_back({"Practice setup", "Turn limit"});
+    events.push_back({"Practice turn limit", turns == -1 ? "Unlimited" : std::to_string(turns) + " turns"});
+    events.push_back({"Practice setup", "Fog"});
+    events.push_back({"Practice fog", fog ? "Fog on" : "Fog off"});
+}
+
+void default_settings(const alliance_game::PracticeSettings& value)
+{
+    require(value.control == alliance_game::PracticeControl::own_side && value.starting_gold == 100 &&
+            value.turn_limit == -1 && value.fog, "Default settings changed");
 }
 
 int main()
@@ -343,6 +363,7 @@ int main()
         check("separate Practice confirmation Back preserves Ready without launching", [] {
             all_not_ready(); ready_events();
             events.push_back({"Battle plan", "Practice this plan"});
+            events.push_back({"Practice setup", "Review and start"});
             events.push_back({"Confirm local team practice", "<default>"});
             events.push_back({"Battle plan", "<close>"});
             alliance_game::battle_detail({}, saved.id);
@@ -402,7 +423,101 @@ int main()
             require(std::find(seen[0].rows.begin(), seen[0].rows.end(), "Approve this plan") != seen[0].rows.end(), "Current captain lost approval");
             require(std::find(seen[0].rows.begin(), seen[0].rows.end(), "Practice this plan") == seen[0].rows.end(), "Unselected captain can practice");
         });
+        for(const auto* back : {"<default>", "<close>", "Back without changes"}) {
+            reset(); events.push_back({"Practice setup", back});
+            alliance_game::practice_plan({}, saved);
+            require(events.empty() && !pending && queue_count == 0 && mutations == 0, "Setup cancellation launched or mutated");
+            require(calls == std::vector<std::string>({"me", "battle_detail"}), "Setup cancellation made extra requests");
+            require(seen.size() == 1 && seen.front().rows.front() == "Back without changes", "Setup default is not Back");
+        }
+        std::cout << "PASS three setup Back and close paths are read-only\n";
+        for(const auto control : {alliance_game::PracticeControl::own_side, alliance_game::PracticeControl::own_team,
+                                  alliance_game::PracticeControl::hotseat}) {
+            for(int gold : {75, 100, 150, 200}) for(int turns : {20, 30, 50, -1}) for(bool fog : {false, true}) {
+                reset(); all_not_ready(); saved.teams[0].players[1].ready = true;
+                const std::string mode = alliance_game::practice_control_name(control);
+                settings_events(mode, gold, turns, fog);
+                events.push_back({"Practice setup", "Review and start"});
+                events.push_back({"Confirm local team practice", "Start local practice"});
+                alliance_game::practice_plan({}, saved);
+                require(events.empty() && pending && queue_count == 1 && mutations == 0, "Configured practice failed or changed server state");
+                require(queued_settings.control == control && queued_settings.starting_gold == gold &&
+                        queued_settings.turn_limit == turns && queued_settings.fog == fog, "Confirmed settings differ from queued settings");
+                const std::string text = seen.back().description;
+                for(const auto& expected : {"Control: " + mode, "Starting gold: " + std::to_string(gold) + " per side",
+                    "Turn limit: " + (turns == -1 ? std::string("Unlimited") : std::to_string(turns)),
+                    std::string("Fog: ") + (fog ? "On" : "Off")})
+                    require(text.find(expected) != std::string::npos, "Review did not show exact settings");
+                for(const auto& team : saved.teams) for(const auto& player : team.players) {
+                    const bool local = control == alliance_game::PracticeControl::hotseat ||
+                        (control == alliance_game::PracticeControl::own_team ? team.name == "Koichi" : player.side == 4);
+                    const std::string expected = "Side " + std::to_string(player.side) + ": " + player.username +
+                        " — Spearman, level 1 — " + team.name + " — " + (local ? "Local player on this device" : "Computer");
+                    require(text.find(expected) != std::string::npos, "Review showed wrong local/AI ownership");
+                }
+                require(text.find("local copies of the saved leaders") != std::string::npos &&
+                        text.find("Other players do not join this game") != std::string::npos,
+                        "Training scope or turn-limit consequence missing");
+                require((text.find("stock Defeat screen") != std::string::npos) == (turns != -1),
+                        "Turn-limit consequence does not match the selected duration");
+                require(calls == std::vector<std::string>({"me", "battle_detail", "battle_detail"}),
+                        "Editing local settings sent mutations or additional requests");
+            }
+        }
+        std::cout << "PASS 96 control gold turn-limit and fog combinations preserve consent and exact review\n";
+        check("reset settings restores only local defaults before explicit review", [] {
+            settings_events("Local hotseat", 200, 20, false);
+            events.push_back({"Practice setup", "Reset to defaults"});
+            events.push_back({"Practice setup", "Review and start"});
+            events.push_back({"Confirm local team practice", "Start local practice"});
+            alliance_game::practice_plan({}, saved);
+            require(events.empty() && pending && queue_count == 1 && mutations == 0, "Reset launched or mutated unexpectedly");
+            default_settings(queued_settings);
+            require(seen.back().description.find("Control: My side") != std::string::npos, "Reset did not refresh review");
+            require(calls == std::vector<std::string>({"me", "battle_detail", "battle_detail"}), "Reset sent a network request");
+        });
+        for(const auto* back : {"<default>", "<close>", "Back without changes"}) {
+            reset(); settings_events("Command my team", 150, 30, false);
+            for(const auto& menu : std::vector<std::pair<std::string, std::string>>{
+                    {"Control mode", "Practice control"}, {"Starting gold", "Practice starting gold"},
+                    {"Turn limit", "Practice turn limit"}, {"Fog", "Practice fog"}}) {
+                events.push_back({"Practice setup", menu.first}); events.push_back({menu.second, back});
+            }
+            events.push_back({"Practice setup", "Review and start"});
+            events.push_back({"Confirm local team practice", "Start local practice"});
+            alliance_game::practice_plan({}, saved);
+            require(events.empty() && pending && queue_count == 1 && mutations == 0, "Submenu Back launched early or mutated");
+            require(queued_settings.control == alliance_game::PracticeControl::own_team && queued_settings.starting_gold == 150 &&
+                    queued_settings.turn_limit == 30 && !queued_settings.fog, "Submenu Back changed a chosen setting");
+        }
+        std::cout << "PASS twelve settings submenu Back and close paths preserve current choices\n";
+        check("abandoned setup choices are not reused by a later launch", [] {
+            settings_events("Local hotseat", 75, 50, false);
+            events.push_back({"Practice setup", "Back without changes"});
+            alliance_game::practice_plan({}, saved);
+            require(!pending && queue_count == 0 && mutations == 0, "Abandoning setup started practice");
+            events.push_back({"Practice setup", "Review and start"});
+            events.push_back({"Confirm local team practice", "Start local practice"});
+            alliance_game::practice_plan({}, saved);
+            require(events.empty() && pending && queue_count == 1, "Fresh setup did not launch once");
+            default_settings(queued_settings);
+        });
+        for(const auto* mode : {"My side", "Command my team", "Local hotseat"}) {
+            for(const auto change : {Change::cancelled, Change::not_ready, Change::approval, Change::roster,
+                                    Change::leader, Change::actor, Change::logout}) {
+                reset(); confirmation_change = change;
+                settings_events(mode, 200, 30, false);
+                events.push_back({"Practice setup", "Review and start"});
+                events.push_back({"Confirm local team practice", "Start local practice"});
+                alliance_game::practice_plan({}, saved);
+                require(events.empty() && !pending && queue_count == 0 && mutations == 0 && detail_reads == 2,
+                        "Configured practice bypassed snapshot or actor checks");
+                require(messages.size() == 1, "Rejected configured launch lacks bounded feedback");
+            }
+        }
+        std::cout << "PASS 21 configured mode consent and actor races reject stale launches\n";
         check("confirmation Open defaults to Back without final read or queue", [] {
+            events.push_back({"Practice setup", "Review and start"});
             events.push_back({"Confirm local team practice", "<default>"});
             alliance_game::practice_plan({}, saved);
             require(!pending && queue_count == 0, "Default must not launch");
@@ -410,8 +525,10 @@ int main()
             require(calls == std::vector<std::string>({"me", "battle_detail"}), "Unexpected consent cancellation request");
         });
         check("confirmation Escape and Back never queue", [] {
+            events.push_back({"Practice setup", "Review and start"});
             events.push_back({"Confirm local team practice", "<close>"});
             alliance_game::practice_plan({}, saved);
+            events.push_back({"Practice setup", "Review and start"});
             events.push_back({"Confirm local team practice", "Back without changes"});
             alliance_game::practice_plan({}, saved);
             require(!pending && queue_count == 0 && detail_reads == 2, "Back queued or checked after refusal");
@@ -443,6 +560,7 @@ int main()
         for(const auto change : {Change::cancelled, Change::running, Change::completed, Change::not_ready,
                                 Change::approval, Change::roster, Change::leader, Change::name, Change::actor, Change::logout}) {
             reset(); confirmation_change = change;
+            events.push_back({"Practice setup", "Review and start"});
             events.push_back({"Confirm local team practice", "Start local practice"});
             const auto cached = saved;
             alliance_game::practice_plan({}, cached);
@@ -452,6 +570,7 @@ int main()
         std::cout << "PASS ten post-confirmation state consent snapshot and actor races\n";
         check("another player's readiness change during confirmation preserves personal launch", [] {
             confirmation_change = Change::other_not_ready;
+            events.push_back({"Practice setup", "Review and start"});
             events.push_back({"Confirm local team practice", "Start local practice"});
             alliance_game::practice_plan({}, saved);
             require(pending && queue_count == 1 && !queued.teams[1].players[1].ready,
@@ -465,11 +584,14 @@ int main()
                 if(failure == 0) fail_call = read + 1;
                 if(failure == 1) empty_detail = read;
                 if(failure == 2) wrong_detail = read;
-                if(read == 2) events.push_back({"Confirm local team practice", "Start local practice"});
+                if(read == 2) {
+                    events.push_back({"Practice setup", "Review and start"});
+                    events.push_back({"Confirm local team practice", "Start local practice"});
+                }
                 alliance_game::practice_plan({}, saved);
                 require(!pending && queue_count == 0 && calls.size() == static_cast<std::size_t>(read + 1),
                         "Failed or wrong-ID read fell back or retried");
-                require(seen.size() == static_cast<std::size_t>(read - 1), "Failure opened unexpected confirmation");
+                require(seen.size() == static_cast<std::size_t>(2 * (read - 1)), "Failure opened unexpected confirmation");
             }
         }
         std::cout << "PASS six pre/post-confirmation failed missing and wrong-ID reads\n";
@@ -481,6 +603,7 @@ int main()
         });
         check("queue validation failure displays fixed safe feedback", [] {
             queue_fails = true;
+            events.push_back({"Practice setup", "Review and start"});
             events.push_back({"Confirm local team practice", "Start local practice"});
             alliance_game::practice_plan({}, saved);
             require(!pending && queue_count == 0 && messages.size() == 1, "Queue failure not handled");
@@ -488,12 +611,13 @@ int main()
         });
         check("successful launch uses fresh eligible snapshot and makes only three reads", [] {
             response_profile.experience = 5; response_profile.total_experience = 47;
+            events.push_back({"Practice setup", "Review and start"});
             events.push_back({"Confirm local team practice", "Start local practice"});
             alliance_game::practice_plan({}, saved);
             require(pending && queue_count == 1 && queued_profile.experience == 5 &&
                     alliance_game::same_practice_snapshot(queued, saved, response_profile.account_id), "Fresh consented data was not queued");
-            const auto& text = seen[0].description;
-            for(const auto* required : {"You control side 4", "computer controls every other side", "saved leaders and alliances",
+            const auto& text = seen.back().description;
+            for(const auto* required : {"Control: My side", "Side 4: UniRecruit — Spearman, level 1 — Koichi — Local player on this device", "saved leaders and alliances",
                                        "No players or teams are reserved", "no account experience, team experience or rating",
                                        "Other players do not join this game", "checked again after you confirm"})
                 require(text.find(required) != std::string::npos, std::string("Missing explanation: ") + required);
@@ -502,16 +626,17 @@ int main()
         check("confirmation displays the latest eligible lineup rather than the old menu copy", [] {
             change_on_read = 1; read_change = Change::leader;
             const auto cached = saved;
+            events.push_back({"Practice setup", "Review and start"});
             events.push_back({"Confirm local team practice", "Start local practice"});
             alliance_game::practice_plan({}, cached);
             require(pending && queued.teams[1].players[1].unit_type == "Swordsman", "New confirmed lineup was lost");
-            require(seen[0].description.find("UniRival — Swordsman, level 2") != std::string::npos,
+            require(seen.back().description.find("UniRival — Swordsman, level 2") != std::string::npos,
                     "Confirmation silently used old lineup");
         });
         check("complete title account teams plans detail chain unwinds before handoff", [] {
             events = {{"Alliance", "Teams"}, {"Alliance teams", "Battle plans"},
                       {"Battle plans", "My battle plans"}, {"My battle plans", "", 0},
-                      {"Battle plan", "Practice this plan"}, {"Confirm local team practice", "Start local practice"}};
+                      {"Battle plan", "Practice this plan"}, {"Practice setup", "Review and start"}, {"Confirm local team practice", "Start local practice"}};
             TitleFixture title; title.open();
             require(events.empty() && pending && queue_count == 1, "Practice not queued exactly once");
             require(title.retval == alliance_game::practice_title_result, "Title did not request engine handoff");
@@ -525,7 +650,7 @@ int main()
             events = {{"Alliance", "Teams"}, {"Alliance teams", "Battle plans"},
                       {"Battle plans", "My battle plans"}, {"My battle plans", "", 0},
                       {"Battle plan", "Set myself ready"}, {"Confirm ready", "Set myself ready"},
-                      {"Battle plan", "Practice this plan"}, {"Confirm local team practice", "Start local practice"}};
+                      {"Battle plan", "Practice this plan"}, {"Practice setup", "Review and start"}, {"Confirm local team practice", "Start local practice"}};
             TitleFixture title; title.open();
             require(events.empty() && pending && queue_count == 1 && mutations == 1, "Separate choices did not save and queue once");
             require(title.retval == alliance_game::practice_title_result && modal_depth == 0, "Separate choices failed title handoff");
@@ -541,7 +666,7 @@ int main()
         check("cancelled confirmation returns to menus without title handoff", [] {
             events = {{"Alliance", "Teams"}, {"Alliance teams", "Battle plans"},
                       {"Battle plans", "My battle plans"}, {"My battle plans", "", 0},
-                      {"Battle plan", "Practice this plan"}, {"Confirm local team practice", "<default>"},
+                      {"Battle plan", "Practice this plan"}, {"Practice setup", "Review and start"}, {"Confirm local team practice", "<default>"},
                       {"Battle plan", "<close>"}, {"My battle plans", "<close>"}, {"Battle plans", "<close>"},
                       {"Alliance teams", "<close>"}, {"Alliance", "<close>"}};
             TitleFixture title; title.open();
