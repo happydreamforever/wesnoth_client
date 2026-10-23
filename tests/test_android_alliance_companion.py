@@ -244,6 +244,24 @@ print(''' + repr(C.FINISHED + 'acknowledged') + ''',flush=True)
             with self.assertRaises(C.CompanionError): C.run_native(self.shell_device(), script, {'token': TOKEN}, session)
             self.assertFalse((private / 'files/alliance-companions' / ACCOUNT / 'active').exists())
 
+    def test_real_shell_selects_compiled_dummy_sdl_drivers_for_headless_child(self):
+        # --nogui still initializes SDL video. A CLI launched with run-as has
+        # no Android SDLActivity, so inherited Android drivers must not win.
+        code = "import os,json,sys\njson.loads(sys.stdin.readline())\n" \
+            "assert os.environ['SDL_VIDEODRIVER']=='dummy'\n" \
+            "assert os.environ['SDL_AUDIODRIVER']=='dummy'\n" \
+            "print(" + repr(C.START) + ",flush=True)\n" \
+            "print(" + repr(C.FINISHED + 'acknowledged') + ",flush=True)\n"
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(os.environ,
+                {'SDL_VIDEODRIVER': 'android', 'SDL_AUDIODRIVER': 'openslES'}):
+            stage, private, hashes = self.make_payload(Path(tmp), code)
+            session, script = C.launch_script(str(private), str(stage), ACCOUNT, RUN, 'a' * 32,
+                '/data', hashes, hashlib.sha256(b'public-profile-fixture').hexdigest())
+            self.assertEqual(C.run_native(self.shell_device(), script, {'token': TOKEN}, session,
+                emit=lambda *a, **k: None), 'acknowledged')
+            self.assertEqual(os.environ['SDL_VIDEODRIVER'], 'android')
+            self.assertEqual(os.environ['SDL_AUDIODRIVER'], 'openslES')
+
     def test_real_shell_account_lock_prevents_duplicate_without_removing_owner(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp); stage, private, hashes = self.make_payload(root)
