@@ -16,7 +16,8 @@ std::deque<Choice> choices;
 std::deque<Credential> credentials;
 std::deque<account::Reply> replies;
 std::vector<std::string> operations,messages,menu_titles;
-int login_prompts=0, auth_windows=0, backdrops=0, redraws=0, paints=0;
+int login_prompts=0, auth_windows=0, backdrops=0, redraws=0, paints=0, foreground_depth=0;
+bool revoke_on_retry=false;std::vector<std::pair<std::string,std::string>> reauth_requests;int reauth_clears=0;
 std::vector<std::string> welcome_notices;
 std::vector<bool> signup_visibility;
 void need(bool value){if(!value)throw std::runtime_error("assertion");}
@@ -81,20 +82,23 @@ const char* ProfileReadError::what()const noexcept{return "profile failure";}
 }
 namespace alliance_game {
 PlayerSession::~PlayerSession(){clear_secret(token);}
-void retry_story_results() noexcept {}
+void retry_story_results() noexcept {if(revoke_on_retry){session.clear();revoke_on_retry=false;}}
 int select(const std::string& title,const std::string&,const std::vector<std::string>& items){need(title=="Heroes");need(items==std::vector<std::string>({"My heroes","Account details"}));menu_titles.push_back(title);need(!choices.empty());auto c=choices.front();choices.pop_front();return c.accepted?c.selected:-1;}
 void heroes_dialog(const alliance::TrustedProfile&){}
 void refresh(const alliance::TrustedProfile&){}
 
 struct HeroForm {std::string name;int native_level;};
 const HeroForm* find_hero_form(const std::string& hero,const std::string& form){static HeroForm spec{"Fighter",1};return hero=="konrad"&&form=="konrad_fighter"?&spec:nullptr;}
+struct AccountNetworkActivity {AccountNetworkActivity(){++foreground_depth;}~AccountNetworkActivity(){--foreground_depth;}};
+void request_session_reauthentication(const std::string& actor,const std::string& generation){reauth_requests.emplace_back(actor,generation);}
+void clear_session_reauthentication() noexcept {++reauth_clears;}
 // @FUNCTIONS@
 }
 namespace {
 account::Profile profile(){account::Profile p;p.account_id="11111111-1111-4111-8111-111111111111";p.username="NewPlayer";p.database_generation="22222222-2222-4222-8222-222222222222";return p;}
 account::Reply ok(bool token=false){account::Reply r;r.ok=true;r.profile=profile();if(token)r.token=std::string(43,'a');return r;}
 account::Reply owned(){auto r=ok();account::Hero h;h.hero_id="konrad";h.name="Konrad";h.hero_level=5;h.revision=4;h.forms={"konrad_fighter"};r.profile.heroes.push_back(h);return r;}
-void reset(){need(auth_windows==0&&backdrops==0);welcome_notices.clear();signup_visibility.clear();redraws=paints=0;session.clear();choices.clear();credentials.clear();replies.clear();operations.clear();messages.clear();menu_titles.clear();login_prompts=0;setenv("WESNOTH_ALLIANCE_PROFILE","/public-profile.json",1);}
+void reset(){need(auth_windows==0&&backdrops==0&&foreground_depth==0);revoke_on_retry=false;reauth_requests.clear();reauth_clears=0;welcome_notices.clear();signup_visibility.clear();redraws=paints=0;session.clear();choices.clear();credentials.clear();replies.clear();operations.clear();messages.clear();menu_titles.clear();login_prompts=0;setenv("WESNOTH_ALLIANCE_PROFILE","/public-profile.json",1);}
 void ready(){session.profile=profile();session.token=std::string(43,'a');session.identity="127.0.0.1:15001:pin";}
 }
 int main(){try{
@@ -142,10 +146,12 @@ int main(){try{
  std::cout<<"PASS a mismatched existing token cannot bypass the restricted gate\n";
  reset();ready();choices={{false,0}};alliance_game::show_account_dialog();need(menu_titles==std::vector<std::string>{"Heroes"});need(operations.empty());need(!session.token.empty());
  std::cout<<"PASS Heroes contains collection and details only, never logout\n";
- reset();ready();replies={ok()};alliance_game::logout_player();need(session.token.empty()&&session.profile.account_id.empty());need(operations==std::vector<std::string>{"logout"});
- reset();ready();replies={bad};alliance_game::logout_player();need(session.token.empty());
+ reset();ready();replies={ok()};alliance_game::logout_player();need(session.token.empty()&&session.profile.account_id.empty());need(operations==std::vector<std::string>{"logout"});need(messages.empty());
+ reset();ready();replies={bad};alliance_game::logout_player();need(session.token.empty()&&messages.empty());
  std::cout<<"PASS main-menu logout clears common session with or without server acknowledgement\n";
  reset();ready();need(alliance_game::has_player_session());alliance_game::invalidate_player_session();need(!alliance_game::has_player_session());need(session.token.empty()&&session.identity.empty()&&session.profile.account_id.empty());need(operations.empty());
  std::cout<<"PASS network invalidation clears session without network or dialog recursion\n";
+ reset();revoke_on_retry=true;choices={{true,0},{false,0}};credentials={{true,"NewPlayer","fixture-password"}};replies={ok(true)};need(!alliance_game::ensure_player_session());need(session.token.empty()&&menu_titles.size()==2);
+ std::cout<<"PASS queued-result revocation returns to authentication instead of admitting an empty session\n";
  std::cout<<"PASS all unified startup UI cases\n";return 0;
 }catch(...){std::cerr<<"FAIL unified startup UI fixture\n";return 1;}}
