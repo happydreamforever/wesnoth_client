@@ -260,6 +260,24 @@ try {
         if(allowed) require(admission.upload_only,"Evidence retry accidentally queued normal gameplay");
         completed("shared evidence retry is separate from gameplay: "+state);
     }
+    for(int mode=0;mode<10;++mode) {
+        reset();current_battle.state="completed";const auto viewed=current_battle;
+        events.push_back({"Download completed battle replay",mode==0?"<default>":"Download my permitted recording",mode==1?std::function<void()>(changed_actor):std::function<void()>{}});
+        if(mode>=2) {
+            if(mode==3)current_battle.state="running";
+            if(mode==4)current_battle.id=other;
+            if(mode==5){current_battle.teams[0].captain_id=other;current_battle.teams[0].players[0].id=other;}
+            if(mode==8){current_battle.teams[0].players[0].id=other;}
+            if(mode==9){current_battle.teams[0].captain_id=other;}
+            network.push_back({"battle_detail",{},mode==2,mode==6?std::function<void()>(changed_actor):std::function<void()>{}});
+        }
+        alliance_game::download_shared_replay(trusted,viewed);
+        const bool allowed=mode>=7;
+        require(joins==(allowed?1:0),"Replay download ignored consent, actor, exact run or permission");
+        if(allowed)require(admission.download_only&&!admission.upload_only&&!admission.computer_controlled,"Replay download entered gameplay or evidence upload");
+        require(std::all_of(calls.begin(),calls.end(),[](const auto& op){return op=="battle_detail";}),"Replay download mutated server state");
+        completed("server replay download Back, actor, refresh, identity and selected/captain guards "+std::to_string(mode));
+    }
     std::cout<<"PASS all progression UI cases ("<<groups<<" groups)\n";return 0;
 } catch(const std::exception& error) {std::cerr<<"FAIL "<<error.what()<<'\n';return 1;}
 }

@@ -171,6 +171,7 @@ bool replay_pending() noexcept { return false; }
 void campaign_progression(const alliance::TrustedProfile&) { unrelated(); }
 void captain_orders(const alliance::TrustedProfile&) { unrelated(); }
 void join_shared_battle(const alliance::TrustedProfile&, const account::Battle&, bool) { unrelated(); }
+void download_shared_replay(const alliance::TrustedProfile&, const account::Battle&) { unrelated(); }
 void shared_result_review(const alliance::TrustedProfile&, const account::Battle&) { unrelated(); }
 struct SharedJournalBoundary { std::string run_id, status; };
 std::vector<SharedJournalBoundary> inspect_pending_shared(const std::string&) { return {}; }
