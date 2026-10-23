@@ -15,6 +15,8 @@ struct Request {
     std::string battle_id, opponent_team_id, map_id;
     std::vector<Lineup> lineups;
     bool ready = false;
+    // Closed progression extension; validated before opening any socket.
+    std::string progression_json;
 };
 struct Profile {
     std::string account_id, username, unit_type, starter_id;
@@ -64,6 +66,7 @@ struct Battle {
     std::vector<BattleTeam> teams;
 };
 struct Reply {
+    std::string progression_json;
     bool ok = false;
     std::string error_code, error_message, token;
     Profile profile;
@@ -80,6 +83,8 @@ struct Reply {
     std::optional<Battle> battle;
 };
 bool team_name_valid(const std::string&);
+// Same strict public battle projection used by account responses and the shared relay.
+Battle parse_shared_battle_descriptor(const std::string&);
 // Called only by a worker. One connection/request with an overall 10s deadline;
 // never retries a potentially completed registration or team mutation, and never logs credentials.
 Reply perform_request(const TrustedProfile&, const Request&, const CancellationToken&);

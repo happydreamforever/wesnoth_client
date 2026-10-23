@@ -90,6 +90,7 @@ int main(int argc, char** argv)
         }
         Request request;
         request.operation = field(input, "operation");
+        request.progression_json = field(input, "progression_json");
         request.username = field(input, "username");
         request.password = field(input, "password");
         request.starter_id = field(input, "starter_id");

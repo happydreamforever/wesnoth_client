@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "account_client.hpp"
 #include "account_protocol.hpp"
+#include "progression_protocol.hpp"
 #include <openssl/rand.h>
 #include <algorithm>
 #include <array>
@@ -516,6 +517,8 @@ Profile profile(const json::object& data) {
 }
 }
 
+Battle parse_shared_battle_descriptor(const std::string& raw) { return battle(parse_document(raw)); }
+
 bool team_name_valid(const std::string& value) {
     auto alnum = [](char c) { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9'); };
     return value.size() >= 3 && value.size() <= 40 && alnum(value.front()) && value.back() != ' ' &&
@@ -595,6 +598,7 @@ Reply perform_request(const TrustedProfile& trusted, const Request& request,
     try {
         json::object body;
         const auto& op = request.operation;
+        const bool is_progression = progression_protocol::operation(op);
         const bool is_team = team_operation(op);
         const bool is_battle = battle_operation(op);
         if(op != "leave_team" && request.allow_archive) return failure("invalid_input", is_team);
@@ -604,7 +608,13 @@ Reply perform_request(const TrustedProfile& trusted, const Request& request,
         if(!is_team && (!request.name.empty() || !request.area_id.empty() ||
                        !request.team_id.empty() || !request.account_id.empty() || !request.after.empty() ||
                        !request.decision_id.empty())) return failure("invalid_input");
-        if(is_battle) {
+        if(!is_progression && !request.progression_json.empty()) return failure("invalid_input");
+        if(is_progression) {
+            if(!token_valid(request.token) || !request.username.empty() || !request.password.empty() ||
+               !request.starter_id.empty() || request.progression_json.empty()) return failure("invalid_input");
+            body = parse_document(request.progression_json);
+            progression_protocol::request(op, body);
+        } else if(is_battle) {
             if(!token_valid(request.token) || !request.username.empty() || !request.password.empty() ||
                !request.starter_id.empty() || !request.name.empty() || !request.account_id.empty() ||
                !request.decision_id.empty()) return team_failure("invalid_input");
@@ -708,7 +718,7 @@ Reply perform_request(const TrustedProfile& trusted, const Request& request,
         std::string id;
         for(auto c : random) { id += hex[c >> 4]; id += hex[c & 15]; }
         json::object message{{"v", 1}, {"id", id}, {"op", op}, {"body", std::move(body)}};
-        if(op == "me" || op == "logout" || is_team) message["token"] = request.token;
+        if(op == "me" || op == "logout" || is_team || is_progression) message["token"] = request.token;
         auto frame = encode_message(message);
         const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
         auto remaining = [&]() {
@@ -736,6 +746,12 @@ Reply perform_request(const TrustedProfile& trusted, const Request& request,
             keys(data, {"code", "message"});
             auto code = string(data, "code", 64);
             string(data, "message", 256);
+            if(is_progression) {
+                auto reply = failure(status == 401 ? "invalid_session" : code);
+                const auto public_message=progression_protocol::public_error(code);
+                if(status!=401&&!public_message.empty()) reply.error_message=public_message;
+                return reply;
+            }
             if(is_team) {
                 if(status == 401) return failure("invalid_session");
                 if(status == 403) return team_failure("forbidden");
@@ -748,7 +764,11 @@ Reply perform_request(const TrustedProfile& trusted, const Request& request,
             return failure(code);
         }
         Reply reply;
-        if(is_team) {
+        if(is_progression) {
+            if(status != 200) invalid();
+            progression_protocol::response(op, data);
+            reply.progression_json = json::serialize(data);
+        } else if(is_team) {
             if(status != (op == "create_team" || op == "propose_battle" ? 201 : 200)) invalid();
             if(is_battle) battle_response(data, request, reply);
             else team_response(data, request, reply);
