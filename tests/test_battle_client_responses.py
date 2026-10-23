@@ -242,7 +242,7 @@ class BattleClientResponseTests(AccountClientResponseTests):
     def test_battle_safe_errors_preserve_session_except_authenticated_401(self):
         battle = self.battle()
         cases = [(409, code, code) for code in ("planning_exists", "invalid_map", "invalid_lineup", "different_area",
-                 "stale_proposal", "approval_required", "invalid_state", "busy", "not_member", "conflict")]
+                 "stale_proposal", "advancement_required", "approval_required", "invalid_state", "busy", "not_member", "conflict")]
         cases += [(403, "forbidden", "forbidden"), (401, "forbidden", "invalid_session"), (503, "private", "team_failed")]
         for status, code, expected in cases:
             def responder(request):

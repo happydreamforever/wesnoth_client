@@ -145,6 +145,7 @@ Reply team_failure(const std::string& code) {
     else if(code == "invalid_lineup") result.error_message = "The selected lineups no longer match the map and teams. Load the rosters again.";
     else if(code == "different_area") result.error_message = "Both teams must belong to the same area.";
     else if(code == "stale_proposal") result.error_message = "This plan no longer matches the current teams or leaders. Open its detail; a current captain can cancel the draft and prepare a new plan.";
+    else if(code == "advancement_required") result.error_message = "A selected player must choose their available leader advancement in Campaign progression before preparing this battle.";
     else if(code == "approval_required") result.error_message = "Both current captains must approve this saved plan before players can become ready.";
     else if(code == "invalid_state") result.error_message = "This battle plan is no longer a draft. Refresh My battle plans before making another change.";
     else { result.error_code = "team_failed"; result.error_message = "The team request could not be completed. Try viewing My team."; }

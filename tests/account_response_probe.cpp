@@ -27,7 +27,7 @@ std::string safe_error(const std::string& value)
           "invalid_session", "forbidden", "suspended", "conflict", "rate_limited",
           "timeout", "cancelled", "identity", "protocol", "unavailable",
           "profile_rejected", "document_rejected", "team_failed", "already_member", "busy", "not_found", "capacity", "not_requested", "not_member", "captain_transfer_required",
-          "planning_exists", "invalid_map", "invalid_lineup", "different_area", "stale_proposal", "approval_required", "invalid_state"}) {
+          "planning_exists", "invalid_map", "invalid_lineup", "different_area", "stale_proposal", "advancement_required", "approval_required", "invalid_state"}) {
         if(value == allowed) return value;
     }
     return "unrecognized_error";
