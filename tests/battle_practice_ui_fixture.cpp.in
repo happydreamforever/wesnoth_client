@@ -1,6 +1,9 @@
 // Scripted boundaries around source-extracted production UI controllers.
 #include "alliance_native/account_client.hpp"
 #include "alliance_game/practice_plan.hpp"
+#include "alliance_game/progression_plan.hpp"
+#include "alliance_game/replay_launch.hpp"
+#include "alliance_game/shared_launch.hpp"
 #include <algorithm>
 #include <array>
 #include <cstdlib>
@@ -160,6 +163,20 @@ void logout(const alliance::TrustedProfile&) { unrelated(); }
 void register_player(const alliance::TrustedProfile&) { unrelated(); }
 void login(const alliance::TrustedProfile&) { unrelated(); }
 void propose_battle(const alliance::TrustedProfile&) { unrelated(); }
+// New campaign/shared actions are covered by progression_ui_fixture; these
+// boundaries keep the existing local-training scenarios independent of them.
+bool progression_pending() noexcept { return false; }
+bool shared_pending() noexcept { return false; }
+bool replay_pending() noexcept { return false; }
+void campaign_progression(const alliance::TrustedProfile&) { unrelated(); }
+void captain_orders(const alliance::TrustedProfile&) { unrelated(); }
+void join_shared_battle(const alliance::TrustedProfile&, const account::Battle&, bool) { unrelated(); }
+void shared_result_review(const alliance::TrustedProfile&, const account::Battle&) { unrelated(); }
+struct SharedJournalBoundary { std::string run_id, status; };
+std::vector<SharedJournalBoundary> inspect_pending_shared(const std::string&) { return {}; }
+std::string verified_shared_replay(const std::string&, const std::string&) { throw std::runtime_error("No local recording"); }
+void queue_alliance_replay(AllianceReplay, const std::string&, const std::string&) { unrelated(); }
+bool same_extension_actor(const std::string&) { unrelated(); return false; }
 
 // @FUNCTIONS@
 }
@@ -386,17 +403,18 @@ int main()
                 require(!player.ready, "Withdrawal changed another player's consent");
             require(has_message("You are now not ready."), "Missing withdrawal acknowledgement");
         });
-        check("cancelled running and completed plans have no practice or dummy replay action", [] {
+        check("closed states cannot practice and unavailable recordings never expose replay", [] {
             for(const auto* state : {"cancelled", "running", "completed"}) {
                 saved.state = state;
                 require(!alliance_game::can_practice_plan(saved, response_profile), "Inactive state accepted");
                 events.push_back({"Battle plan", "<close>"});
                 alliance_game::battle_detail({}, saved.id);
                 const auto& menu = seen.back();
-                require(menu.rows.size() == 3, "Closed state exposes launch or mutation");
+                require(std::find(menu.rows.begin(), menu.rows.end(), "Practice this plan") == menu.rows.end(), "Closed state exposes practice");
+                require(std::find(menu.rows.begin(), menu.rows.end(), "Watch completed battle replay") == menu.rows.end(), "Missing recording exposes replay");
+                require(std::find(menu.rows.begin(), menu.rows.end(), "Set myself ready") == menu.rows.end(), "Closed state exposes readiness mutation");
                 require(menu.description.find("Practice this plan opens") == std::string::npos, "Closed state promises practice");
-                if(saved.state == "completed") require(menu.description.find("replay viewing is not available") != std::string::npos,
-                                                       "Completed screen invents an available recording");
+                if(saved.state == "running") require(std::find(menu.rows.begin(), menu.rows.end(), "Reconnect to my side") != menu.rows.end(), "Running saved side cannot reconnect");
             }
             require(!pending && queue_count == 0, "Closed state launched");
         });

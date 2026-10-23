@@ -1,0 +1,265 @@
+// Scripted boundaries for production progression and team-extension controllers.
+#include "alliance_native/account_client.hpp"
+#include "alliance_native/account_protocol.hpp"
+#include "alliance_native/progression_protocol.hpp"
+#include "alliance_game/progression_plan.hpp"
+#include "alliance_game/progression_result.hpp"
+#include "alliance_game/replay_launch.hpp"
+#include "alliance_game/shared_launch.hpp"
+#include <algorithm>
+#include <deque>
+#include <functional>
+#include <iostream>
+#include <stdexcept>
+#include <string>
+#include <vector>
+
+namespace account=alliance::account;
+namespace json=boost::json;
+const std::string actor="00000000-0000-0000-0000-000000000001";
+const std::string other="00000000-0000-0000-0000-000000000002";
+const std::string run_id="00000000-0000-0000-0000-000000000100";
+const std::string team_id="00000000-0000-0000-0000-000000000010";
+const std::string digest(64,'a');
+void require(bool condition,const std::string& why) {if(!condition) throw std::runtime_error(why);}
+struct Event {std::string title,action;std::function<void()> change={};};
+struct Network {std::string op;json::object response;bool fail=false;std::function<void()> change={};};
+std::deque<Event> events;
+std::deque<Network> network;
+std::vector<std::string> messages,calls;
+std::vector<json::object> bodies;
+std::vector<alliance_game::ProgressionPending> records;
+int acknowledged=0,cancelled=0,replays=0,joins=0,depth=0,groups=0;
+bool replay_available=true,replay_queued=false;
+account::Team own_team;
+account::Battle current_battle;
+alliance_game::SharedAdmission admission;
+std::string edited_text="Hold the river crossing.";
+bool edit_confirmed=true;
+
+namespace gui2 {namespace retval {constexpr int OK=1;constexpr int CANCEL=0;}}
+namespace gui2::dialogs {
+class simple_item_selector {
+public:
+    simple_item_selector(const std::string& title,const std::string&,const std::vector<std::string>& rows,bool,bool)
+        :title_(title),rows_(rows) {++depth;}
+    ~simple_item_selector() {--depth;}
+    void set_allow_plugin_skip(bool value) {skip_=value;}
+    void set_selected_index(int value) {index_=value;}
+    void set_ok_label(const std::string&) {}
+    void set_cancel_label(const std::string&) {}
+    bool show() {
+        require(!skip_&&index_==0,"Unsafe consent selector defaults");
+        require(!events.empty(),"Unexpected reopened menu: "+title_);
+        auto event=events.front();events.pop_front();
+        require(event.title==title_,"Wrong menu: "+title_+" expected "+event.title);
+        if(event.change) event.change();
+        if(event.action=="<back>") return false;
+        if(event.action=="<default>") {require(rows_.front()=="Back without changes","Mutation default is not Back");return true;}
+        if(event.action=="@0") {index_=0;return true;}
+        const auto found=std::find(rows_.begin(),rows_.end(),event.action);
+        require(found!=rows_.end(),"Missing production action: "+event.action);
+        index_=static_cast<int>(found-rows_.begin());return true;
+    }
+    int selected_index() const {return index_;}
+private:
+    std::string title_;std::vector<std::string> rows_;int index_=-1;bool skip_=true;
+};
+}
+namespace alliance_game {
+struct Session {std::string token;account::Profile profile;} session;
+Session& current_session() {return session;}
+void message(const std::string& value) {messages.push_back(value);}
+std::string profile_text(const account::Profile& value) {return value.account_id+" "+value.unit_type;}
+std::string take_progression_notice() {return {};}
+std::vector<ProgressionPending> inspect_pending_progression(const std::string& id) {require(id==actor,"Wrong journal owner");return records;}
+void acknowledge_progression_result(const std::string& id,const std::string& run,const std::string& outcome) {
+    require(id==actor&&run==run_id&&outcome=="win","Wrong saved result acknowledged");++acknowledged;
+}
+void acknowledge_progression_cancel(const std::string& id,const std::string& run) {
+    require(id==actor&&run==run_id,"Wrong cancellation acknowledged");++cancelled;
+}
+std::string verified_progression_replay(const std::string& id,const std::string& run) {
+    require(id==actor&&run==run_id,"Wrong replay owner/run");if(!replay_available) throw std::runtime_error("Private storage error");return "saved-replay";
+}
+void queue_alliance_replay(AllianceReplay kind,const std::string& id,const std::string& run) {
+    require(kind==AllianceReplay::campaign&&id==actor&&run==run_id&&depth==0,"Wrong replay queue");++replays;replay_queued=true;
+}
+bool replay_pending() noexcept {return replay_queued;}
+void queue_shared(SharedAdmission value) {
+    require(depth==0&&value.account_id==actor&&value.run_id==run_id&&value.profile.port==15002,"Wrong shared queue");
+    admission=std::move(value);++joins;
+}
+bool team_request(const alliance::TrustedProfile&,account::Request request,const std::string&,account::Reply& reply) {
+    require(!network.empty(),"Unexpected request or automatic retry: "+request.operation);
+    auto item=network.front();network.pop_front();require(item.op==request.operation,"Wrong request: "+request.operation+" expected "+item.op);
+    calls.push_back(request.operation);
+    if(request.operation=="my_team") reply.team=own_team;
+    else if(request.operation=="battle_detail") {require(request.battle_id==run_id,"Wrong plan read");reply.battle=current_battle;}
+    else {
+        auto body=account::parse_document(request.progression_json);
+        alliance::progression_protocol::request(request.operation,body);bodies.push_back(body);
+        reply.progression_json=json::serialize(item.response);
+    }
+    if(item.change) item.change();
+    return !item.fail;
+}
+class CaptainOrderDialog {
+public:
+    explicit CaptainOrderDialog(std::string& text):text_(text) {}
+    void show() {text_=edited_text;}
+    int get_retval() const {return edit_confirmed?gui2::retval::OK:gui2::retval::CANCEL;}
+private: std::string& text_;
+};
+// @SELECTORS@
+// @PROGRESSION@
+// @TEAM@
+}
+json::object leader() {return {{"id",actor},{"username","UniPlayer"},{"starter_id","spearman"},{"unit_type","Spearman"},
+    {"level",1},{"experience",0},{"total_experience",0},{"advancement_choices",json::array{"Swordsman","Pikeman"}}};}
+json::object run(const std::string& state="running",const std::string& owner=actor) {
+    return {{"id",run_id},{"account_id",owner},{"username","UniPlayer"},{"mission_id","alliance_training_1"},
+        {"mission_name","Border Patrol"},{"mission_version","progression-campaign-v1"},{"ruleset_version","alliance-v1"},
+        {"state",state},{"unit_type","Spearman"},{"leader_level",1},{"nonce",state=="running"?digest:""},
+        {"created_at","2026-10-23T00:00:00Z"},{"finished_at",state=="running"?"":"2026-10-23T01:00:00Z"},
+        {"outcome",state=="completed"?"win":""},{"experience_awarded",state=="completed"?20:0}};
+}
+json::object catalog(bool active=false) {
+    json::array missions;
+    for(int i=1;i<=3;++i) missions.push_back(json::object{{"id","alliance_training_"+std::to_string(i)},
+        {"name",i==1?"Border Patrol":i==2?"The River Crossing":"The Old Fortress"},
+        {"version","progression-campaign-v1"},{"unlocked",i==1},{"completed",false},{"victory_experience",20}});
+    return {{"profile",leader()},{"missions",missions},{"active_run",active?json::value(run()):json::value(nullptr)}};
+}
+json::object finish_result() {return {{"run",run("completed")},{"profile",leader()},{"experience_awarded",20}};}
+json::object review() {return {{"run_id",run_id},{"state","running"},{"review_state","awaiting_captains"},
+    {"candidate_digest",digest},{"winner_team_id",team_id},{"draw",false},{"reports_received",4},{"required_reports",4},
+    {"captains_approved",0},{"revision",1}};}
+json::object order() {return {{"id",run_id},{"author_id",actor},{"author_name","UniPlayer"},{"text",edited_text},{"created_at","2026-10-23T00:00:00Z"}};}
+json::object orders() {return {{"team_id",team_id},{"team_name","Koichi"},{"has_more",false},{"orders",json::array{}}};}
+const alliance::TrustedProfile trusted{"100.99.99.14",15001,"fixture certificate","fixture pin"};
+void changed_actor() {alliance_game::session.profile.account_id=other;}
+void logout_actor() {alliance_game::session.token.clear();}
+void reset() {
+    require(events.empty()&&network.empty(),"Unconsumed fixture events");
+    (void)alliance_game::take_pending_progression();
+    calls.clear();bodies.clear();messages.clear();records.clear();acknowledged=cancelled=replays=joins=0;
+    replay_available=true;replay_queued=false;edit_confirmed=true;edited_text="Hold the river crossing.";
+    alliance_game::session={"fixture-token",{actor,"UniPlayer","Spearman","spearman",1,0,0}};
+    own_team={};own_team.id=team_id;own_team.name="Koichi";own_team.captain_id=actor;
+    current_battle={};current_battle.id=run_id;current_battle.state="draft";current_battle.validity="valid";
+    account::BattleTeam t;t.id=team_id;t.name="Koichi";t.captain_id=actor;t.approved=true;
+    t.players.push_back({actor,"UniPlayer","Spearman",1,1,true});
+    t.players.push_back({other,"UniRecruit","Spearman",1,4,true});current_battle.teams.push_back(t);
+    account::BattleTeam rival;rival.id="00000000-0000-0000-0000-000000000011";rival.name="Rival";rival.approved=true;
+    rival.captain_id="00000000-0000-0000-0000-000000000003";
+    rival.players.push_back({rival.captain_id,"UniRival","Spearman",1,2,true});
+    rival.players.push_back({"00000000-0000-0000-0000-000000000004","UniRivalReady","Spearman",1,3,true});
+    current_battle.teams.push_back(rival);
+}
+void completed(const std::string& name) {require(events.empty()&&network.empty()&&depth==0,"Incomplete flow: "+name);++groups;std::cout<<"PASS "<<name<<'\n';}
+bool message_contains(const std::string& s) {return std::any_of(messages.begin(),messages.end(),[&](const auto& v){return v.find(s)!=std::string::npos;});}
+void expect_throw(const std::function<void()>& action) {bool caught=false;try {action();}catch(const std::runtime_error&) {caught=true;}require(caught,"Expected unsafe acknowledgement rejection");}
+void pending_record() {
+    alliance_game::ProgressionPending p;p.run=alliance_game::progression_descriptor(run());p.status="pending";p.outcome="win";p.replay_sha256=digest;records.push_back(p);
+}
+void start_menu(const std::string& action,std::function<void()> change={}) {
+    events.push_back({"Campaign progression","Border Patrol"});events.push_back({"Start campaign mission",action,change});
+    network.push_back({"progression_catalog",catalog()});
+}
+void back_campaign() {events.push_back({"Campaign progression","<back>"});network.push_back({"progression_catalog",catalog()});}
+int main() {
+try {
+    reset();start_menu("<default>");back_campaign();alliance_game::campaign_progression(trusted);
+    require(!alliance_game::progression_pending()&&calls.size()==2,"Back reserved mission");completed("campaign start defaults to Back");
+    for(const auto& change:{std::function<void()>(changed_actor),std::function<void()>(logout_actor)}) {
+        reset();start_menu("Start mission",change);alliance_game::campaign_progression(trusted);
+        require(calls.size()==1&&!alliance_game::progression_pending(),"Changed actor started mission");completed("campaign start rejects modal actor or logout change");
+    }
+    reset();start_menu("Start mission");network.push_back({"progression_start",{{"run",run()}}});alliance_game::campaign_progression(trusted);
+    require(alliance_game::progression_pending(),"Valid mission was not queued");
+    {auto queued=alliance_game::take_pending_progression();require(queued&&queued->account_id==actor&&queued->id==run_id,"Wrong queued mission");}
+    require(bodies.back().at("mission_id")=="alliance_training_1","Wrong chosen mission");completed("confirmed start queues exact valid production descriptor");
+    reset();start_menu("Start mission");network.push_back({"progression_start",{},true});alliance_game::campaign_progression(trusted);
+    require(!alliance_game::progression_pending()&&message_contains("inspect any reserved run"),"Failed start retried or omitted recovery");completed("unknown start never automatically retries");
+    reset();start_menu("Start mission");network.push_back({"progression_start",{{"run",run()}},false,changed_actor});alliance_game::campaign_progression(trusted);
+    require(!alliance_game::progression_pending(),"Changed response actor queued mission");completed("start response actor race rejects queue");
+    reset();start_menu("Start mission");network.push_back({"progression_start",{{"run",run("running",other)}}});
+    expect_throw([]{alliance_game::campaign_progression(trusted);});require(!alliance_game::progression_pending(),"Wrong owner queued");completed("start reply owner bound to player");
+    for(bool change:{false,true}) {
+        reset();events={{"Campaign progression","Choose leader advancement"},{"Choose permanent advancement",change?"Swordsman":"<default>",change?std::function<void()>(changed_actor):std::function<void()>{}}};
+        network.push_back({"progression_catalog",catalog()});if(!change) back_campaign();
+        alliance_game::campaign_progression(trusted);require(std::find(calls.begin(),calls.end(),"progression_advance")==calls.end(),"Unsafe advancement sent");completed("advancement Back or actor race does not mutate");
+    }
+    reset();events={{"Campaign progression","Choose leader advancement"},{"Choose permanent advancement","Swordsman"}};
+    network.push_back({"progression_catalog",catalog()});auto advanced=leader();advanced["unit_type"]="Swordsman";advanced["level"]=2;
+    network.push_back({"progression_advance",{{"profile",advanced}}});events.push_back({"Campaign progression","<back>"});auto after=catalog();after["profile"]=advanced;network.push_back({"progression_catalog",after});
+    alliance_game::campaign_progression(trusted);require(alliance_game::session.profile.unit_type=="Swordsman"&&message_contains("Leader advanced"),"Valid advancement not shown");completed("advancement uses selected branch and authoritative profile");
+    for(bool change:{false,true}) {
+        reset();events={{"Campaign progression","Inspect / cancel unfinished mission"},{"Unfinished mission",change?"Cancel this mission":"<default>",change?std::function<void()>(changed_actor):std::function<void()>{}}};
+        network.push_back({"progression_catalog",catalog(true)});if(!change) back_campaign();
+        alliance_game::campaign_progression(trusted);require(!cancelled&&std::find(calls.begin(),calls.end(),"progression_cancel")==calls.end(),"Unsafe cancellation sent");completed("mission cancellation Back or actor race does not mutate");
+    }
+    reset();events={{"Campaign progression","Inspect / cancel unfinished mission"},{"Unfinished mission","Cancel this mission"}};
+    network={{"progression_catalog",catalog(true)},{"progression_cancel",{{"run",run("cancelled")}}}};back_campaign();
+    alliance_game::campaign_progression(trusted);require(cancelled==1&&message_contains("No experience was awarded"),"Cancellation not acknowledged");completed("confirmed cancellation acknowledges exact journal once");
+    for(int mode=0;mode<5;++mode) {
+        reset();pending_record();events={{"Pending campaign results","@0"},{"Send campaign result",mode==0?"<default>":"Send result",mode==1?std::function<void()>(changed_actor):std::function<void()>{}}};
+        if(mode>=2) {auto response=finish_result();if(mode==3) response["run"].as_object()["id"]=other;network.push_back({"progression_finish",response,mode==2});}
+        if(mode==3) expect_throw([]{alliance_game::campaign_pending(trusted);});else alliance_game::campaign_pending(trusted);
+        require(acknowledged==(mode==4?1:0),"Unconfirmed or wrong result was acknowledged");
+        if(mode==2) require(message_contains("remains saved"),"Failed result omitted retained evidence");
+        completed("pending result Back, actor, failure, wrong-ID and exact acknowledgement "+std::to_string(mode));
+    }
+    for(int mode=0;mode<4;++mode) {
+        reset();network.push_back({"progression_history",{{"runs",json::array{run("completed")}},{"has_more",false}}});events.push_back({"Campaign history","@0"});
+        replay_available=mode!=0;if(mode!=0) events.push_back({"Completed campaign replay",mode==1?"<default>":"Watch replay",mode==2?std::function<void()>(changed_actor):std::function<void()>{}});
+        alliance_game::campaign_history(trusted);require(replays==(mode==3?1:0),"Replay queued without availability/consent/actor");
+        require(calls.size()==1,"Replay changed server state");completed("completed campaign replay availability and actor consent "+std::to_string(mode));
+    }
+    for(int mode=0;mode<5;++mode) {
+        reset();network={{"my_team",{}},{"coordination_orders",orders()}};events.push_back({"Captain orders — Koichi","Write captain orders"});
+        events.push_back({"Post captain orders",mode==0?"<default>":"Post to my team",mode==1?std::function<void()>(changed_actor):std::function<void()>{}});
+        if(mode>=2) {auto response=order();if(mode==3) response["author_id"]=other;network.push_back({"coordination_post",{{"order",response}},mode==2});}
+        if(mode==0||mode==4) {network.push_back({"my_team",{}});network.push_back({"coordination_orders",orders()});events.push_back({"Captain orders — Koichi","<back>"});}
+        if(mode==3) expect_throw([]{alliance_game::captain_orders(trusted);});else alliance_game::captain_orders(trusted);
+        require(message_contains("Captain orders saved")== (mode==4),"Unconfirmed order claimed saved");completed("captain orders Back, actor, failure and author acknowledgement "+std::to_string(mode));
+    }
+    for(int mode=0;mode<6;++mode) {
+        reset();network.push_back({"shared_review",review()});events.push_back({"Review shared battle result",mode==0?"<default>":"Confirm this result as captain",mode==1?std::function<void()>(changed_actor):std::function<void()>{}});
+        if(mode>=2) {auto response=review();if(mode==3) response["run_id"]=other;if(mode==4) response["candidate_digest"]=std::string(64,'b');network.push_back({"shared_confirm",response,mode==2});}
+        if(mode==3||mode==4) expect_throw([]{alliance_game::shared_result_review(trusted,current_battle);});else alliance_game::shared_result_review(trusted,current_battle);
+        require(message_contains("Captain result confirmation saved")== (mode==5),"Unconfirmed or mismatched result claimed saved");completed("shared confirmation Back, actor, failure, run and digest binding "+std::to_string(mode));
+    }
+    for(int mode=0;mode<5;++mode) {
+        reset();const auto viewed=current_battle;events.push_back({"Join shared battle",mode==0?"<default>":"Join my side",mode==1?std::function<void()>(changed_actor):std::function<void()>{}});
+        if(mode>=2) {if(mode==3) current_battle.state="cancelled";network.push_back({"battle_detail",{},mode==2});}
+        alliance_game::join_shared_battle(trusted,viewed,false);require(joins==(mode==4?1:0),"Join ignored consent, actor or fresh state");
+        completed("shared join Back, actor, refresh failure, cancelled and eligible "+std::to_string(mode));
+    }
+    for(int mode=0;mode<8;++mode) {
+        reset();const auto viewed=current_battle;events.push_back({"Join shared battle","Join my side"});
+        if(mode==0) current_battle.teams[0].players[0].ready=false;
+        if(mode==1) current_battle.teams[1].players[0].ready=false;
+        if(mode==2) current_battle.teams[1].approved=false;
+        if(mode==3) current_battle.teams[0].players[0].id="00000000-0000-0000-0000-000000000099";
+        if(mode==4) current_battle.id=other;
+        if(mode==6) {current_battle.state="running";current_battle.teams[0].players[0].ready=false;}
+        if(mode==7) current_battle.state="completed";
+        network.push_back({"battle_detail",{},false,mode==5?std::function<void()>(changed_actor):std::function<void()>{}});
+        alliance_game::join_shared_battle(trusted,viewed,false);
+        require(joins==(mode==6?1:0),"Shared join ignored selection, readiness, approval or exact refreshed identity");
+        completed("shared join fixed-seat and latest-state guards "+std::to_string(mode));
+    }
+    for(const auto& state:std::vector<std::string>{"draft","running","completed","cancelled"}) {
+        reset();current_battle.state=state;current_battle.teams[0].players[0].ready=false;
+        const auto viewed=current_battle;events.push_back({"Send saved battle result","Send saved result"});
+        network.push_back({"battle_detail",{}});alliance_game::join_shared_battle(trusted,viewed,true);
+        const bool allowed=state=="running"||state=="completed";
+        require(joins==(allowed?1:0),"Result retry state differs from gameplay admission");
+        if(allowed) require(admission.upload_only,"Evidence retry accidentally queued normal gameplay");
+        completed("shared evidence retry is separate from gameplay: "+state);
+    }
+    std::cout<<"PASS all progression UI cases ("<<groups<<" groups)\n";return 0;
+} catch(const std::exception& error) {std::cerr<<"FAIL "<<error.what()<<'\n';return 1;}
+}

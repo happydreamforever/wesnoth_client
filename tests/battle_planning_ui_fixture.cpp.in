@@ -1,6 +1,7 @@
 // Actual planning controllers; only modal selection and request boundaries are scripted.
 #include "alliance_native/account_client.hpp"
 #include "alliance_game/practice_plan.hpp"
+#include "alliance_game/replay_launch.hpp"
 #include <algorithm>
 #include <deque>
 #include <iostream>
@@ -74,6 +75,18 @@ void practice_plan(const alliance::TrustedProfile&, const account::Battle& battl
     ++practice_calls;
 }
 bool practice_pending() { return practice_calls != 0; }
+// Network gameplay/replay boundaries are covered separately; these cases
+// exercise the original planning/refresh paths with no retained recording.
+bool progression_pending() { return false; }
+bool shared_pending() { return false; }
+bool replay_pending() noexcept { return false; }
+void join_shared_battle(const alliance::TrustedProfile&, const account::Battle&, bool) { throw std::runtime_error("Unexpected gameplay action"); }
+void shared_result_review(const alliance::TrustedProfile&, const account::Battle&) { throw std::runtime_error("Unexpected result action"); }
+struct SharedJournalBoundary { std::string run_id, status; };
+std::vector<SharedJournalBoundary> inspect_pending_shared(const std::string&) { return {}; }
+std::string verified_shared_replay(const std::string&, const std::string&) { throw std::runtime_error("No local recording"); }
+void queue_alliance_replay(AllianceReplay, const std::string&, const std::string&) { throw std::runtime_error("Unexpected replay action"); }
+bool same_extension_actor(const std::string&) { throw std::runtime_error("Unexpected replay consent"); }
 
 // @FUNCTIONS@
 }
@@ -183,7 +196,8 @@ int main()
             steps = {{"Battle plan", "<close>", ""}};
             alliance_game::battle_detail({}, server_plan.id);
             contains(menus[0].text, "complete and inactive");
-            require(menus[0].rows.size() == 3 && !offered(menus[0], "Practice this plan"), "Completed plan offers actions");
+            require(!offered(menus[0], "Practice this plan") && !offered(menus[0], "Watch completed battle replay"), "Completed plan offers practice or a nonexistent recording");
+            require(offered(menus[0], "Review shared battle result"), "Completed result cannot be reviewed");
         });
         check("current captain approval is not invented from historical ready players", [] {
             server_plan.state = "cancelled";
