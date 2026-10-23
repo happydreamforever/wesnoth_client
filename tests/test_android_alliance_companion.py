@@ -31,38 +31,51 @@ C = importlib.util.module_from_spec(spec); spec.loader.exec_module(C)
 ACCOUNT = '11111111-1111-4111-8111-111111111111'
 RUN = '22222222-2222-4222-8222-222222222222'
 TOKEN = 't' * 43
+GENERATION = '33333333-3333-4333-8333-333333333333'
+
+
+def account():
+    return {'id': ACCOUNT, 'username': 'UniRecruit', 'database_generation': GENERATION, 'heroes': [
+        {'hero_id': 'konrad', 'name': 'Konrad', 'hero_level': 2, 'experience': 7, 'total_experience': 27, 'revision': 1, 'forms': ['konrad_fighter']}] }
+
+
+def selection():
+    return {'hero_id': 'konrad', 'form_id': 'konrad_fighter', 'hero_level': 2, 'hero_revision': 1, 'unit_type': 'Alliance Konrad Fighter', 'unit_level': 1}
 
 
 def battle():
-    players = [{'id': ACCOUNT if i == 1 else f'{i:08d}-1111-4111-8111-111111111111', 'side': i, 'ready': True} for i in range(1, 5)]
+    players = [{'id': ACCOUNT if i == 1 else f'{i:08d}-1111-4111-8111-111111111111', 'side': i, 'ready': True, 'selection': selection()} for i in range(1, 5)]
     return {'battle': {'id': RUN, 'state': 'draft', 'validity': 'valid', 'map': {'size': 2},
         'teams': [{'approved': True, 'captain_id': ACCOUNT, 'players': players[:2]}, {'approved': True, 'captain_id': players[2]['id'], 'players': players[2:]}]}}
 
 
 class FixtureServer:
-    def __init__(self, cert, key, handler=None, preamble=b'\0\0\0\0'):
+    def __init__(self, cert, key, handler=None, preamble=b'\0\0\0\0', version=2, requests=1):
         self.listener = socket.socket(); self.listener.bind(('127.0.0.1', 0)); self.listener.listen(1)
         self.listener.settimeout(10)
         self.port = self.listener.getsockname()[1]
         self.context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER); self.context.load_cert_chain(cert, key)
         self.handler = handler or (lambda request: {'status': 'logged_out'})
         self.preamble = preamble; self.application = None; self.error = None
+        self.version = version; self.requests = requests; self.applications = []
 
     def __enter__(self):
         def serve():
             try:
-                with self.listener.accept()[0] as raw:
-                    raw.settimeout(5)
-                    if raw.recv(4) != b'\0\0\0\1': raise AssertionError('preamble differs')
-                    raw.sendall(self.preamble)
-                    if self.preamble != b'\0\0\0\0': return
-                    with self.context.wrap_socket(raw, server_side=True) as stream:
-                        size = struct.unpack('!I', C.exact_read(stream, 4, C.time.monotonic() + 5))[0]
-                        self.application = json.loads(gzip.decompress(C.exact_read(stream, size, C.time.monotonic() + 5)))
-                        request = self.application
-                        reply = {'v': 1, 'id': request['id'], 'ok': True, 'status': 200, 'data': self.handler(request)}
-                        encoded = gzip.compress(json.dumps(reply).encode(), mtime=0)
-                        stream.sendall(struct.pack('!I', len(encoded)) + encoded)
+                for _ in range(self.requests):
+                    with self.listener.accept()[0] as raw:
+                        raw.settimeout(5)
+                        if raw.recv(4) != b'\0\0\0\1': raise AssertionError('preamble differs')
+                        raw.sendall(self.preamble)
+                        if self.preamble != b'\0\0\0\0': return
+                        with self.context.wrap_socket(raw, server_side=True) as stream:
+                            size = struct.unpack('!I', C.exact_read(stream, 4, C.time.monotonic() + 5))[0]
+                            self.application = json.loads(gzip.decompress(C.exact_read(stream, size, C.time.monotonic() + 5)))
+                            request = self.application
+                            self.applications.append(request)
+                            reply = {'v': self.version, 'id': request['id'], 'ok': True, 'status': 200, 'data': self.handler(request)}
+                            encoded = gzip.compress(json.dumps(reply).encode(), mtime=0)
+                            stream.sendall(struct.pack('!I', len(encoded)) + encoded)
             except Exception as error:
                 self.error = error
             finally:
@@ -103,12 +116,69 @@ class CompanionTests(unittest.TestCase):
             with self.assertRaises(C.CompanionError): C.document(value)
 
     def test_actual_tls_login_bound_response_and_no_plaintext_password(self):
-        with FixtureServer(self.cert, self.key, lambda req: {'token': TOKEN, 'account': {'id': ACCOUNT, 'username': 'UniRecruit', 'leader': {}}}) as server:
+        with FixtureServer(self.cert, self.key, lambda req: {'token': TOKEN, 'account': account()}) as server:
             profile = dict(self.profile, port=server.port)
-            self.assertEqual(C.login(profile, 'UniRecruit', 'private-fixture-password'), (TOKEN, ACCOUNT))
+            self.assertEqual(C.login(profile, 'UniRecruit', 'private-fixture-password'), (TOKEN, account()))
         self.assertIsNone(server.error)
         self.assertEqual(server.application['body']['password'], 'private-fixture-password')
         self.assertEqual(server.application['op'], 'login')
+        self.assertEqual(server.application['v'], 2)
+
+    def test_release_matches_current_builder(self):
+        import re
+        builder = (ROOT / 'tools/build_android_account_game.py').read_text()
+        self.assertEqual(C.VERSION, int(re.search(r'^VERSION_CODE = (\d+)$', builder, re.M)[1]))
+        self.assertEqual(C.WIRE_VERSION, 2)
+
+    def test_actual_tls_v1_reply_is_refused(self):
+        with FixtureServer(self.cert, self.key, version=1) as server:
+            with self.assertRaisesRegex(C.CompanionError, 'invalid_account_response'):
+                C.account_request(dict(self.profile, port=server.port), 'logout', {}, TOKEN)
+        self.assertEqual(server.application['v'], 2)
+
+    def test_actual_tls_large_owned_hero_profile_and_plain_bound(self):
+        large = account()
+        large['heroes'] = [dict(large['heroes'][0], hero_id='hero_' + str(i), name='N' * 128,
+            forms=['form_' + str(n) for n in range(16)]) for i in range(117)]
+        self.assertGreater(len(json.dumps(large)), 32768)
+        with FixtureServer(self.cert, self.key, lambda req: {'token': TOKEN, 'account': large}) as server:
+            self.assertEqual(C.login(dict(self.profile, port=server.port), 'UniRecruit', 'hidden'), (TOKEN, large))
+        with FixtureServer(self.cert, self.key, lambda req: {'oversized': 'x' * C.PLAIN_LIMIT}) as server:
+            with self.assertRaisesRegex(C.CompanionError, 'invalid_compression'):
+                C.account_request(dict(self.profile, port=server.port), 'logout', {}, TOKEN)
+
+    def test_owned_profile_strict_generation_and_integral_uncapped_levels(self):
+        empty = account(); empty['heroes'] = []
+        self.assertEqual(C.account_identity(empty, 'unirecruit'), empty)
+        high = account(); high['heroes'][0]['hero_level'] = 100000
+        self.assertEqual(C.account_identity(high, 'UniRecruit'), high)
+        cases = [dict(account(), leader={}), dict(account(), database_generation='invalid'),
+                 {'id': ACCOUNT, 'username': 'UniRecruit', 'leader': {}}]
+        for field, value in [('hero_level', True), ('hero_level', 1.5), ('hero_level', 0),
+                             ('revision', -1), ('total_experience', 1 << 63),
+                             ('forms', ['same', 'same']), ('forms', ['bad\nform'])]:
+            changed = account(); changed['heroes'][0][field] = value; cases.append(changed)
+        changed = account(); changed['heroes'] *= 2; cases.append(changed)
+        for changed in cases:
+            with self.subTest(value=changed), self.assertRaises(C.CompanionError):
+                C.account_identity(changed, 'UniRecruit')
+        with mock.patch.object(C, 'account_request', side_effect=[{'token': TOKEN, 'account': cases[-1]}, {'status': 'logged_out'}]) as requests:
+            with self.assertRaises(C.CompanionError): C.login(self.profile, 'UniRecruit', 'hidden')
+        self.assertEqual(requests.call_args.args, (self.profile, 'logout', {}, TOKEN))
+
+    def test_selected_hero_must_be_owned_current_form_and_integral_snapshot(self):
+        for field, value in [('hero_id', 'another'), ('form_id', 'unowned_form'), ('hero_level', 3),
+                             ('hero_revision', 2), ('hero_level', True), ('unit_level', 1.5),
+                             ('unit_level', 21), ('hero_revision', -1)]:
+            changed = battle(); changed['battle']['teams'][0]['players'][0]['selection'][field] = value
+            with self.subTest(field=field, value=value), self.assertRaises(C.CompanionError):
+                C.selected_side(changed, RUN, account())
+        for selected in (None, {}, dict(selection(), extra=True)):
+            changed = battle(); changed['battle']['teams'][1]['players'][0]['selection'] = selected
+            with self.assertRaises(C.CompanionError): C.selected_side(changed, RUN, account())
+        empty = account(); empty['heroes'] = []
+        with self.assertRaisesRegex(C.CompanionError, 'battle_hero_selection_changed'):
+            C.selected_side(battle(), RUN, empty)
 
     def test_wrong_pin_rejected_before_application_data(self):
         with FixtureServer(self.cert, self.key) as server:
@@ -137,12 +207,12 @@ class CompanionTests(unittest.TestCase):
         self.assertEqual(server.application['body'], {})
 
     def test_wrong_login_actor_revokes_issued_session(self):
-        with mock.patch.object(C, 'account_request', side_effect=[{'token': TOKEN, 'account': {'id': ACCOUNT, 'username': 'Another', 'leader': {}}}, {'status': 'logged_out'}]) as request:
+        with mock.patch.object(C, 'account_request', side_effect=[{'token': TOKEN, 'account': dict(account(), username='Another')}, {'status': 'logged_out'}]) as request:
             with self.assertRaisesRegex(C.CompanionError, 'invalid_login_identity'): C.login(self.profile, 'UniRecruit', 'hidden')
         self.assertEqual(request.call_args.args, (self.profile, 'logout', {}, TOKEN))
 
     def test_selection_requires_all_ready_both_captains_and_exact_actor(self):
-        self.assertEqual(C.selected_side(battle(), RUN, ACCOUNT), 1)
+        self.assertEqual(C.selected_side(battle(), RUN, account()), 1)
         cases = []
         for key, value in (('state', 'completed'), ('state', 'cancelled'), ('validity', 'roster_changed'), ('id', ACCOUNT)):
             changed = battle(); changed['battle'][key] = value; cases.append(changed)
@@ -152,8 +222,8 @@ class CompanionTests(unittest.TestCase):
                 changed = battle(); changed['battle']['teams'][team]['players'][player]['ready'] = False; cases.append(changed)
         changed = battle(); changed['battle']['teams'][1]['players'][0]['side'] = 1; cases.append(changed)
         for changed in cases:
-            with self.assertRaises(C.CompanionError): C.selected_side(changed, RUN, ACCOUNT)
-        with self.assertRaises(C.CompanionError): C.selected_side(battle(), RUN, RUN)
+            with self.assertRaises(C.CompanionError): C.selected_side(changed, RUN, account())
+        with self.assertRaises(C.CompanionError): C.selected_side(battle(), RUN, dict(account(), id=RUN))
 
     def test_regular_rejects_redirected_payload(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -174,15 +244,15 @@ class CompanionTests(unittest.TestCase):
                 C.captain_policy(argparse.Namespace(captain_action=action, after_turn=turn, retry_result=retry))
 
     def test_policy_selected_account_must_be_current_captain(self):
-        self.assertEqual(C.selected_side(battle(), RUN, ACCOUNT, True), 1)
+        self.assertEqual(C.selected_side(battle(), RUN, account(), True), 1)
         changed = battle(); changed['battle']['teams'][0]['captain_id'] = RUN
-        self.assertEqual(C.selected_side(changed, RUN, ACCOUNT), 1)
+        self.assertEqual(C.selected_side(changed, RUN, account()), 1)
         with self.assertRaisesRegex(C.CompanionError, 'account_not_selected_captain'):
-            C.selected_side(changed, RUN, ACCOUNT, True)
+            C.selected_side(changed, RUN, account(), True)
         changed['battle']['teams'][0]['captain_id'] = ACCOUNT
         changed['battle']['teams'][0]['players'][0]['id'] = RUN
         with self.assertRaisesRegex(C.CompanionError, 'account_not_selected'):
-            C.selected_side(changed, RUN, ACCOUNT, True)
+            C.selected_side(changed, RUN, account(), True)
 
     def test_capture_is_bounded_and_does_not_emit_untrusted_output(self):
         with contextlib.redirect_stdout(io.StringIO()) as output:
@@ -338,7 +408,7 @@ print(''' + repr(C.FINISHED + 'acknowledged') + ''',flush=True)
             with self.assertRaisesRegex(C.CompanionError, 'installed_version_differs'): C.check_device(device, apk)
             device.private.assert_not_called()
             device.reset_mock()
-            device.call.side_effect = [b'device\n', b'1\n', b'x86_64\n', b'28\n', b'versionCode=1192615', b'package:/data/app/example/base.apk\n', b'wrong hash']
+            device.call.side_effect = [b'device\n', b'1\n', b'x86_64\n', b'28\n', b'versionCode=1192616', b'package:/data/app/example/base.apk\n', b'wrong hash']
             with self.assertRaisesRegex(C.CompanionError, 'installed_apk_differs'): C.check_device(device, apk)
             device.private.assert_not_called()
 
@@ -346,7 +416,7 @@ print(''' + repr(C.FINISHED + 'acknowledged') + ''',flush=True)
         with tempfile.TemporaryDirectory() as tmp:
             apk = Path(tmp) / 'app.apk'; apk.write_bytes(b'installed-apk')
             device = mock.Mock()
-            device.call.side_effect = [b'device\n', b'1\n', b'x86_64\n', b'28\n', b'versionCode=1192615', b'package:/data/app/example/base.apk\n', C.digest(apk).encode() + b' path']
+            device.call.side_effect = [b'device\n', b'1\n', b'x86_64\n', b'28\n', b'versionCode=1192616', b'package:/data/app/example/base.apk\n', C.digest(apk).encode() + b' path']
             raw = json.dumps(self.profile).encode()
             device.private.side_effect = [b'/data/user/0/org.wesnoth.offline\n', raw, b'']
             checked = C.check_device(device, apk)
@@ -381,10 +451,84 @@ print(''' + repr(C.FINISHED + 'acknowledged') + ''',flush=True)
         stack.enter_context(mock.patch.object(C, 'check_device', return_value=('/data/user/0/' + C.PACKAGE, 'profile', self.profile, '/data', '0' * 64)))
         stack.enter_context(mock.patch('builtins.input', return_value=('RETRY ' if retry else 'CONTROL ') + 'UniRecruit'))
         stack.enter_context(mock.patch.object(C.getpass, 'getpass', return_value='hidden-fixture'))
-        stack.enter_context(mock.patch.object(C, 'login', return_value=(TOKEN, ACCOUNT)))
+        stack.enter_context(mock.patch.object(C, 'login', return_value=(TOKEN, account())))
         stack.enter_context(mock.patch.object(C, 'launch_script', return_value=('/owned-session', 'script')))
         stack.enter_context(contextlib.redirect_stdout(io.StringIO()))
         return args, report, stack
+
+    def test_actual_hidden_prompt_v2_tls_and_owned_shell_workflow(self):
+        # Real getpass terminal, encrypted API, shipped execute/run_native and
+        # shell wrapper. Only Android/ADB and the engine binary are fixtures.
+        import pty
+        import select
+        import termios
+        import time
+        with tempfile.TemporaryDirectory(prefix='companion workflow ') as tmp:
+            root = Path(tmp); stage, private, hashes = self.make_payload(root)
+            def response(request):
+                self.assertEqual(request['v'], 2)
+                if request['op'] == 'login': return {'token': TOKEN, 'account': account()}
+                if request['op'] == 'battle_detail': return battle()
+                if request['op'] == 'logout': return {'status': 'logged_out'}
+                raise AssertionError('unexpected operation')
+            with FixtureServer(self.cert, self.key, response, requests=4) as server:
+                profile = dict(self.profile, port=server.port)
+                report_path = root / 'report.json'
+                program = root / 'helper.py'
+                program.write_text("""import argparse, importlib.util, json, sys
+from pathlib import Path
+spec=importlib.util.spec_from_file_location('companion', SOURCE)
+C=importlib.util.module_from_spec(spec);spec.loader.exec_module(C)
+class Device:
+    base=[sys.executable,'-c',"import os,shlex,sys; a=shlex.split(sys.argv[-1]); os.execvp('sh',['sh','-c',a[-1]])"]
+    def __init__(self,*args): pass
+    def call(self,*args,**kw): return b''
+C.Device=Device
+C.verify_build=lambda *a: {}
+C.check_device=lambda *a: (PRIVATE,'profile',PROFILE,'/data',PROFILE_HASH)
+original=C.launch_script
+C.launch_script=lambda pr,st,ac,run,launch,data,hashes,ph: original(pr,STAGE,ac,run,launch,data,HASHES,ph)
+args=argparse.Namespace(adb=Path('unused'),sdk=Path('unused'),java=Path('unused'),serial='emulator-5554',username='UniRecruit',battle_id=RUN,retry_result=False)
+report={}
+C.execute(args,report)
+Path(REPORT).write_text(json.dumps(report))
+""".replace('SOURCE', repr(str(ROOT / 'tools/run_android_alliance_companion.py')))
+                    .replace('PRIVATE', repr(str(private))).replace('PROFILE_HASH', repr(hashlib.sha256(b'public-profile-fixture').hexdigest()))
+                    .replace('PROFILE', repr(profile)).replace('STAGE', repr(str(stage)))
+                    .replace('HASHES', repr(hashes)).replace('RUN', repr(RUN)).replace('REPORT', repr(str(report_path))))
+                master, slave = pty.openpty()
+                try:
+                    with subprocess.Popen([os.sys.executable, '-I', '-B', str(program)], stdin=slave, stdout=slave, stderr=slave, start_new_session=True) as process:
+                        os.close(slave); slave = None
+                        output = bytearray(); consent_sent = password_sent = False
+                        deadline = time.monotonic() + 25
+                        while process.poll() is None and time.monotonic() < deadline:
+                            if select.select([master], [], [], 0.1)[0]:
+                                try: output.extend(os.read(master, 4096))
+                                except OSError: break
+                            if not consent_sent and b'Type CONTROL UniRecruit' in output:
+                                os.write(master, b'CONTROL UniRecruit\n'); consent_sent = True
+                            if not password_sent and b'Player password (hidden; one login attempt):' in output:
+                                self.assertFalse(termios.tcgetattr(master)[3] & termios.ECHO)
+                                os.write(master, b'private-fixture-password\n'); password_sent = True
+                        if process.poll() is None: process.kill()
+                        self.assertEqual(process.wait(timeout=5), 0, output.decode(errors='replace'))
+                    while select.select([master], [], [], 0)[0]:
+                        try: output.extend(os.read(master, 4096))
+                        except OSError: break
+                finally:
+                    os.close(master)
+                    if slave is not None: os.close(slave)
+                self.assertTrue(consent_sent and password_sent)
+                self.assertNotIn(b'private-fixture-password', output)
+                self.assertNotIn(TOKEN.encode(), output)
+                report = json.loads(report_path.read_text())
+                self.assertEqual(report['outcome'], 'completed')
+                self.assertEqual(report['session_logout'], 'confirmed')
+                self.assertEqual(report['database_generation'], GENERATION)
+                self.assertNotIn(TOKEN, report_path.read_text())
+                self.assertEqual([req['op'] for req in server.applications], ['login', 'battle_detail', 'battle_detail', 'logout'])
+                self.assertIsNone(server.error)
 
     def test_finally_logout_after_native_failure(self):
         args, report, stack = self.execute_fixture()

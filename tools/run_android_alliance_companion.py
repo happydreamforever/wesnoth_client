@@ -30,7 +30,10 @@ import zlib
 
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGE = 'org.wesnoth.offline'
-VERSION = 1192615
+VERSION = 1192616
+WIRE_VERSION = 2
+PLAIN_LIMIT = 256 * 1024
+INT64_MAX = (1 << 63) - 1
 UUID = re.compile(r'[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}')
 TOKEN = re.compile(r'[A-Za-z0-9_-]{43}')
 LIBRARIES = ('libmain.so', 'libSDL3.so', 'libSDL3_image.so', 'libSDL3_mixer.so', 'libc++_shared.so')
@@ -113,13 +116,13 @@ def account_request(profile, operation, body, token=None):
     if operation not in ('login', 'logout', 'battle_detail'):
         fail('unsupported_operation')
     request_id = uuid.uuid4().hex
-    request = {'v': 1, 'id': request_id, 'op': operation, 'body': body}
+    request = {'v': WIRE_VERSION, 'id': request_id, 'op': operation, 'body': body}
     if token is not None:
         if not TOKEN.fullmatch(token):
             fail('invalid_session')
         request['token'] = token
     encoded = json.dumps(request, separators=(',', ':'), ensure_ascii=False).encode('utf-8')
-    if len(encoded) > 32768:
+    if len(encoded) > PLAIN_LIMIT:
         fail('request_too_large')
     context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
     context.minimum_version = ssl.TLSVersion.TLSv1_2
@@ -140,30 +143,71 @@ def account_request(profile, operation, body, token=None):
             compressed = exact_read(stream, length, deadline)
     decoder = zlib.decompressobj(16 + zlib.MAX_WBITS)
     try:
-        decoded = decoder.decompress(compressed, 32769)
+        decoded = decoder.decompress(compressed, PLAIN_LIMIT + 1)
     except zlib.error:
         fail('invalid_compression')
-    if len(decoded) > 32768 or not decoder.eof or decoder.unused_data or decoder.unconsumed_tail:
+    if len(decoded) > PLAIN_LIMIT or not decoder.eof or decoder.unused_data or decoder.unconsumed_tail:
         fail('invalid_compression')
-    reply = document(decoded)
-    if set(reply) != {'v', 'id', 'ok', 'status', 'data'} or type(reply['v']) is not int or reply['v'] != 1 or reply['id'] != request_id or type(reply['ok']) is not bool or type(reply['status']) is not int or not 200 <= reply['status'] <= 599 or reply['ok'] != (200 <= reply['status'] < 300) or not isinstance(reply['data'], dict):
+    reply = document(decoded, PLAIN_LIMIT)
+    if set(reply) != {'v', 'id', 'ok', 'status', 'data'} or type(reply['v']) is not int or reply['v'] != WIRE_VERSION or reply['id'] != request_id or type(reply['ok']) is not bool or type(reply['status']) is not int or not 200 <= reply['status'] <= 599 or reply['ok'] != (200 <= reply['status'] < 300) or not isinstance(reply['data'], dict):
         fail('invalid_account_response')
     if not reply['ok']:
         fail('account_rejected')
     return reply['data']
 
 
+def bounded_text(value, limit):
+    return isinstance(value, str) and 0 < len(value.encode('utf-8')) <= limit and all(ord(c) >= 32 and ord(c) != 127 for c in value)
+
+
+def integer(value, minimum=0, maximum=INT64_MAX):
+    return type(value) is int and minimum <= value <= maximum
+
+
+def account_identity(account, username):
+    """Validate the complete v2 owned-hero projection, without a starter hero."""
+    if (not isinstance(account, dict) or set(account) != {'id', 'username', 'database_generation', 'heroes'}
+            or not isinstance(account['id'], str) or not UUID.fullmatch(account['id'])
+            or not isinstance(account['database_generation'], str) or not UUID.fullmatch(account['database_generation'])
+            or not isinstance(account['username'], str) or not re.fullmatch(r'[A-Za-z0-9_]{3,24}', account['username'])
+            or account['username'].casefold() != username.casefold()
+            or not isinstance(account['heroes'], list) or len(account['heroes']) > 256):
+        fail('invalid_login_identity')
+    ids = set()
+    for hero in account['heroes']:
+        if (not isinstance(hero, dict) or set(hero) != {'hero_id', 'name', 'hero_level', 'experience', 'total_experience', 'revision', 'forms'}
+                or not bounded_text(hero['hero_id'], 80) or hero['hero_id'] in ids
+                or not bounded_text(hero['name'], 128) or not integer(hero['hero_level'], 1)
+                or not all(integer(hero[key]) for key in ('experience', 'total_experience', 'revision'))
+                or not isinstance(hero['forms'], list) or len(hero['forms']) > 128
+                or any(not bounded_text(form, 100) for form in hero['forms'])
+                or len(set(hero['forms'])) != len(hero['forms'])):
+            fail('invalid_login_identity')
+        ids.add(hero['hero_id'])
+    return account
+
+
 def login(profile, username, password):
     result = account_request(profile, 'login', {'username': username, 'password': password})
     if set(result) != {'token', 'account'} or not isinstance(result['token'], str) or not TOKEN.fullmatch(result['token']):
         fail('invalid_login_response')
-    account = result['account']
-    if not isinstance(account, dict) or set(account) != {'id', 'username', 'leader'} or not isinstance(account['id'], str) or not UUID.fullmatch(account['id']) or not isinstance(account['username'], str) or account['username'].casefold() != username.casefold():
+    try:
+        account = account_identity(result['account'], username)
+    except (CompanionError, UnicodeError):
         # A valid issued token is revoked even if the remaining identity is bad.
         with contextlib.suppress(Exception):
             account_request(profile, 'logout', {}, result['token'])
         fail('invalid_login_identity')
-    return result['token'], account['id']
+    return result['token'], account
+
+
+def validate_selection(selection):
+    if (not isinstance(selection, dict) or set(selection) != {'hero_id', 'form_id', 'hero_level', 'hero_revision', 'unit_type', 'unit_level'}
+            or not bounded_text(selection['hero_id'], 80) or not bounded_text(selection['form_id'], 100)
+            or not bounded_text(selection['unit_type'], 128) or not integer(selection['hero_level'], 1)
+            or not integer(selection['hero_revision']) or not integer(selection['unit_level'], 0, 20)):
+        fail('battle_hero_not_selected')
+
 
 
 def captain_policy(args):
@@ -175,7 +219,8 @@ def captain_policy(args):
     return {'captain_action': action, 'after_turn': turn}
 
 
-def selected_side(data, battle_id, account_id, require_captain=False):
+def selected_side(data, battle_id, account, require_captain=False):
+    account_id = account['id']
     if set(data) != {'battle'} or not isinstance(data['battle'], dict):
         fail('invalid_battle_response')
     battle = data['battle']
@@ -192,8 +237,14 @@ def selected_side(data, battle_id, account_id, require_captain=False):
         for player in team['players']:
             if not isinstance(player, dict) or player.get('ready') is not True or not isinstance(player.get('id'), str) or not UUID.fullmatch(player['id']) or type(player.get('side')) is not int or player['id'] in seats or player['side'] in sides:
                 fail('battle_not_ready')
+            validate_selection(player.get('selection'))
             seats.add(player['id']); sides.add(player['side'])
             if player['id'] == account_id:
+                selected = player['selection']
+                owned = next((hero for hero in account['heroes'] if hero['hero_id'] == selected['hero_id']), None)
+                if (owned is None or selected['form_id'] not in owned['forms']
+                        or selected['hero_level'] != owned['hero_level'] or selected['hero_revision'] != owned['revision']):
+                    fail('battle_hero_selection_changed')
                 if require_captain and team.get('captain_id') != account_id:
                     fail('account_not_selected_captain')
                 found.append(player['side'])
@@ -466,14 +517,16 @@ def execute(args, report):
         fail('invalid_password_length')
     token = None
     try:
-        token, account_id = login(profile, args.username, password)
+        token, account = login(profile, args.username, password)
+        account_id = account['id']
         password = None
         report['step'] = 'C04_check_seat'
         report['account_id'] = account_id
+        report['database_generation'] = account['database_generation']
         if args.retry_result:
             print('C04: authenticated result retry only; the native engine will verify this account\'s retained result and replay.', flush=True)
         else:
-            side = selected_side(account_request(profile, 'battle_detail', {'battle_id': args.battle_id}, token), args.battle_id, account_id, bool(policy))
+            side = selected_side(account_request(profile, 'battle_detail', {'battle_id': args.battle_id}, token), args.battle_id, account, bool(policy))
             report['side'] = side
             print('C04 PASS: authenticated account controls fixed side ' + str(side) + '; the fixed lineups are Ready.', flush=True)
         stage = '/data/local/tmp/wesnoth-alliance-companion-' + uuid.uuid4().hex
@@ -488,7 +541,7 @@ def execute(args, report):
         session, script = launch_script(private_root, stage, account_id, args.battle_id, uuid.uuid4().hex, data, {name: item[1] for name, item in payload.items()}, profile_hash)
         # Recheck only; never silently ready a player or confirm a captain.
         if not args.retry_result:
-            selected_side(account_request(profile, 'battle_detail', {'battle_id': args.battle_id}, token), args.battle_id, account_id, bool(policy))
+            selected_side(account_request(profile, 'battle_detail', {'battle_id': args.battle_id}, token), args.battle_id, account, bool(policy))
         report['step'] = 'C06_run'
         report['result'] = run_native(device, script, {'run_id': args.battle_id, 'account_id': account_id, 'token': token, 'intent': 'result_retry' if args.retry_result else 'play', **policy}, session)
         report['outcome'] = 'completed' if report['result'] == 'acknowledged' else 'result_pending'
