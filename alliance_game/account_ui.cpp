@@ -459,8 +459,8 @@ std::string profile_text(const account::Profile& profile)
         "Experience: " + std::to_string(profile.experience) + "\n"
         "Total experience: " + std::to_string(profile.total_experience) + "\n\n"
         "Your leader is saved on the Windows Alliance server.\n"
-        "Saved battle plans can be practised against the computer.\n"
-        "Campaign rewards and shared team battles will be added in a later update.";
+        "Open Campaign progression to earn experience and choose advancement.\n"
+        "Open Teams and Battle plans to prepare, practise or join a shared team battle.";
 }
 
 void register_player(const alliance::TrustedProfile& profile)
@@ -758,7 +758,7 @@ std::string team_text(const account::Team& team)
         text += " — " + member.unit_type + ", leader level " + std::to_string(member.level);
     }
     text += "\n\nTeam experience is separate from personal leader experience.\n"
-            "Open Battle plans to practise a saved lineup against the computer.\n"
+            "Open Battle plans for local training or a shared team battle.\n"
             "Open Captain orders for your team's saved plan and instructions.";
     return text;
 }
@@ -1295,7 +1295,7 @@ std::string battle_text(const account::Battle& battle)
             text += player.ready ? "Ready" : "Not ready";
         }
     }
-    text += "\n\nPlanning does not start a shared team battle.";
+    text += "\n\nA shared battle starts only after every selected player is Ready, both captains approve and every fixed seat joins.";
     text += "\n" + practice_availability_text(battle, current_session().profile);
     if(battle.state == "draft")
         text += "\nPersonal practice requires a valid plan, both captains' approval and your own Ready. "
@@ -1524,6 +1524,8 @@ void battle_detail(const alliance::TrustedProfile& profile, const std::string& b
         if(upload>=0) actions.push_back("Send saved battle result");
         const int replay=available_replay?static_cast<int>(actions.size()):-1;
         if(replay>=0) actions.push_back("Watch completed battle replay");
+        const int download=!available_replay&&battle.state=="completed"&&(selected||captain)?static_cast<int>(actions.size()):-1;
+        if(download>=0) actions.push_back("Download completed battle replay");
         const int result_review=(battle.state=="running"||battle.state=="completed")?static_cast<int>(actions.size()):-1;
         if(result_review>=0) actions.push_back("Review shared battle result");
         const bool draft = battle.state == "draft";
@@ -1565,6 +1567,7 @@ void battle_detail(const alliance::TrustedProfile& profile, const std::string& b
         }
         if(choice == 1) continue;
         if(choice==join||choice==upload) {join_shared_battle(profile,battle,choice==upload);if(shared_pending())return;continue;}
+        if(choice==download) {download_shared_replay(profile,battle);if(shared_pending())return;continue;}
         if(choice==replay) {
             if(select_change("Completed battle replay","Watch this player's saved recording. This never grants experience.",{"Watch replay"})==0&&same_extension_actor(actor)) {
                 queue_alliance_replay(AllianceReplay::shared,actor,battle.id);return;
@@ -1740,6 +1743,7 @@ void battle_plans(const alliance::TrustedProfile& profile)
     while(!current_session().token.empty()) {
         const int choice = select("Battle plans", "Prepare maps and fixed lineups with another team in your area.\n"
             "Both captains approve, then selected players set their readiness.\n"
+            "For a shared battle, every selected player must be Ready and join their fixed seat. "
             "For personal practice, a selected player needs a valid draft, both captain approvals and only their own Ready. "
             "Choose Set myself ready first, then choose Practice this plan separately. "
             "Control your side, command your whole team against the computer, or play all sides locally in hotseat. "

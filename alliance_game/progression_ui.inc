@@ -20,7 +20,7 @@ bool extension_request(const alliance::TrustedProfile& trusted, const std::strin
     input.operation = op;
     input.progression_json = pj::serialize(body);
     account::Reply reply;
-    if(!team_request(trusted, std::move(input), "Checking campaign progress…", reply)) return false;
+    if(!team_request(trusted, std::move(input), "Checking Alliance progress…", reply)) return false;
     if(current_session().profile.account_id != actor || current_session().token.empty()) {
         message("The signed-in player changed. Reopen Campaign progression.");
         return false;

@@ -17,6 +17,12 @@ _NEW = b'''	find_widget<button>("addons").set_label("Alliance");
 		alliance_game::show_account_dialog();
 		if(alliance_game::practice_pending()) {
 			set_retval(alliance_game::practice_title_result);
+		} else if(alliance_game::progression_pending()) {
+			set_retval(alliance_game::progression_title_result);
+		} else if(alliance_game::shared_pending()) {
+			set_retval(alliance_game::shared_title_result);
+		} else if(alliance_game::replay_pending()) {
+			set_retval(alliance_game::replay_title_result);
 		}
 	});
 '''
@@ -29,5 +35,5 @@ def generate_title_overlay(source: bytes) -> bytes:
     if source.count(_INCLUDE) != 1 or source.count(_OLD) != 1:
         raise ValueError("Pinned title-screen anchors differ; original preserved.")
     return source.replace(
-        _INCLUDE, _INCLUDE + b'#include "alliance_game/account_ui.hpp"\n#include "alliance_game/battle_launch.hpp"\n'
+        _INCLUDE, _INCLUDE + b'#include "alliance_game/account_ui.hpp"\n#include "alliance_game/battle_launch.hpp"\n#include "alliance_game/progression_plan.hpp"\n#include "alliance_game/shared_launch.hpp"\n#include "alliance_game/replay_launch.hpp"\n'
     ).replace(_OLD, _NEW)

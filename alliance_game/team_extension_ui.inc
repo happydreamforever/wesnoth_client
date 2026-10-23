@@ -124,3 +124,27 @@ void join_shared_battle(const alliance::TrustedProfile& profile,const account::B
     admission.profile.port=15002;
     queue_shared(std::move(admission));
 }
+
+void download_shared_replay(const alliance::TrustedProfile& profile,const account::Battle& viewed)
+{
+    const auto actor=current_session().profile.account_id;
+    if(select_change("Download completed battle replay",
+        "Retrieve the retained recording from your Windows server. This does not change the battle or grant experience.\nBattle: "+viewed.id,
+        {"Download my permitted recording"})!=0) return;
+    if(!same_extension_actor(actor)) return;
+    account::Request request;request.operation="battle_detail";request.battle_id=viewed.id;
+    account::Reply latest;
+    if(!team_request(profile,request,"Checking the completed battle…",latest)||!latest.battle) return;
+    if(!same_extension_actor(actor)) return;
+    bool permitted=false;
+    for(const auto& team:latest.battle->teams) {
+        permitted=permitted||team.captain_id==actor;
+        for(const auto& player:team.players) permitted=permitted||player.id==actor;
+    }
+    if(latest.battle->id!=viewed.id||latest.battle->state!="completed"||!permitted) {
+        message("A completed recording is available only to this battle's recorded participants and captains.");return;
+    }
+    SharedAdmission admission{profile,viewed.id,actor,current_session().token};
+    admission.profile.port=15002;admission.download_only=true;
+    queue_shared(std::move(admission));
+}
