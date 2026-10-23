@@ -149,8 +149,8 @@ try {
     if ($KeepSavedProfile) {
         $packageDetails = Selected-Adb @('shell', 'dumpsys', 'package', $package) 60000 $true
         $versions = [regex]::Matches($packageDetails.Stdout, '(?m)^\s*versionCode=([0-9]+)(?:\s|$)')
-        if ($versions.Count -ne 1 -or $versions[0].Groups[1].Value -notin @('1192608', '1192609', '1192610', '1192611', '1192612', '1192613', '1192614', '1192615', '1192616')) {
-            throw 'Expected the installed Alliance account game version 1192608, 1192609, 1192610, 1192611, 1192612, 1192613, 1192614, 1192615 or 1192616. No app update was attempted.'
+        if ($versions.Count -ne 1 -or $versions[0].Groups[1].Value -notin @('1192608', '1192609', '1192610', '1192611', '1192612', '1192613', '1192614', '1192615', '1192616', '1192617')) {
+            throw 'Expected the installed Alliance account game version 1192608, 1192609, 1192610, 1192611, 1192612, 1192613, 1192614, 1192615, 1192616 or 1192617. No app update was attempted.'
         }
     }
     $install = Selected-Adb @('install', '-r', $apk) 300000
@@ -158,8 +158,8 @@ try {
     if ($KeepSavedProfile) {
         $packageDetails = Selected-Adb @('shell', 'dumpsys', 'package', $package) 60000 $true
         $versions = [regex]::Matches($packageDetails.Stdout, '(?m)^\s*versionCode=([0-9]+)(?:\s|$)')
-        if ($versions.Count -ne 1 -or $versions[0].Groups[1].Value -cne '1192616') {
-            throw 'Android did not report the expected updated version 1192616. Send this log.'
+        if ($versions.Count -ne 1 -or $versions[0].Groups[1].Value -cne '1192617') {
+            throw 'Android did not report the expected updated version 1192617. Send this log.'
         }
     } else {
         $remote = '/sdcard/Download/wesnoth-alliance-public-profile-' + $runId + '.json'
@@ -182,7 +182,7 @@ try {
     if (-not $ready) { throw 'No fresh account setup marker was observed. Send the saved log.' }
     Write-Host 'ANDROID ACCOUNT GAME INSTALL COMPLETE'
     if ($KeepSavedProfile) {
-        Write-Host 'Version 1192616 and setup activity startup are verified. No profile was imported or changed by this helper.'
+        Write-Host 'Version 1192617 and setup activity startup are verified. No profile was imported or changed by this helper.'
         Write-Host 'Confirm the existing Trusted server is displayed, then choose Start game -> Alliance -> Log in.'
         Write-Host 'If setup says no saved profile or reports an unusable profile, stop and send that message; do not reimport or reset the app.'
     } else {

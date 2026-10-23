@@ -32,9 +32,9 @@ ENGINE_KIND = 'wesnoth-android-account-engine'
 LOCK = '.wesnoth-account-game-operation.json'
 MARKER = '.wesnoth-account-game.json'
 ENGINE_MARKER = '.wesnoth-account-engine.json'
-VERSION_CODE = 1192616
-PREVIOUS_VERSION_CODES = frozenset((1192608, 1192609, 1192610, 1192611, 1192612, 1192613, 1192614, 1192615))
-UPDATE_JOURNAL = '.wesnoth-account-game-update-1192616.json'
+VERSION_CODE = 1192617
+PREVIOUS_VERSION_CODES = frozenset((1192608, 1192609, 1192610, 1192611, 1192612, 1192613, 1192614, 1192615, 1192616))
+UPDATE_JOURNAL = '.wesnoth-account-game-update-1192617.json'
 UPDATE_KIND = 'wesnoth-android-account-game-update'
 UPDATE_STAGES = ('android-account-engine', 'android-account-game')
 PACKAGE = G.PACKAGE
@@ -545,7 +545,7 @@ def completed_previous_stages(repo, profile, current_inputs):
     version = previous_version(game_root, marker, receipt)
     # A pending later transaction can leave older completed source directories
     # in place before its first move. Do not start another upgrade on top of it
-    # or reinterpret its immutable journal as a 1192616 update.
+    # or reinterpret its immutable journal as a 1192617 update.
     for later in PREVIOUS_VERSION_CODES:
         if later > version and safe(repo / 'build' / ('.wesnoth-account-game-update-' + str(later) + '.json')).exists():
             raise BuildError('A later account update journal exists beside older completed stages. Preserve it and send the log.')
@@ -743,7 +743,7 @@ def main(argv=None):
     parser.add_argument('--gradle-user-home', type=Path, default=Path.home() / '.gradle')
     parser.add_argument('--jobs', type=int, default=2)
     parser.add_argument('--verify', '--verify-only', action='store_true')
-    parser.add_argument('--prepare-update', action='store_true', help='Preserve completed 1192608, 1192609, 1192610, 1192611, 1192612 1192613, 1192614 or 1192615 stages before the 1192616 unified-game update.')
+    parser.add_argument('--prepare-update', action='store_true', help='Preserve completed 1192608, 1192609, 1192610, 1192611, 1192612 1192613, 1192614, 1192615 or 1192616 stages before the 1192617 unified-game update.')
     args = parser.parse_args(argv)
     try:
         for name, value in vars(args).items():
