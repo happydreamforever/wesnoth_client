@@ -103,7 +103,13 @@ def layout_cpp(window_path, login_path):
 
 
 class CredentialDialogConstruction(unittest.TestCase):
+    def test_android_reset_dialog_and_matching_layout(self):
+        self.run_dialog(android=True)
+
     def test_actual_dialog_and_pinned_swap_with_matching_layout(self):
+        self.run_dialog(android=False)
+
+    def run_dialog(self, android):
         compiler = shutil.which(os.environ.get("CXX", "c++"))
         if not compiler:
             self.skipTest("A C++17 compiler is required for the dialog fixture")
@@ -133,12 +139,13 @@ class CredentialDialogConstruction(unittest.TestCase):
             fixture = fixture.replace("// @" + marker + "@", value)
         with tempfile.TemporaryDirectory(prefix="alliance-credential-dialog-") as temporary:
             audit = os.environ.get("ALLIANCE_CREDENTIAL_DIALOG_AUDIT")
-            output = Path(audit) if audit else Path(temporary)
+            output = Path(audit) / ("android" if android else "desktop") if audit else Path(temporary)
             output.mkdir(parents=True, exist_ok=True)
             source, binary = output / "credential_dialog.cpp", output / "credential_dialog"
             source.write_text(fixture)
             command = [compiler, "-std=c++17", "-Wall", "-Wextra", "-Werror", "-O0", "-g",
                        "-fsanitize=address,undefined", "-fno-omit-frame-pointer", str(source), "-o", str(binary)]
+            if android: command.insert(1, "-D__ANDROID__")
             build = subprocess.run(command, capture_output=True, text=True, timeout=180)
             self.assertEqual(build.returncode, 0, build.stdout + build.stderr)
             run = subprocess.run([str(binary)], capture_output=True, text=True, timeout=30)

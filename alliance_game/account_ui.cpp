@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "alliance_game/account_ui.hpp"
+#include "alliance_game/android_lifecycle.hpp"
 #include "alliance_game/hero_catalog.hpp"
 #include "alliance_game/story_progression.hpp"
 #include "alliance_game/battle_launch.hpp"
@@ -14,6 +15,11 @@
 #include "alliance_native/account_protocol.hpp"
 
 #include "desktop/clipboard.hpp"
+#include "color.hpp"
+#include "draw.hpp"
+#include "draw_manager.hpp"
+#include "gui/core/top_level_drawable.hpp"
+#include "video.hpp"
 #include "font/constants.hpp"
 #include "gui/dialogs/message.hpp"
 #include "gui/dialogs/modal_dialog.hpp"
@@ -347,6 +353,34 @@ private:
                 find_widget<gui2::toggle_button>("remember_password").get_value_bool());
             keyboard_capture(&password);
         });
+#ifdef __ANDROID__
+        auto* controls_parent = dynamic_cast<gui2::grid*>(show_password.parent());
+        if(controls_parent == nullptr) throw std::runtime_error("The credential controls have no owning grid.");
+        auto controls = std::make_unique<gui2::grid>(2, 1);
+        auto* controls_ptr = controls.get();
+        auto original_toggle = controls_parent->swap_child("remember_password", std::move(controls), false);
+        if(original_toggle.get() != &show_password) throw std::runtime_error("The credential controls could not be installed.");
+        const auto flags = gui2::grid::VERTICAL_ALIGN_CENTER | gui2::grid::HORIZONTAL_ALIGN_LEFT;
+        controls_ptr->set_child(std::move(original_toggle), 0, 0, flags, 0);
+        config reset_config;
+        reset_config["id"] = "reset_keyboard_modifiers";
+        reset_config["definition"] = "default";
+        reset_config["label"] = "Reset keyboard modifiers";
+        auto reset = std::make_unique<gui2::button>(gui2::implementation::builder_button(reset_config));
+        auto* reset_ptr = reset.get();
+        controls_ptr->set_child(std::move(reset), 1, 0, flags, 0);
+        gui2::event::connect_signal_mouse_left_click(*reset_ptr, [this](auto&&...) {
+            const bool reset_done = reset_android_keyboard_modifiers();
+            // Inline feedback keeps exactly one credential window visible and
+            // never reads, transforms or submits the current credential text.
+            find_widget<gui2::label>("login_label").set_label(description_ + "\n" +
+                (reset_done ? "Keyboard modifiers reset for new typing. Existing text was not changed."
+                            : "Keyboard reset is unavailable. Existing text was not changed."));
+            keyboard_capture(&find_widget<CredentialPasswordBox>("password"));
+            invalidate_layout();
+        });
+        add_to_tab_order(reset_ptr);
+#endif
         find_widget<gui2::button>("ok").set_label(action_);
         add_to_tab_order(&username);
         add_to_tab_order(&password);
@@ -372,6 +406,56 @@ private:
     std::string action_;
     bool confirm_only_;
 };
+
+// Startup runs before the title screen exists. Always give hidden/closed
+// authentication windows a real background to reveal, rather than retaining
+// their last pixels behind the next, smaller dialog.
+class AuthenticationBackdrop final : public gui2::top_level_drawable {
+public:
+    AuthenticationBackdrop() { draw_manager::invalidate_all(); }
+    ~AuthenticationBackdrop() override { draw_manager::invalidate_all(); }
+    rect screen_location() override { return video::game_canvas(); }
+    bool expose(const rect& region) override
+    {
+        draw::fill(region, color_t{18, 24, 32, 255});
+        return true;
+    }
+};
+
+int welcome_action(bool allow_signup, const std::string& notice)
+{
+    // This function returns only after the welcome modal has been destroyed.
+    // Button return values select an action directly; there is no list or OK.
+    constexpr int login_action = 10, signup_action = 11;
+    gui2::dialogs::message welcome("Welcome to Wesnoth",
+        notice.empty() ? "Log in once to play Campaigns, Multiplayer and Teams." : notice, false, false, false);
+    using Dialog = gui2::dialogs::message;
+    using Visibility = gui2::widget::visibility;
+    welcome.set_allow_plugin_skip(false);
+    welcome.set_button_caption(Dialog::left_1, "Log in");
+    welcome.set_button_visible(Dialog::left_1, Visibility::visible);
+    welcome.set_button_retval(Dialog::left_1, login_action);
+    welcome.set_button_caption(Dialog::ok, "Sign up");
+    welcome.set_button_visible(Dialog::ok, allow_signup ? Visibility::visible : Visibility::invisible);
+    welcome.set_button_retval(Dialog::ok, signup_action);
+    welcome.set_button_caption(Dialog::cancel, "Quit");
+    welcome.set_button_visible(Dialog::cancel, Visibility::visible);
+    welcome.set_button_retval(Dialog::cancel, gui2::retval::CANCEL);
+    welcome.set_enter_disabled(true);
+    welcome.show();
+    const int action = welcome.get_retval();
+    return action == login_action ? 0 : allow_signup && action == signup_action ? 1 : -1;
+}
+
+bool collect_credentials(std::string& username, std::string& password,
+                         const std::string& description, const std::string& action,
+                         bool confirm_only = false)
+{
+    // Destruction releases the modal and clears its private text renderer
+    // before confirmation, network progress, feedback or welcome can open.
+    CredentialsDialog credentials(username, password, description, action, confirm_only);
+    return credentials.show();
+}
 
 // network_transmission pumps the regular game event loop and forwards Cancel.
 // This adapter's poll never performs network work. Results are read only after
@@ -526,11 +610,10 @@ void register_player(const alliance::TrustedProfile& profile)
 {
     account::Request input;
     input.operation = "register";
-    CredentialsDialog credentials(input.username, input.password,
+    if(!collect_credentials(input.username, input.password,
         "Create a player account.\nUsername: 3–24 letters, digits or underscores.\n"
         "Password: 12–128 characters. Your administrator account is separate.",
-        "Create account");
-    if(!credentials.show()) {
+        "Create account")) {
         clear_secret(input.password);
         return;
     }
@@ -542,9 +625,8 @@ void register_player(const alliance::TrustedProfile& profile)
         return;
     }
     std::string repeated;
-    CredentialsDialog confirmation(input.username, repeated,
-        "Create player account: repeat the same password.", "Confirm password", true);
-    const bool confirmed = confirmation.show() && repeated == input.password;
+    const bool confirmed = collect_credentials(input.username, repeated,
+        "Create player account: repeat the same password.", "Confirm password", true) && repeated == input.password;
     clear_secret(repeated);
     if(!confirmed) {
         clear_secret(input.password);
@@ -583,14 +665,14 @@ void register_player(const alliance::TrustedProfile& profile)
 
 void application_decisions(const alliance::TrustedProfile& profile, bool unread_only);
 
-void login(const alliance::TrustedProfile& profile)
+void login(const alliance::TrustedProfile& profile, const std::string& required_account = {},
+           const std::string& required_generation = {})
 {
     account::Request input;
     input.operation = "login";
-    CredentialsDialog credentials(input.username, input.password,
+    if(!collect_credentials(input.username, input.password,
         "Log in to your player account.\n"
-        "The Windows administrator account is separate.", "Log in");
-    if(!credentials.show()) {
+        "The Windows administrator account is separate.", "Log in")) {
         clear_secret(input.password);
         return;
     }
@@ -604,6 +686,21 @@ void login(const alliance::TrustedProfile& profile)
     if(!request(profile, input, "Logging in…", output)) return;
     if(!output.ok) {
         show_failure(output);
+        return;
+    }
+    if((!required_account.empty() && output.profile.account_id != required_account) ||
+       (!required_generation.empty() && output.profile.database_generation != required_generation)) {
+        // A reconnect must never temporarily expose another player's account,
+        // decisions or token to the paused game. Revoke only this new session.
+        account::Request revoke;
+        revoke.operation = "logout";
+        revoke.token = std::move(output.token);
+        account::Reply ignored;
+        try { request(profile, revoke, "Closing the other account session…", ignored); }
+        catch(...) {}
+        clear_secret(revoke.token);
+        current_session().clear();
+        message("Sign in as the player who started this game to resume. Quit game to switch accounts.");
         return;
     }
     auto& session = current_session();
@@ -1912,24 +2009,30 @@ bool player_request(account::Request& input, account::Reply& output)
     return true;
 }
 
-bool ensure_player_session()
+bool ensure_player_session(const std::string& required_account,
+                           const std::string& required_generation,
+                           const std::string& notice)
 {
     static bool active=false;
     if(active)return false;
     struct Guard{bool& flag;Guard(bool& f):flag(f){flag=true;}~Guard(){flag=false;}}guard(active);
+    AuthenticationBackdrop background;
     try {
         if(auto existing=player_session()) {
-            if(reload_player(existing->trusted))return true;
+            if((!required_account.empty() && existing->account.account_id != required_account) ||
+               (!required_generation.empty() && existing->account.database_generation != required_generation)) {
+                logout(existing->trusted);
+            } else if(reload_player(existing->trusted))return true;
             if(!current_session().token.empty())return false;
         }
         const char* path=std::getenv("WESNOTH_ALLIANCE_PROFILE");
         if(!path||!*path){message("Import the trusted Windows server profile before starting the game.");return false;}
         const auto trusted=account::read_public_profile(path);
         while(current_session().token.empty()) {
-            gui2::dialogs::simple_item_selector menu("Welcome to Wesnoth","Log in once to play Campaigns, Multiplayer and Teams.",{"Log in","Sign up"});
-            menu.set_allow_plugin_skip(false);menu.set_cancel_label("Quit game");
-            if(!menu.show())return false;
-            if(menu.selected_index()==0)login(trusted);else if(menu.selected_index()==1)register_player(trusted);
+            const int action=welcome_action(required_account.empty() && required_generation.empty(), notice);
+            if(action<0)return false;
+            if(action==0)login(trusted, required_account, required_generation);
+            else if(action==1)register_player(trusted);
         }
         retry_story_results();
         return true;
@@ -1948,14 +2051,34 @@ void show_account_dialog()
     try {
         auto session=player_session();if(!session)return;
         for(;;){
-            const int action=select("Heroes and account","Signed in as "+current_session().profile.username,{"My heroes","Account details","Log out"});
+            const int action=select("Heroes","Signed in as "+current_session().profile.username,{"My heroes","Account details"});
             if(action<0)return;
             if(action==0)heroes_dialog(session->trusted);
             else if(action==1)refresh(session->trusted);
-            else if(action==2){logout(session->trusted);return;}
             if(current_session().token.empty())return;
         }
     }catch(...){message("The heroes screen could not be opened. Return to the title screen and try again.");}
+}
+bool has_player_session() noexcept
+{
+    return !current_session().token.empty();
+}
+
+void invalidate_player_session()
+{
+    current_session().clear();
+}
+
+void logout_player()
+{
+    try {
+        auto session=player_session();
+        if(session)logout(session->trusted);
+        else current_session().clear();
+    }catch(...){
+        current_session().clear();
+        message("You are signed out on this device. The server did not confirm session revocation.");
+    }
 }
 void show_teams_dialog()
 {

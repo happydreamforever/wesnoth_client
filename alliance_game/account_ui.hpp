@@ -11,10 +11,17 @@ struct PlayerSession {
     ~PlayerSession();
 };
 // Startup gate. Cancelling authentication exits the game; there is no guest path.
-bool ensure_player_session();
+bool ensure_player_session(const std::string& required_account = {},
+                           const std::string& required_generation = {},
+                           const std::string& notice = {});
+// Invalidate the device session without network access; used after connection loss.
+void invalidate_player_session();
+bool has_player_session() noexcept;
 std::optional<PlayerSession> player_session();
 bool player_request(alliance::account::Request&, alliance::account::Reply&);
 void show_account_dialog();
+// Main-menu action; always clears this device session even if revocation fails.
+void logout_player();
 void show_teams_dialog();
 void show_training_dialog();
 // Rechecks current ownership before returning a selected hero/form.
