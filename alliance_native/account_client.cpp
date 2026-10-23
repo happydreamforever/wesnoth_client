@@ -635,8 +635,7 @@ Reply perform_request(const TrustedProfile& trusted, const Request& request,
         if(is_casual) {
             if(!token_valid(request.token) || !request.username.empty() || !request.password.empty() || !request.starter_id.empty()) return failure("invalid_input");
             if(op == "casual_select") {
-                if(request.game_id.empty() || request.game_id.size() > 36 ||
-                   !std::all_of(request.game_id.begin(), request.game_id.end(), [](char c){ return c >= '0' && c <= '9'; }) ||
+                if(!uuid_valid(request.game_id) ||
                    request.side < 1 || request.side > 99 || request.hero_id.size()>80 || request.form_id.size()>100 || !catalog_id_valid(request.hero_id) || !catalog_id_valid(request.form_id)) return failure("invalid_input");
                 body = {{"game_id",request.game_id},{"side",request.side},{"hero_id",request.hero_id},{"form_id",request.form_id}};
             }

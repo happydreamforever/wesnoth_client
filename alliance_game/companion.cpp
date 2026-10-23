@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "alliance_game/companion.hpp"
+#include "alliance_game/individual_companion.hpp"
 #include "alliance_game/shared_launch.hpp"
 #include "alliance_game/shared_result.hpp"
 #include "alliance_native/account_client.hpp"
@@ -14,8 +15,9 @@
 #include <string>
 
 namespace alliance_game {
-bool companion_requested() noexcept { return std::getenv("WESNOTH_ALLIANCE_COMPANION_PROFILE") != nullptr; }
+bool companion_requested() noexcept { return individual_companion_requested() || std::getenv("WESNOTH_ALLIANCE_COMPANION_PROFILE") != nullptr; }
 int run_companion() noexcept {
+    if(individual_companion_requested()) return run_individual_companion();
     // The launcher keeps passwords out of the process command line and sends
     // only a short-lived account token over this process's private stdin pipe.
     std::string input;

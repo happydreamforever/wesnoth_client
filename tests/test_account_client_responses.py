@@ -976,18 +976,19 @@ class AccountClientResponseTests(unittest.TestCase):
     def test_v2_casual_selection_is_bound_to_requested_hero_form(self):
         choice={'hero_id':'konrad','form_id':'konrad_fighter','hero_level':12,'hero_revision':3,
                 'unit_type':'AllianceHero_konrad_fighter','unit_level':1}
-        request=self.team_request('casual_select',game_id='12',side=3,hero_id='konrad',form_id='konrad_fighter')
+        game='82345678-1234-4321-8765-0123456789ab'
+        request=self.team_request('casual_select',game_id=game,side=3,hero_id='konrad',form_id='konrad_fighter')
         data={'selection_ticket':'d'*43,'selection':choice}
         output,received=self.exercise(self.team_reply(data),request)
         self.assertTrue(output['ok']);self.assertTrue(output['has_selection_ticket'])
-        self.assertEqual(received['body'],{'game_id':'12','side':3,'hero_id':'konrad','form_id':'konrad_fighter'})
+        self.assertEqual(received['body'],{'game_id':game,'side':3,'hero_id':'konrad','form_id':'konrad_fighter'})
         for field,bad in [('hero_id','delfador'),('form_id','unowned'),('hero_level',True),('unit_level',21),('hero_revision',-1)]:
             output,_=self.exercise(self.team_reply({**data,'selection':{**choice,field:bad}}),request)
             self.assertFalse(output['ok'])
 
     def test_v2_invalid_casual_selection_never_opens_socket(self):
-        valid=self.team_request('casual_select',game_id='12',side=1,hero_id='konrad',form_id='konrad_fighter')
-        for key,value in [('game_id','remote.example'),('side',0),('side',100),('hero_id','../hero'),('form_id','bad form'),('username','Other')]:
+        valid=self.team_request('casual_select',game_id='82345678-1234-4321-8765-0123456789ab',side=1,hero_id='konrad',form_id='konrad_fighter')
+        for key,value in [('game_id','remote.example'),('game_id','12'),('game_id','82345678-1234-4321-8765-0123456789ag'),('game_id','823456781234432187650123456789ab'),('side',0),('side',100),('hero_id','../hero'),('form_id','bad form'),('username','Other')]:
             with self.peer() as (port,state):
                 output=self.invoke(self.profile(port),{**valid,key:value})
             self.assertFalse(output['ok']);self.assertEqual(state['connections'],0)

@@ -65,6 +65,7 @@ class CompanionEntryTests(unittest.TestCase):
     def run_case(self, mode='acknowledged', value=None, raw=None, expected=1, profile=True):
         if value is None: value = {'run_id': RUN, 'account_id': ACCOUNT, 'token': TOKEN, 'intent': 'result_retry' if mode=='retry' else 'play'}
         environment = os.environ.copy(); environment.pop('WESNOTH_ALLIANCE_PROFILE', None)
+        environment.pop('WESNOTH_INDIVIDUAL_COMPANION_PROFILE', None)
         if profile: environment['WESNOTH_ALLIANCE_COMPANION_PROFILE'] = str(self.profile)
         else: environment.pop('WESNOTH_ALLIANCE_COMPANION_PROFILE', None)
         result = subprocess.run([str(self.binary), mode], input=raw if raw is not None else json.dumps(value)+'\n',
@@ -80,6 +81,23 @@ class CompanionEntryTests(unittest.TestCase):
 
     def test_acknowledged_exact_account_run_and_replay_exit_zero(self):
         self.assertEqual(self.run_case(expected=0), [START, FINISH+'acknowledged'])
+
+    def test_individual_dispatch_is_explicit_and_preserves_shared_entry(self):
+        environment = os.environ.copy()
+        for key in ('WESNOTH_ALLIANCE_COMPANION_PROFILE', 'WESNOTH_INDIVIDUAL_COMPANION_PROFILE'):
+            environment.pop(key, None)
+        def call(mode, expected):
+            result = subprocess.run([str(self.binary), mode], env=environment, input='',
+                capture_output=True, text=True, timeout=15)
+            self.assertEqual(result.returncode, expected, result.stdout+result.stderr)
+            self.assertEqual(result.stdout+result.stderr, '')
+        call('entry_requested', 1)
+        environment['WESNOTH_ALLIANCE_COMPANION_PROFILE'] = str(self.profile)
+        call('entry_requested', 0)
+        environment.pop('WESNOTH_ALLIANCE_COMPANION_PROFILE')
+        environment['WESNOTH_INDIVIDUAL_COMPANION_PROFILE'] = str(self.profile)
+        call('entry_requested', 0)
+        call('individual', 17)
 
     def test_explicit_result_retry_is_separate_admission(self):
         self.assertEqual(self.run_case('retry', expected=0), [START, FINISH+'acknowledged'])

@@ -7,6 +7,7 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
+#include <cstdlib>
 
 namespace {
 std::string mode;
@@ -17,6 +18,10 @@ int starts=0,reads=0;
 }
 namespace video { bool headless() { return mode!="nonheadless"; } }
 namespace alliance_game {
+bool individual_companion_requested() noexcept {
+    return std::getenv("WESNOTH_INDIVIDUAL_COMPANION_PROFILE")!=nullptr;
+}
+int run_individual_companion() noexcept { return mode=="individual"?17:99; }
 void queue_shared(SharedAdmission admission) {
     if(mode=="queue_failure")throw std::runtime_error("PRIVATE_QUEUE_ERROR");
     const bool policy=mode.rfind("captain_",0)==0;
@@ -52,5 +57,6 @@ std::string verified_shared_replay(const std::string& owner,const std::string& i
 int main(int argc,char** argv) {
     if(argc!=2)return 99;
     mode=argv[1];
+    if(mode=="entry_requested")return alliance_game::companion_requested()?0:1;
     return alliance_game::run_companion();
 }
