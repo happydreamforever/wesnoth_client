@@ -25,6 +25,7 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.util.Locale;
 import org.libsdl.app.SDLActivity;
+import org.libsdl.app.WesnothKeyboard;
 
 /** SDLActivity host for the actual shared Wesnoth engine. */
 public final class OfflineGameActivity extends SDLActivity {
@@ -71,6 +72,7 @@ public final class OfflineGameActivity extends SDLActivity {
         setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
     }
     @Override public void onWindowFocusChanged(boolean focused) {
+        if (!focused && !mBrokenLibraries) WesnothKeyboard.focusLost();
         super.onWindowFocusChanged(focused);
         if (!focused || mBrokenLibraries) return;
         if (Build.VERSION.SDK_INT >= 30) {
@@ -86,6 +88,20 @@ public final class OfflineGameActivity extends SDLActivity {
                     View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION |
                     View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
         }
+    }
+
+    /** Called only for an explicit native game exit, before its process exits. */
+    public void finishGameTask() {
+        if (WesnothGameTask.finish(this)) {
+            Log.i(OfflineInitActivity.TAG, "WESNOTH_GAME_TASK_FINISH_REQUESTED");
+        } else {
+            Log.w(OfflineInitActivity.TAG, "WESNOTH_GAME_TASK_FINISH_INCOMPLETE");
+        }
+    }
+
+    /** Explicit user recovery for future keyboard input; existing text is untouched. */
+    public void resetKeyboardModifiers() {
+        runOnUiThread(WesnothKeyboard::reset);
     }
 
     // These method names/signatures are called through JNI by the preserved engine.
