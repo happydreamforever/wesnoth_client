@@ -2,6 +2,12 @@
 #include "alliance_game/account_ui.hpp"
 #include "alliance_game/battle_launch.hpp"
 #include "alliance_game/practice_plan.hpp"
+#include "alliance_game/progression_plan.hpp"
+#include "alliance_game/progression_result.hpp"
+#include "alliance_game/shared_launch.hpp"
+#include "alliance_game/shared_result.hpp"
+#include "alliance_game/replay_launch.hpp"
+#include "alliance_native/progression_protocol.hpp"
 #include "alliance_native/account_client.hpp"
 #include "alliance_native/account_protocol.hpp"
 
@@ -753,7 +759,7 @@ std::string team_text(const account::Team& team)
     }
     text += "\n\nTeam experience is separate from personal leader experience.\n"
             "Open Battle plans to practise a saved lineup against the computer.\n"
-            "Shared team battles will be added in a later update.";
+            "Open Captain orders for your team's saved plan and instructions.";
     return text;
 }
 
@@ -1231,8 +1237,7 @@ std::string practice_availability_text(const account::Battle& battle, const acco
     if(battle.state == "cancelled")
         return "Cancelled plans are history only. Local practice is unavailable.";
     if(battle.state == "completed")
-        return "Completed battles cannot start local practice. Alliance battle replay viewing is not available in this version. "
-            "A local practice save or replay, if you saved one, is separate and remains available through Load.";
+        return "Completed battles cannot start practice. Watch completed battle replay is available when this player's verified recording is saved on this device.";
     if(battle.state == "running")
         return "This Alliance battle is already running. Local practice is unavailable.";
     const auto eligibility = practice_eligibility(battle, player);
@@ -1478,6 +1483,9 @@ bool battle_mutation(const alliance::TrustedProfile& profile, account::Request i
     return true;
 }
 
+#include "alliance_game/progression_ui.inc"
+#include "alliance_game/team_extension_ui.inc"
+
 void battle_detail(const alliance::TrustedProfile& profile, const std::string& battle_id,
                    std::string confirmed_change = {})
 {
@@ -1494,16 +1502,30 @@ void battle_detail(const alliance::TrustedProfile& profile, const std::string& b
         confirmed_change.clear();
         const auto& battle = *output.battle;
         const auto actor = current_session().profile.account_id;
-        bool captain = false, approved = false, selected = false, ready = false, both_approved = true;
+        bool captain = false, approved = false, selected = false, ready = false, both_approved = true, all_ready=true;
         for(const auto& team : battle.teams) {
             both_approved = both_approved && team.approved;
             if(team.captain_id == actor) { captain = true; approved = team.approved; }
-            for(const auto& player : team.players) if(player.id == actor) { selected = true; ready = player.ready; }
+            for(const auto& player : team.players) {all_ready=all_ready&&player.ready; if(player.id == actor) { selected = true; ready = player.ready; }}
         }
         std::vector<std::string> actions{"View fixed lineups", "Refresh plan"};
         const int practice = can_practice_plan(battle, current_session().profile)
             ? static_cast<int>(actions.size()) : -1;
         if(practice >= 0) actions.push_back("Practice this plan");
+        const int join=selected&&((battle.state=="draft"&&battle.validity=="valid"&&both_approved&&all_ready)||battle.state=="running")
+            ?static_cast<int>(actions.size()):-1;
+        if(join>=0) actions.push_back(battle.state=="running"?"Reconnect to my side":"Join shared battle");
+        bool pending_result=false,available_replay=false;
+        try {
+            for(const auto& record:inspect_pending_shared(actor)) if(record.run_id==battle.id&&record.status=="pending") pending_result=true;
+            if(battle.state=="completed") {(void)verified_shared_replay(actor,battle.id);available_replay=true;}
+        } catch(...) { /* Unusable local files never enable replay or result actions. */ }
+        const int upload=pending_result&&(battle.state=="running"||battle.state=="completed")?static_cast<int>(actions.size()):-1;
+        if(upload>=0) actions.push_back("Send saved battle result");
+        const int replay=available_replay?static_cast<int>(actions.size()):-1;
+        if(replay>=0) actions.push_back("Watch completed battle replay");
+        const int result_review=(battle.state=="running"||battle.state=="completed")?static_cast<int>(actions.size()):-1;
+        if(result_review>=0) actions.push_back("Review shared battle result");
         const bool draft = battle.state == "draft";
         const int approve = draft && captain && !approved && battle.validity == "valid"
             ? static_cast<int>(actions.size()) : -1;
@@ -1542,7 +1564,15 @@ void battle_detail(const alliance::TrustedProfile& profile, const std::string& b
             continue;
         }
         if(choice == 1) continue;
-        if(choice == practice) { practice_plan(profile, battle); if(practice_pending()) return; continue; }
+        if(choice==join||choice==upload) {join_shared_battle(profile,battle,choice==upload);if(shared_pending())return;continue;}
+        if(choice==replay) {
+            if(select_change("Completed battle replay","Watch this player's saved recording. This never grants experience.",{"Watch replay"})==0&&same_extension_actor(actor)) {
+                queue_alliance_replay(AllianceReplay::shared,actor,battle.id);return;
+            }
+            continue;
+        }
+        if(choice == result_review) {shared_result_review(profile,battle);continue;}
+        if(choice == practice) { practice_plan(profile, battle); if(practice_pending() || progression_pending() || shared_pending() || replay_pending()) return; continue; }
         account::Request mutation;
         mutation.battle_id = battle.id;
         std::string title, explanation, affirmative, success;
@@ -1600,7 +1630,7 @@ void my_battles(const alliance::TrustedProfile& profile)
         if(choice == previous) { cursors.pop_back(); continue; }
         if(choice == more) { cursors.push_back(output.next); continue; }
         if(static_cast<std::size_t>(choice) < output.battles.size()) battle_detail(profile, output.battles[choice].id);
-        if(practice_pending()) return;
+        if(practice_pending() || progression_pending() || shared_pending() || replay_pending()) return;
     }
 }
 
@@ -1718,7 +1748,7 @@ void battle_plans(const alliance::TrustedProfile& profile)
         if(choice < 0) return;
         if(choice == 0) my_battles(profile);
         if(choice == 1) propose_battle(profile);
-        if(practice_pending()) return;
+        if(practice_pending() || progression_pending() || shared_pending() || replay_pending()) return;
     }
 }
 
@@ -1728,7 +1758,7 @@ void teams(const alliance::TrustedProfile& profile)
         const int action = select("Alliance teams",
             "Build your team in an area. Apply to join a team, or review applications as captain.",
             {"Browse areas and teams", "Create team", "My team", "My applications", "Review applications", "Application decisions",
-             "Transfer captain", "Leave team", "Area rankings", "Battle plans"});
+             "Transfer captain", "Leave team", "Area rankings", "Battle plans", "Captain orders"});
         if(action < 0) return;
         if(action == 0) browse_areas(profile);
         else if(action == 1) create_team(profile);
@@ -1740,9 +1770,12 @@ void teams(const alliance::TrustedProfile& profile)
         else if(action == 7) leave_team(profile);
         else if(action == 8) area_rankings(profile);
         else if(action == 9) battle_plans(profile);
-        if(practice_pending()) return;
+        else if(action == 10) captain_orders(profile);
+        if(practice_pending() || progression_pending() || shared_pending() || replay_pending()) return;
     }
 }
+
+
 
 void logout(const alliance::TrustedProfile& profile)
 {
@@ -1766,7 +1799,7 @@ void show_account_dialog()
     // A title-screen hotkey must not open another account flow while a modal
     // request is pumping events. This flag is used only by the game UI thread.
     static bool active = false;
-    if(active || practice_pending()) return;
+    if(active || practice_pending() || progression_pending() || shared_pending() || replay_pending()) return;
     struct ActiveFlow {
         bool& active;
         explicit ActiveFlow(bool& value) : active(value) { active = true; }
@@ -1794,7 +1827,7 @@ void show_account_dialog()
                 logged_in ? "Logged in as " + session.profile.username
                           : "Grow your personal leader.\nCreate a player account or log in.",
                 logged_in
-                    ? std::vector<std::string>{"View personal leader", "Teams", "Log out"}
+                    ? std::vector<std::string>{"View personal leader", "Teams", "Campaign progression", "Log out"}
                     : std::vector<std::string>{"Create player account", "Log in"});
             menu.set_allow_plugin_skip(false);
             menu.set_selected_index(0);
@@ -1806,12 +1839,13 @@ void show_account_dialog()
             if(logged_in) {
                 if(action == 0) refresh(profile);
                 else if(action == 1) teams(profile);
-                else if(action == 2) logout(profile);
+                else if(action == 2) campaign_progression(profile);
+                else if(action == 3) logout(profile);
             } else {
                 if(action == 0) register_player(profile);
                 else if(action == 1) login(profile);
             }
-            if(practice_pending()) return;
+            if(practice_pending() || progression_pending() || shared_pending() || replay_pending()) return;
         }
     } catch(const account::ProfileReadError& error) {
         // This type accepts only an enum and returns fixed public strings.
