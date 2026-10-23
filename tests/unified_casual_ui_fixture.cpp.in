@@ -1,0 +1,113 @@
+// Actual controller; config, modal, account and socket boundaries are substituted.
+#include "alliance_game/casual_sides.hpp"
+#include "alliance_game/casual_session.hpp"
+#include "alliance_game/account_ui.hpp"
+#include "alliance_game/hero_catalog.hpp"
+#include <algorithm>
+#include <deque>
+#include <functional>
+#include <iostream>
+#include <map>
+#include <optional>
+#include <stdexcept>
+#include <string>
+#include <vector>
+void need(bool value,const std::string& why="assertion"){if(!value)throw std::runtime_error(why);}
+class config {
+public:
+ struct attribute {
+  std::string value;
+  std::string str()const{return value;}
+  int to_int()const{return value.empty()?0:std::stoi(value);}
+  long long to_long_long()const{return value.empty()?0:std::stoll(value);}
+  bool to_bool()const{return value=="yes"||value=="true"||value=="1";}
+  attribute& operator=(const std::string& v){value=v;return *this;}
+  attribute& operator=(const char* v){value=v;return *this;}
+  attribute& operator=(bool v){value=v?"yes":"no";return *this;}
+  attribute& operator=(int v){value=std::to_string(v);return *this;}
+  attribute& operator=(std::int64_t v){value=std::to_string(v);return *this;}
+ };
+ struct optional_ref {
+  const config* value=nullptr;
+  explicit operator bool()const{return value;}
+  const attribute& operator[](const std::string& k)const{return (*value)[k];}
+ };
+ std::map<std::string,attribute> attributes;
+ std::map<std::string,std::vector<config>> children;
+ attribute& operator[](const std::string& k){return attributes[k];}
+ const attribute& operator[](const std::string& k)const{static attribute empty;auto found=attributes.find(k);return found==attributes.end()?empty:found->second;}
+ config& add_child(const std::string& key){children[key].push_back({});return children[key].back();}
+ bool has_child(const std::string& key)const{return !child_range(key).empty();}
+ optional_ref optional_child(const std::string& key)const{const auto& list=child_range(key);return {list.empty()?nullptr:&list.front()};}
+ const std::vector<config>& child_range(const std::string& key)const{static std::vector<config> empty;auto f=children.find(key);return f==children.end()?empty:f->second;}
+ void remove_children(const std::string& key){children.erase(key);}
+};
+const std::string game_one="11111111-1111-4111-8111-111111111111",game_two="22222222-2222-4222-8222-222222222222";
+const std::string actor_one="33333333-3333-4333-8333-333333333333",generation_one="44444444-4444-4444-8444-444444444444";
+std::optional<alliance_game::PlayerSession> current;
+std::vector<config> sent;
+std::vector<std::string> notices,rows;
+int action=0,chooser_calls=0,ticket_calls=0,cleared_secrets=0,scale_calls=0;
+bool modal_accept=true,hero_accept=true,ticket_accept=true,send_failure=false;
+std::function<void()> modal_change,hero_change,ticket_change;
+namespace gui2 {
+namespace dialogs {
+struct message{static constexpr int ok_button=1;};
+struct simple_item_selector {
+ simple_item_selector(const std::string&,const std::string&,const std::vector<std::string>& options,bool,bool){rows=options;}
+ void set_allow_plugin_skip(bool){}void set_selected_index(int){}void set_ok_label(const std::string&){}void set_cancel_label(const std::string&){}
+ bool show(){if(modal_change)modal_change();return modal_accept;}int selected_index()const{return action;}
+};
+}
+void show_message(const std::string&,const std::string& text,int,bool,bool){notices.push_back(text);}
+}
+namespace mp {void send_to_server(const config& packet){if(send_failure)throw std::runtime_error("send failed");sent.push_back(packet);}}
+class wesnothd_connection {
+public:
+ std::deque<config> incoming;
+ bool receive_data(config& result){need(!incoming.empty(),"Unexpected receive polling");result=incoming.front();incoming.pop_front();return true;}
+};
+namespace alliance_game {
+PlayerSession::~PlayerSession()=default;
+std::optional<PlayerSession> player_session(){return current;}
+bool choose_owned_hero(std::string& hero,std::string& form){++chooser_calls;if(hero_change)hero_change();hero="konrad";form="fighter";return hero_accept;}
+std::optional<std::string> casual_selection_ticket(const std::string& game,int side,const std::string& hero,const std::string& form){++ticket_calls;need(game==game_one&&side==1&&hero=="konrad"&&form=="fighter");if(ticket_change)ticket_change();if(!ticket_accept)return std::nullopt;return "fixture-one-use-ticket";}
+void clear_casual_secret(std::string& value) noexcept{if(!value.empty())++cleared_secrets;value.clear();}
+const HeroForm* find_hero_form(const std::string& hero,const std::string& form) noexcept {
+ static HeroForm value{"fighter","konrad","AH_konrad_fighter","Rebels","Fighter",1,32,{}};
+ return hero==value.hero_id&&form==value.id?&value:nullptr;
+}
+std::string hero_name(const std::string& id){return id=="konrad"?"Konrad":id;}
+void apply_hero_level(config& leader,const std::string& hero,const std::string& form,std::int64_t level){++scale_calls;need(leader["type"].str()=="AH_konrad_fighter"&&hero=="konrad"&&form=="fighter"&&level==25);leader["scaled"]=true;}
+}
+// @PRODUCTION@
+config context(const std::string& id=game_one,bool resumed=false){config result;auto& child=result.add_child("alliance_game");child["id"]=id;child["resume"]=resumed;return result;}
+config selection(bool ready=false){config packet;auto& row=packet.add_child("alliance_selection");row["game_id"]=game_one;row["side"]=1;row["username"]="Player";row["account_id"]=actor_one;row["hero_id"]="konrad";row["form_id"]="fighter";row["hero_level"]=25;row["hero_revision"]=7;row["unit_type"]="AH_konrad_fighter";row["unit_level"]=1;row["ready"]=ready;return packet;}
+void reset(){alliance_game::reset_casual_game();current.emplace();current->account.account_id=actor_one;current->account.username="Player";current->account.database_generation=generation_one;current->token="fixture-session";sent.clear();notices.clear();rows.clear();action=chooser_calls=ticket_calls=cleared_secrets=scale_calls=0;modal_accept=hero_accept=ticket_accept=true;send_failure=false;modal_change=hero_change=ticket_change={};}
+void prepare(bool ready=false){alliance_game::observe_casual_message(context());alliance_game::observe_casual_message(selection(ready));}
+void check(const std::string& name,void(*body)()){reset();body();std::cout<<"PASS "<<name<<'\n';}
+int main(){try{
+ check("missing game context never opens selection or sends",[]{need(!alliance_game::choose_casual_side(1));need(rows.empty()&&sent.empty()&&ticket_calls==0);});
+ check("server-confirmed canonical hero controls label and readiness",[]{prepare(true);need(alliance_game::casual_side_ready(1,"Player"));need(!alliance_game::casual_side_ready(1,"Other"));need(alliance_game::casual_side_label(1,"Player").find("25")!=std::string::npos);});
+ check("new game clears prior ready cache",[]{prepare(true);alliance_game::observe_casual_message(context(game_two));need(!alliance_game::casual_side_ready(1,"Player"));});
+ check("selection from another game cannot overwrite current side",[]{prepare(true);auto old=selection(false);old.children["alliance_selection"][0]["game_id"]=game_two;alliance_game::observe_casual_message(old);need(alliance_game::casual_side_ready(1,"Player"));});
+ check("cleared server selection removes readiness",[]{prepare(true);auto row=selection();row.children["alliance_selection"][0]["cleared"]=true;alliance_game::observe_casual_message(row);need(!alliance_game::casual_side_ready(1,"Player"));});
+ check("unrecognized hero form is rejected",[]{prepare();auto bad=selection();bad.children["alliance_selection"][0]["unit_type"]="Ancient Lich";bool rejected=false;try{alliance_game::observe_casual_message(bad);}catch(...){rejected=true;}need(rejected);});
+ check("Back and cancelled modal never mutate",[]{prepare(true);need(!alliance_game::choose_casual_side(1));modal_accept=false;action=1;need(!alliance_game::choose_casual_side(1));need(sent.empty()&&chooser_calls==0&&ticket_calls==0);});
+ check("hero selection uses one-use ticket and awaits server acknowledgement",[]{prepare(true);action=1;need(alliance_game::choose_casual_side(1));need(chooser_calls==1&&ticket_calls==1&&sent.size()==1&&sent[0].has_child("alliance_hero"));need(!sent[0].has_child("login")&&!alliance_game::casual_side_ready(1,"Player"));need(cleared_secrets==1);alliance_game::observe_casual_message(selection());need(!alliance_game::casual_side_ready(1,"Player"));});
+ check("cancelled hero chooser requests no ticket",[]{prepare();hero_accept=false;action=1;need(!alliance_game::choose_casual_side(1));need(ticket_calls==0&&sent.empty());});
+ check("account change during chooser sends no ticket",[]{prepare();action=1;hero_change=[]{current->account.account_id=game_two;};need(!alliance_game::choose_casual_side(1));need(sent.empty());});
+ check("database generation change during chooser sends no ticket",[]{prepare();action=1;hero_change=[]{current->account.database_generation=game_two;};need(!alliance_game::choose_casual_side(1));need(sent.empty());});
+ check("game change during chooser cancels selection",[]{prepare();action=1;hero_change=[]{alliance_game::observe_casual_message(context(game_two));};need(!alliance_game::choose_casual_side(1));need(sent.empty()&&ticket_calls==0);});
+ check("ticket is cleared if account changes before it is sent",[]{prepare();action=1;ticket_change=[]{current->account.account_id=game_two;};need(!alliance_game::choose_casual_side(1));need(sent.empty()&&cleared_secrets==1);});
+ check("ticket is cleared on send failure",[]{prepare();action=1;send_failure=true;bool failed=false;try{alliance_game::choose_casual_side(1);}catch(...){failed=true;}need(failed&&sent.empty()&&cleared_secrets==1);});
+ check("Ready remains pending until matching server confirmation",[]{prepare();action=2;need(alliance_game::choose_casual_side(1));need(sent.size()==1&&sent[0].optional_child("alliance_ready")["ready"].to_bool());need(!alliance_game::casual_side_ready(1,"Player"));alliance_game::observe_casual_message(selection(true));need(alliance_game::casual_side_ready(1,"Player"));});
+ check("Not ready withdrawal immediately clears local authorization",[]{prepare(true);action=2;need(alliance_game::choose_casual_side(1));need(!sent[0].optional_child("alliance_ready")["ready"].to_bool()&&!alliance_game::casual_side_ready(1,"Player"));});
+ check("resume keeps frozen hero and explicitly readies saved side",[]{prepare(false);alliance_game::observe_casual_message(context(game_one,true));action=1;need(alliance_game::choose_casual_side(1));need(chooser_calls==0&&ticket_calls==0&&sent[0].optional_child("alliance_ready")["ready"].to_bool());});
+ check("human side uses only canonical owned hero and scaling",[]{prepare();config side;side["side"]=1;side["controller"]="human";side["player_id"]="Player";side.add_child("leader")["type"]="Ancient Lich";alliance_game::apply_casual_side(side);need(side.child_range("leader").size()==1&&side.optional_child("leader")["type"].str()=="AH_konrad_fighter"&&scale_calls==1);need(side["alliance_account_id"].str()==actor_one&&side["alliance_hero_level"].to_long_long()==25);});
+ check("AI and resumed saved sides are not rewritten",[]{prepare();config side;side["controller"]="ai";side["side"]=1;side["player_id"]="Player";alliance_game::apply_casual_side(side);need(scale_calls==0);side["controller"]="human";alliance_game::observe_casual_message(context(game_one,true));alliance_game::apply_casual_side(side);need(scale_calls==0);});
+ check("matching server Start acknowledgement permits start",[]{prepare(true);wesnothd_connection conn;config response;auto& ack=response.add_child("alliance_start");ack["game_id"]=game_one;ack["accepted"]=true;conn.incoming.push_back(response);need(alliance_game::await_casual_start(conn));});
+ check("wrong game Start acknowledgement cannot start",[]{prepare(true);wesnothd_connection conn;config response;auto& ack=response.add_child("alliance_start");ack["game_id"]=game_two;ack["accepted"]=true;conn.incoming.push_back(response);need(!alliance_game::await_casual_start(conn));});
+ check("server rejection and leave stop Start",[]{for(const auto* tag:{"error","leave_game"}){prepare(true);wesnothd_connection conn;config response;response.add_child(tag);conn.incoming.push_back(response);need(!alliance_game::await_casual_start(conn));}});
+ std::cout<<"PASS all unified casual UI cases\n";return 0;
+}catch(const std::exception& e){std::cerr<<"FAIL "<<e.what()<<'\n';return 1;}}

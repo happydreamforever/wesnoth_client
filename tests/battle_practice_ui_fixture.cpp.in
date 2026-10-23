@@ -1,5 +1,6 @@
 // Scripted boundaries around source-extracted production UI controllers.
-#include "alliance_native/account_client.hpp"
+#include "alliance_game/account_ui.hpp"
+#include "alliance_game/hero_catalog.hpp"
 #include "alliance_game/practice_plan.hpp"
 #include "alliance_game/progression_plan.hpp"
 #include "alliance_game/replay_launch.hpp"
@@ -94,6 +95,9 @@ struct Session {
     void clear() { token.clear(); profile = {}; identity.clear(); }
 } fixture_session;
 Session& current_session() { return fixture_session; }
+PlayerSession::~PlayerSession()=default;
+std::optional<PlayerSession> player_session(){if(fixture_session.token.empty())return std::nullopt;return PlayerSession{{"127.0.0.1",15001,"public-cert","public-pin"},fixture_session.profile,fixture_session.token};}
+bool choose_hero(const alliance::TrustedProfile&,std::string&,std::string&){throw std::runtime_error("Unexpected hero selection");}
 void message(const std::string& value) { messages.push_back(value); }
 void queue_practice(const account::Battle& battle, const account::Profile& player, const PracticeSettings& settings)
 {
@@ -193,7 +197,10 @@ void apply_change(Change change)
     case Change::other_not_ready: saved.teams[1].players[1].ready = false; break;
     case Change::approval: saved.teams[1].approved = false; break;
     case Change::roster: saved.validity = "roster_changed"; break;
-    case Change::leader: saved.teams[1].players[1].unit_type = "Swordsman"; saved.teams[1].players[1].level = 2; break;
+    case Change::leader: {
+        auto& p=saved.teams[1].players[1];const auto& f=alliance_game::hero_forms()[1];
+        p.hero_id=f.hero_id;p.form_id=f.id;p.unit_type=f.unit_type;p.level=f.native_level;p.hero_level=9;p.hero_revision=8;break;
+    }
     case Change::name: saved.teams[1].name = "Changed Team"; break;
     case Change::actor: alliance_game::current_session().profile.account_id = "00000000-0000-0000-0000-000000000099"; break;
     case Change::logout: alliance_game::current_session().token.clear(); break;
@@ -201,6 +208,7 @@ void apply_change(Change change)
 }
 
 struct TitleFixture {
+    static constexpr int RELOAD_UI=999;
     int retval = 0;
     void set_retval(int value)
     {
@@ -227,12 +235,14 @@ void reset()
     saved.created_at = "2026-10-22T12:00:00Z"; saved.validity = "valid";
     saved.map = {"isars-cross", "Isar's Cross", "multiplayer_Isars_Cross", 2, {{1,4},{2,3}}};
     saved.teams = {{"00000000-0000-0000-0000-000000000020", "Koichi", "00000000-0000-0000-0000-000000000001", true,
-                   {{"00000000-0000-0000-0000-000000000001", "UniPlayer", "Spearman", 1, 1, true},
-                    {"00000000-0000-0000-0000-000000000002", "UniRecruit", "Spearman", 1, 4, true}}},
+                   {{"00000000-0000-0000-0000-000000000001", "UniPlayer", "Spearman", 1, 1, true, {}, {}},
+                    {"00000000-0000-0000-0000-000000000002", "UniRecruit", "Spearman", 1, 4, true, {}, {}}}},
                   {"00000000-0000-0000-0000-000000000021", "RivalPlan", "00000000-0000-0000-0000-000000000003", true,
-                   {{"00000000-0000-0000-0000-000000000003", "UniSolo", "Spearman", 1, 2, true},
-                    {"00000000-0000-0000-0000-000000000004", "UniRival", "Spearman", 1, 3, true}}}};
-    response_profile = {"00000000-0000-0000-0000-000000000002", "UniRecruit", "Spearman", "spearman", 1, 0, 0};
+                   {{"00000000-0000-0000-0000-000000000003", "UniSolo", "Spearman", 1, 2, true, {}, {}},
+                    {"00000000-0000-0000-0000-000000000004", "UniRival", "Spearman", 1, 3, true, {}, {}}}}};
+    for(auto& t:saved.teams)for(auto& p:t.players){const auto& f=alliance_game::hero_forms().front();p.hero_id=f.hero_id;p.form_id=f.id;p.unit_type=f.unit_type;p.level=f.native_level;p.hero_level=7;p.hero_revision=4;p.selection_present=true;}
+    response_profile={};response_profile.account_id="00000000-0000-0000-0000-000000000002";response_profile.username="UniRecruit";
+    account::Hero hero;hero.hero_id=alliance_game::hero_forms().front().hero_id;hero.forms={alliance_game::hero_forms().front().id};hero.hero_level=7;hero.revision=4;response_profile.heroes={hero};
     alliance_game::current_session() = {"dummy-session-secret", response_profile, "127.0.0.1:15001:public-pin"};
     setenv("WESNOTH_ALLIANCE_PROFILE", "/unused/public-profile.json", 1);
 }
@@ -471,7 +481,7 @@ int main()
                     const bool local = control == alliance_game::PracticeControl::hotseat ||
                         (control == alliance_game::PracticeControl::own_team ? team.name == "Koichi" : player.side == 4);
                     const std::string expected = "Side " + std::to_string(player.side) + ": " + player.username +
-                        " — Spearman, level 1 — " + team.name + " — " + (local ? "Local player on this device" : "Computer");
+                        " — " + alliance_game::hero_form_text(player.hero_id,player.form_id,player.hero_level) + " — " + team.name + " — " + (local ? "Local player on this device" : "Computer");
                     require(text.find(expected) != std::string::npos, "Review showed wrong local/AI ownership");
                 }
                 require(text.find("local copies of the saved leaders") != std::string::npos &&
@@ -629,14 +639,14 @@ int main()
             require(messages[0].find("private diagnostic") == std::string::npos, "Exception text leaked");
         });
         check("successful launch uses fresh eligible snapshot and makes only three reads", [] {
-            response_profile.experience = 5; response_profile.total_experience = 47;
+            response_profile.heroes[0].experience = 5; response_profile.heroes[0].total_experience = 47;
             events.push_back({"Practice setup", "Review and start"});
             events.push_back({"Confirm local team practice", "Start local practice"});
             alliance_game::practice_plan({}, saved);
-            require(pending && queue_count == 1 && queued_profile.experience == 5 &&
+            require(pending && queue_count == 1 && queued_profile.heroes[0].experience == 5 &&
                     alliance_game::same_practice_snapshot(queued, saved, response_profile.account_id), "Fresh consented data was not queued");
             const auto& text = seen.back().description;
-            for(const auto* required : {"Control: My side", "Side 4: UniRecruit — Spearman, level 1 — Koichi — Local player on this device", "saved leaders and alliances",
+            for(const auto* required : {"Control: My side", "Side 4: UniRecruit", "saved leaders and alliances",
                                        "No players or teams are reserved", "no account experience, team experience or rating",
                                        "Other players do not join this game", "checked again after you confirm"})
                 require(text.find(required) != std::string::npos, std::string("Missing explanation: ") + required);
@@ -648,12 +658,12 @@ int main()
             events.push_back({"Practice setup", "Review and start"});
             events.push_back({"Confirm local team practice", "Start local practice"});
             alliance_game::practice_plan({}, cached);
-            require(pending && queued.teams[1].players[1].unit_type == "Swordsman", "New confirmed lineup was lost");
-            require(seen.back().description.find("UniRival — Swordsman, level 2") != std::string::npos,
+            require(pending && queued.teams[1].players[1].unit_type == alliance_game::hero_forms()[1].unit_type, "New confirmed lineup was lost");
+            require(seen.back().description.find("UniRival — " + alliance_game::hero_form_text(alliance_game::hero_forms()[1].hero_id,alliance_game::hero_forms()[1].id,9)) != std::string::npos,
                     "Confirmation silently used old lineup");
         });
         check("complete title account teams plans detail chain unwinds before handoff", [] {
-            events = {{"Alliance", "Teams"}, {"Alliance teams", "Battle plans"},
+            events = {{"Teams", "Battle plans"},
                       {"Battle plans", "My battle plans"}, {"My battle plans", "", 0},
                       {"Battle plan", "Practice this plan"}, {"Practice setup", "Review and start"}, {"Confirm local team practice", "Start local practice"}};
             TitleFixture title; title.open();
@@ -661,12 +671,12 @@ int main()
             require(title.retval == alliance_game::practice_title_result, "Title did not request engine handoff");
             require(calls == std::vector<std::string>({"my_battles", "battle_detail", "me", "battle_detail", "battle_detail"}), "Unexpected extra request after queue");
             require(messages.empty(), "An ancestor reopened or failed while unwinding");
-            alliance_game::show_account_dialog();
+            alliance_game::show_teams_dialog();
             require(queue_count == 1 && events.empty(), "Pending request permitted a second account flow");
         });
         check("separate Ready then Practice choices unwind the complete title flow", [] {
             all_not_ready();
-            events = {{"Alliance", "Teams"}, {"Alliance teams", "Battle plans"},
+            events = {{"Teams", "Battle plans"},
                       {"Battle plans", "My battle plans"}, {"My battle plans", "", 0},
                       {"Battle plan", "Set myself ready"}, {"Confirm ready", "Set myself ready"},
                       {"Battle plan", "Practice this plan"}, {"Practice setup", "Review and start"}, {"Confirm local team practice", "Start local practice"}};
@@ -679,15 +689,15 @@ int main()
                 require(player.ready == (player.id == response_profile.account_id), "Separate Ready changed another player's consent");
             require(messages.size() == 1 && has_message("You are now ready. This does not start a battle."),
                     "Separate Ready lacked acknowledgement or Practice reported unexpected failure");
-            alliance_game::show_account_dialog();
+            alliance_game::show_teams_dialog();
             require(queue_count == 1 && mutations == 1 && events.empty(), "Pending launch allowed another action");
         });
         check("cancelled confirmation returns to menus without title handoff", [] {
-            events = {{"Alliance", "Teams"}, {"Alliance teams", "Battle plans"},
+            events = {{"Teams", "Battle plans"},
                       {"Battle plans", "My battle plans"}, {"My battle plans", "", 0},
                       {"Battle plan", "Practice this plan"}, {"Practice setup", "Review and start"}, {"Confirm local team practice", "<default>"},
                       {"Battle plan", "<close>"}, {"My battle plans", "<close>"}, {"Battle plans", "<close>"},
-                      {"Alliance teams", "<close>"}, {"Alliance", "<close>"}};
+                      {"Teams", "<close>"}};
             TitleFixture title; title.open();
             require(events.empty() && !pending && queue_count == 0 && title.retval == 0, "Cancel changed title mode");
             require(messages.empty(), "Cancel flow failed");

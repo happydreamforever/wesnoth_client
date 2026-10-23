@@ -1,0 +1,90 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+#include "alliance_game/account_ui.hpp"
+#include <algorithm>
+#include <cstdlib>
+#include <deque>
+#include <iostream>
+#include <stdexcept>
+#include <utility>
+#include <vector>
+namespace account=alliance::account;
+namespace {
+struct Choice{bool accepted;int selected;};
+struct Credential{bool accepted;std::string username,password;};
+std::deque<Choice> choices;
+std::deque<Credential> credentials;
+std::deque<account::Reply> replies;
+std::vector<std::string> operations,messages,menu_titles;
+int login_prompts=0;
+void need(bool value){if(!value)throw std::runtime_error("assertion");}
+void clear_secret(std::string& value){value.clear();}
+struct Session{std::string token,identity;account::Profile profile;void clear(){token.clear();identity.clear();profile={};}};
+Session session;
+Session& current_session(){return session;}
+void message(const std::string& value){messages.push_back(value);}
+void show_failure(const account::Reply& value){if(value.error_code=="invalid_session")session.clear();message(value.error_code);}
+bool valid_username(const std::string& s){return s.size()>=3&&s.size()<=24;}
+struct CredentialsDialog{
+ std::string& name;std::string& password;
+ CredentialsDialog(std::string& n,std::string& p,const std::string&,const std::string&,bool=false):name(n),password(p){++login_prompts;}
+ bool show(){need(!credentials.empty());auto c=credentials.front();credentials.pop_front();name=c.username;password=c.password;return c.accepted;}
+};
+bool request(const alliance::TrustedProfile&,account::Request& input,const std::string&,account::Reply& output){
+ need(!replies.empty());need(input.starter_id.empty());operations.push_back(input.operation);output=replies.front();replies.pop_front();input.password.clear();input.token.clear();return true;
+}
+void application_decisions(const alliance::TrustedProfile&,bool){}
+}
+namespace utf8{std::size_t size(const std::string&s){return s.size();}}
+namespace gui2::dialogs{
+struct simple_item_selector{
+ Choice selected{};
+ simple_item_selector(const std::string& title,const std::string&,const std::vector<std::string>&){menu_titles.push_back(title);}
+ void set_allow_plugin_skip(bool){} void set_cancel_label(const std::string&){}
+ bool show(){need(!choices.empty());selected=choices.front();choices.pop_front();return selected.accepted;}
+ int selected_index(){return selected.selected;}
+};
+}
+namespace alliance::account{
+TrustedProfile read_public_profile(const std::string&){return {"127.0.0.1",15001,"pem","pin"};}
+const char* ProfileReadError::what()const noexcept{return "profile failure";}
+}
+namespace alliance_game {
+PlayerSession::~PlayerSession(){clear_secret(token);}
+void retry_story_results() noexcept {}
+struct HeroForm {std::string name;int native_level;};
+const HeroForm* find_hero_form(const std::string& hero,const std::string& form){static HeroForm spec{"Fighter",1};return hero=="konrad"&&form=="konrad_fighter"?&spec:nullptr;}
+// @FUNCTIONS@
+}
+namespace {
+account::Profile profile(){account::Profile p;p.account_id="11111111-1111-4111-8111-111111111111";p.username="NewPlayer";p.database_generation="22222222-2222-4222-8222-222222222222";return p;}
+account::Reply ok(bool token=false){account::Reply r;r.ok=true;r.profile=profile();if(token)r.token=std::string(43,'a');return r;}
+account::Reply owned(){auto r=ok();account::Hero h;h.hero_id="konrad";h.name="Konrad";h.hero_level=5;h.revision=4;h.forms={"konrad_fighter"};r.profile.heroes.push_back(h);return r;}
+void reset(){session.clear();choices.clear();credentials.clear();replies.clear();operations.clear();messages.clear();menu_titles.clear();login_prompts=0;setenv("WESNOTH_ALLIANCE_PROFILE","/public-profile.json",1);}
+void ready(){session.profile=profile();session.token=std::string(43,'a');session.identity="127.0.0.1:15001:pin";}
+}
+int main(){try{
+ reset();choices.push_back({false,0});need(!alliance_game::ensure_player_session());need(operations.empty());
+ std::cout<<"PASS startup Back exits without guest access\n";
+ reset();choices.push_back({true,0});credentials.push_back({true,"NewPlayer","fixture-password"});replies.push_back(ok(true));need(alliance_game::ensure_player_session());need(operations==std::vector<std::string>{"login"});need(login_prompts==1);
+ replies.push_back(ok());need(alliance_game::ensure_player_session());need(login_prompts==1);need(operations.back()=="me");
+ std::cout<<"PASS startup login is shared and refresh never asks a second password\n";
+ reset();choices.push_back({true,1});credentials.push_back({true,"NewPlayer","fixture-password"});credentials.push_back({true,"NewPlayer","fixture-password"});replies.push_back(ok());replies.push_back(ok(true));need(alliance_game::ensure_player_session());need(session.profile.heroes.empty());need(operations==std::vector<std::string>({"register","login"}));need(menu_titles.size()==1);
+ std::cout<<"PASS signup creates an empty collection and automatically signs in without a starter selector\n";
+ reset();choices.push_back({true,1});choices.push_back({false,0});credentials.push_back({true,"NewPlayer","fixture-password"});credentials.push_back({true,"NewPlayer","different-password"});need(!alliance_game::ensure_player_session());need(operations.empty());
+ std::cout<<"PASS mismatched signup confirmation sends no account mutation\n";
+ reset();ready();auto changed=ok();changed.profile.database_generation="33333333-3333-4333-8333-333333333333";replies.push_back(changed);choices.push_back({false,0});need(!alliance_game::ensure_player_session());need(session.token.empty());
+ std::cout<<"PASS database reset generation forces a fresh login\n";
+ reset();ready();account::Reply unavailable;unavailable.error_code="unavailable";replies.push_back(unavailable);need(!alliance_game::ensure_player_session());need(!session.token.empty());need(login_prompts==0);
+ std::cout<<"PASS offline service failure blocks entry without pretending the password expired\n";
+ reset();ready();account::Reply expired;expired.error_code="invalid_session";replies.push_back(expired);choices.push_back({false,0});need(!alliance_game::ensure_player_session());need(session.token.empty());
+ std::cout<<"PASS revoked session returns to startup authentication\n";
+ reset();ready();replies.push_back(ok());std::string hero,form;need(!alliance_game::choose_hero(alliance::account::read_public_profile("x"),hero,form));need(hero.empty()&&form.empty());need(menu_titles.empty());
+ std::cout<<"PASS empty collection cannot choose or silently receive a starter hero\n";
+ reset();ready();replies.push_back(owned());replies.push_back(owned());choices.push_back({true,0});choices.push_back({true,0});need(alliance_game::choose_hero(alliance::account::read_public_profile("x"),hero,form));need(hero=="konrad"&&form=="konrad_fighter");need(operations==std::vector<std::string>({"me","me"}));
+ std::cout<<"PASS owned hero choice is bound to a fresh hero revision after both selectors\n";
+ reset();ready();replies.push_back(owned());auto advanced=owned();advanced.profile.heroes[0].revision++;replies.push_back(advanced);choices.push_back({true,0});choices.push_back({true,0});hero.clear();form.clear();need(!alliance_game::choose_hero(alliance::account::read_public_profile("x"),hero,form));need(hero.empty()&&form.empty());
+ std::cout<<"PASS concurrent hero advancement invalidates an unconfirmed selection\n";
+ reset();ready();replies.push_back(owned());choices.push_back({false,0});need(!alliance_game::choose_hero(alliance::account::read_public_profile("x"),hero,form));need(operations==std::vector<std::string>{"me"});
+ std::cout<<"PASS selection Back does not mutate server readiness or hero state\n";
+ std::cout<<"PASS all unified startup UI cases\n";return 0;
+}catch(...){std::cerr<<"FAIL unified startup UI fixture\n";return 1;}}

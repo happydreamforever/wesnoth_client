@@ -8,8 +8,9 @@ class SharedConnection(unittest.TestCase):
   sys.path.insert(0,os.environ['ALLIANCE_SHARED_SERVER_SOURCE'])
   from tools.alliance_transport import prepare_identity
   root=Path(os.environ['ALLIANCE_SHARED_CONNECTION_SCRATCH']);root.mkdir(parents=True,exist_ok=False)
-  profile,_=prepare_identity(root/'identity','127.0.0.1',15002,Path('/usr/bin/openssl'))
-  other,_=prepare_identity(root/'other','127.0.0.1',15002,Path('/usr/bin/openssl'))
+  port=int(os.environ.get('ALLIANCE_CONNECTION_PORT','15002'));self.assertIn(port,(15000,15002))
+  profile,_=prepare_identity(root/'identity','127.0.0.1',port,Path('/usr/bin/openssl'))
+  other,_=prepare_identity(root/'other','127.0.0.1',port,Path('/usr/bin/openssl'))
   binary=os.environ['ALLIANCE_SHARED_CONNECTION_PROBE'];results=[]
   def read(s,n):
    result=b''
@@ -19,7 +20,7 @@ class SharedConnection(unittest.TestCase):
     result+=more
    return result
   def one(name,action,version=None,identity='identity',mode='reject',expected_time=None):
-   server=socket.socket();server.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR,1);server.bind(('127.0.0.1',15002));server.listen(1);server.settimeout(15)
+   server=socket.socket();server.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR,1);server.bind(('127.0.0.1',port));server.listen(1);server.settimeout(15)
    errors=[]
    def serve():
     try:
@@ -55,9 +56,9 @@ class SharedConnection(unittest.TestCase):
   one('preamble-eof',lambda s:None)
   one('preamble-stall',lambda s:None,expected_time=13)
   one('zero-frame',lambda s:s.sendall(b'\0'*4))
-  one('oversize',lambda s:s.sendall(struct.pack('!I',65537)))
+  one('oversize',lambda s:s.sendall(struct.pack('!I',(4*1024*1024 if port==15000 else 65536)+1)))
   one('invalid-gzip',packet(b'not gzip'))
-  one('decompression-limit',packet(gzip.compress(b'x'*(2*1024*1024+1))))
+  one('decompression-limit',packet(gzip.compress(b'x'*((32 if port==15000 else 2)*1024*1024+1))))
   one('trailing-gzip',packet(gzip.compress(b'[probe]\nvalue="safe fixture payload"\n[/probe]\n')+b'garbage'))
   one('partial-header',lambda s:s.sendall(b'\0\0'))
   one('partial-body',lambda s:s.sendall(struct.pack('!I',20)+b'a'))

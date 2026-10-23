@@ -13,6 +13,7 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+from hero_catalog_fixture import catalogue_source
 
 ROOT = Path(__file__).resolve().parents[1]
 UI = ROOT / "alliance_game/account_ui.cpp"
@@ -35,11 +36,11 @@ class PracticeUiBehavior(unittest.TestCase):
         source = UI.read_text(encoding="utf-8")
         signatures = [
             "int select(", "int select_change(", "std::string battle_validity_text(",
-            "std::string practice_availability_text(", "std::string battle_text(",
+            "std::string practice_availability_text(", "std::string hero_form_text(", "std::string battle_text(",
             "bool can_practice_plan(", "bool load_practice_plan(", "std::string practice_settings_text(",
             "bool choose_practice_settings(", "std::string practice_lineup_text(", "void practice_plan(", "bool battle_mutation(",
             "void battle_detail(", "void my_battles(", "void battle_plans(",
-            "void teams(", "void show_account_dialog(",
+            "void teams(", "void show_teams_dialog(",
         ]
         functions = "\n\n".join(extract(source, signature) for signature in signatures)
         spec = importlib.util.spec_from_file_location("practice_title_overlay", ROOT / "alliance_game/title_overlay.py")
@@ -49,7 +50,7 @@ class PracticeUiBehavior(unittest.TestCase):
         generated = overlay.generate_title_overlay(original)
         self.assertEqual(hashlib.sha256(original).hexdigest(), overlay.SOURCE_SHA256)
         self.assertIn(b'if(alliance_game::practice_pending())', generated)
-        callback = overlay._NEW.decode("utf-8").split('register_button("addons",', 1)[1]
+        callback = overlay._NEW.decode("utf-8").replace("show_account_dialog()", "show_teams_dialog()").split('register_button("addons",', 1)[1]
         callback = callback.split('[this]() {', 1)[1].rsplit('});', 1)[0]
         fixture = (ROOT / "tests/battle_practice_ui_fixture.cpp.in").read_text(encoding="utf-8")
         fixture = fixture.replace("// @FUNCTIONS@", functions).replace("// @TITLE_CALLBACK@", callback)
@@ -68,9 +69,11 @@ class PracticeUiBehavior(unittest.TestCase):
                 str(ROOT / "alliance_game/practice_plan.cpp"), "-o", str(policy)]
             compiled = subprocess.run(policy_command, capture_output=True, text=True, timeout=120)
             self.assertEqual(compiled.returncode, 0, compiled.stdout + compiled.stderr)
+            catalogue=directory/"catalogue.cpp"
+            includes=catalogue_source(ROOT,catalogue)
             command = [compiler, "-std=c++17", "-Wall", "-Wextra", "-Werror", "-O0", "-g",
                        "-fsanitize=address,undefined", "-fno-omit-frame-pointer", "-I" + str(ROOT),
-                       str(cpp), str(policy), "-o", str(binary)]
+                       str(cpp), str(policy), str(catalogue), *includes, "-o", str(binary)]
             built = subprocess.run(command, capture_output=True, text=True, timeout=120)
             self.assertEqual(built.returncode, 0, built.stdout + built.stderr)
             ran = subprocess.run([str(binary)], capture_output=True, text=True, timeout=30)

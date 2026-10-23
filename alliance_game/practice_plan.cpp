@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "alliance_game/practice_plan.hpp"
 #include "alliance_game/battle_launch.hpp"
+#include "alliance_game/hero_catalog.hpp"
 #include <algorithm>
 #include <map>
 #include <set>
@@ -37,17 +38,6 @@ const std::map<std::string, Map> maps = {
     {"hexcake", {"Hexcake", "multiplayer_Hexcake", "multiplayer/maps/6p_Hexcake.map", {{1,4,5},{2,3,6}}}},
     {"mokena-prairie", {"Mokena Prairie", "multiplayer_8p_Mokena_Prairie", "multiplayer/maps/8p_Mokena_Prairie.map", {{1,3,5,8},{2,4,6,7}}}}
 };
-struct Unit { int level; const char* faction; };
-const std::map<std::string, Unit> units = {
-    {"Spearman",{1,"Loyalists"}}, {"Swordsman",{2,"Loyalists"}}, {"Pikeman",{2,"Loyalists"}},
-    {"Javelineer",{2,"Loyalists"}}, {"Royal Guard",{3,"Loyalists"}}, {"Halberdier",{3,"Loyalists"}},
-    {"Elvish Fighter",{1,"Rebels"}}, {"Elvish Captain",{2,"Rebels"}}, {"Elvish Hero",{2,"Rebels"}},
-    {"Elvish Marshal",{3,"Rebels"}}, {"Elvish Champion",{3,"Rebels"}},
-    {"Orcish Grunt",{1,"Northerners"}}, {"Orcish Warrior",{2,"Northerners"}}, {"Orcish Warlord",{3,"Northerners"}},
-    {"Dwarvish Fighter",{1,"Knalgan Alliance"}}, {"Dwarvish Steelclad",{2,"Knalgan Alliance"}}, {"Dwarvish Lord",{3,"Knalgan Alliance"}},
-    {"Drake Fighter",{1,"Drakes"}}, {"Drake Warrior",{2,"Drakes"}}, {"Drake Blademaster",{3,"Drakes"}},
-    {"Skeleton",{1,"Undead"}}, {"Revenant",{2,"Undead"}}, {"Deathblade",{2,"Undead"}}, {"Draug",{3,"Undead"}}
-};
 PracticeEligibility evaluate_practice(const alliance::account::Battle& battle,
                                      const alliance::account::Profile& viewer, PracticePlan& result)
 {
@@ -76,17 +66,19 @@ PracticeEligibility evaluate_practice(const alliance::account::Battle& battle,
         approved = approved && !team.captain_id.empty() && team.approved;
         for(std::size_t p = 0; p < team.players.size(); ++p) {
             const auto& player = team.players[p];
-            const auto unit = units.find(player.unit_type);
+            const auto* unit = find_hero_form(player.hero_id,player.form_id);
             if(!uuid(player.id) || !username(player.username) || !players.insert(player.id).second ||
-               player.side != map->second.sides[t][p] || unit == units.end() || player.level != unit->second.level)
+               player.side != map->second.sides[t][p] || !player.selection_present || !unit ||
+               player.level != unit->native_level || player.unit_type != unit->unit_type || player.hero_level < 1 || player.hero_revision < 0)
                 return PracticeEligibility::invalid_plan;
             const bool human = player.id == viewer.account_id;
             if(human) {
                 result.controlled_side = player.side;
                 viewer_ready = player.ready;
             }
-            result.seats.push_back({player.id, player.username, team.id, team.name, unit->second.faction,
-                                    player.unit_type, player.level, player.side, human});
+            result.seats.push_back({player.id, player.username, team.id, team.name, unit->faction,
+                                    player.unit_type, player.level, player.side, human,
+                                    player.hero_id, player.form_id, player.hero_level, player.hero_revision});
         }
     }
     if(!result.controlled_side) return PracticeEligibility::not_selected;
@@ -137,8 +129,8 @@ bool same_practice_snapshot(const alliance::account::Battle& first, const allian
         for(std::size_t p = 0; p < a.players.size(); ++p) {
             const auto& left = a.players[p];
             const auto& right = b.players[p];
-            if(std::tie(left.id, left.username, left.unit_type, left.level, left.side) !=
-               std::tie(right.id, right.username, right.unit_type, right.level, right.side)) return false;
+            if(std::tie(left.id, left.username, left.unit_type, left.level, left.side, left.hero_id, left.form_id, left.hero_level, left.hero_revision, left.selection_present) !=
+               std::tie(right.id, right.username, right.unit_type, right.level, right.side, right.hero_id, right.form_id, right.hero_level, right.hero_revision, right.selection_present)) return false;
             if(left.id == viewer_account_id) {
                 if(viewer_found || left.ready != right.ready) return false;
                 viewer_found = true;
@@ -188,9 +180,9 @@ PracticePlan make_practice_plan(const alliance::account::Battle& battle, const a
 std::string practice_advancement_targets()
 {
     std::string result;
-    for(const auto& entry : units) {
+    for(const auto& entry : hero_forms()) {
         if(!result.empty()) result += ',';
-        result += entry.first;
+        result += entry.unit_type;
     }
     return result;
 }

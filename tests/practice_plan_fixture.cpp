@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "alliance_game/battle_launch.hpp"
 #include "alliance_game/practice_plan.hpp"
+#include "alliance_game/hero_catalog.hpp"
 #include <iomanip>
 #include <iostream>
 #include <sstream>
@@ -12,6 +13,11 @@ namespace {
 int checks = 0;
 void require(bool value) { ++checks; if(!value) throw std::runtime_error("practice fixture failed"); }
 std::string id(int n) { std::ostringstream out; out << "00000000-0000-4000-8000-" << std::setfill('0') << std::setw(12) << n; return out.str(); }
+void select_form(BattlePlayer& player, const HeroForm& form)
+{
+    player.hero_id=form.hero_id;player.form_id=form.id;player.hero_level=37;player.hero_revision=6;
+    player.unit_type=form.unit_type;player.level=form.native_level;player.selection_present=true;
+}
 Battle battle(int size = 2)
 {
     Battle b;
@@ -30,7 +36,7 @@ Battle battle(int size = 2)
             BattlePlayer player;
             const int number = t*size+p+1;
             player.id = id(number); player.username = "Player" + std::to_string(number);
-            player.unit_type = "Spearman"; player.level = 1; player.side = b.map.sides[t][p];
+            select_form(player,hero_forms().front()); player.side = b.map.sides[t][p];
             player.ready = true;
             team.players.push_back(player);
         }
@@ -61,7 +67,7 @@ int main()
                 for(std::size_t i = 0; i < plan.seats.size(); ++i) {
                     const auto& seat = plan.seats[i];
                     require(seat.side == static_cast<int>(i+1));
-                    require(seat.unit_type == "Spearman" && seat.faction == "Loyalists" && seat.level == 1);
+                    require(seat.unit_type == hero_forms().front().unit_type && seat.faction == hero_forms().front().faction && seat.level == hero_forms().front().native_level && seat.hero_level == 37 && seat.hero_revision == 6 && seat.hero_id == hero_forms().front().hero_id && seat.form_id == hero_forms().front().id);
                     if(seat.human) { ++humans; require(seat.id == viewer.account_id); }
                 }
                 require(humans == 1);
@@ -121,24 +127,15 @@ int main()
         require(training && training->settings.control == PracticeControl::own_team &&
                 training->settings.starting_gold == 200 && training->settings.turn_limit == 30 && !training->settings.fog);
         require(!practice_pending() && !take_pending_practice());
-        const std::pair<const char*, int> branches[] = {
-            {"Spearman",1},{"Swordsman",2},{"Pikeman",2},{"Javelineer",2},{"Royal Guard",3},{"Halberdier",3},
-            {"Elvish Fighter",1},{"Elvish Captain",2},{"Elvish Hero",2},{"Elvish Marshal",3},{"Elvish Champion",3},
-            {"Orcish Grunt",1},{"Orcish Warrior",2},{"Orcish Warlord",3},
-            {"Dwarvish Fighter",1},{"Dwarvish Steelclad",2},{"Dwarvish Lord",3},
-            {"Drake Fighter",1},{"Drake Warrior",2},{"Drake Blademaster",3},
-            {"Skeleton",1},{"Revenant",2},{"Deathblade",2},{"Draug",3}};
-        for(const auto& branch : branches) {
-            auto b = battle(); b.teams[0].players[0].unit_type = branch.first; b.teams[0].players[0].level = branch.second;
+        for(const auto& form : hero_forms()) {
+            auto b = battle(); select_form(b.teams[0].players[0],form);
             const auto plan = make_practice_plan(b, viewer);
-            require(plan.seats[0].unit_type == branch.first && plan.seats[0].level == branch.second);
-            // This same allowlist is used by the saved object's persistent
-            // remove_advancement effect, including every branching target.
-            require(("," + practice_advancement_targets() + ",").find("," + std::string(branch.first) + ",") != std::string::npos);
+            require(plan.seats[0].unit_type == form.unit_type && plan.seats[0].level == form.native_level);
+            require(plan.seats[0].hero_id == form.hero_id && plan.seats[0].form_id == form.id && plan.seats[0].hero_level == 37);
+            require(("," + practice_advancement_targets() + ",").find("," + form.unit_type + ",") != std::string::npos);
         }
         auto b = battle();
-        viewer.unit_type = "Royal Guard"; viewer.level = 3; viewer.experience = 123;
-        require(make_practice_plan(b, viewer).seats[0].unit_type == "Spearman");
+        require(make_practice_plan(b, viewer).seats[0].unit_type == hero_forms().front().unit_type);
         // Captains may select other teammates instead of occupying a battle seat.
         b.teams[0].captain_id = id(900); b.teams[1].captain_id = id(901);
         require(practice_eligibility(b, viewer) == PracticeEligibility::eligible);
@@ -219,7 +216,12 @@ int main()
         reject_changed([](auto& v) { v.teams[0].players[0].username = "bad name"; });
         reject_changed([](auto& v) { v.teams[0].players[0].username = std::string(25,'a'); });
         reject_changed([](auto& v) { v.teams[0].players[0].unit_type = "Ancient Lich"; });
-        reject_changed([](auto& v) { v.teams[0].players[0].level = 2; });
+        reject_changed([](auto& v) { v.teams[0].players[0].level = 99; });
+        reject_changed([](auto& v) { v.teams[0].players[0].selection_present = false; });
+        reject_changed([](auto& v) { v.teams[0].players[0].hero_id = "unknown"; });
+        reject_changed([](auto& v) { v.teams[0].players[0].form_id = "unknown"; });
+        reject_changed([](auto& v) { v.teams[0].players[0].hero_level = 0; });
+        reject_changed([](auto& v) { v.teams[0].players[0].hero_revision = -1; });
         auto outsider = viewer; outsider.account_id = id(900);
         check_rejected(battle(), outsider, PracticeEligibility::not_selected);
         // Being an unselected current captain does not create a playable seat.
@@ -255,7 +257,12 @@ int main()
         changed_snapshot([](auto& v) { v.teams[0].players[0].id = id(800); });
         changed_snapshot([](auto& v) { v.teams[0].players[0].username = "ChangedPlayer"; });
         changed_snapshot([](auto& v) { v.teams[0].players[0].unit_type = "Elvish Fighter"; });
-        changed_snapshot([](auto& v) { v.teams[0].players[0].level = 2; });
+        changed_snapshot([](auto& v) { ++v.teams[0].players[0].level; });
+        changed_snapshot([](auto& v) { ++v.teams[0].players[0].hero_level; });
+        changed_snapshot([](auto& v) { ++v.teams[0].players[0].hero_revision; });
+        changed_snapshot([](auto& v) { v.teams[0].players[0].hero_id = "other"; });
+        changed_snapshot([](auto& v) { v.teams[0].players[0].form_id = "other"; });
+        changed_snapshot([](auto& v) { v.teams[0].players[0].selection_present = false; });
         changed_snapshot([](auto& v) { v.teams[0].players[0].side = 4; });
         changed_snapshot([](auto& v) { v.teams[0].players[0].ready = false; });
         changed_snapshot([](auto& v) { v.teams[1].players[0].ready = false; v.teams[1].players[0].unit_type = "Elvish Fighter"; });
@@ -292,7 +299,7 @@ int main()
         require(practice_pending()); input.teams[0].players[0].unit_type = "Ancient Lich";
         bool busy = false; try { queue_practice(battle(),viewer); } catch(const std::logic_error&) { busy = true; } require(busy);
         const auto queued = take_pending_practice();
-        require(queued && queued->seats[0].unit_type == "Spearman");
+        require(queued && queued->seats[0].unit_type == hero_forms().front().unit_type);
         require(!practice_pending() && !take_pending_practice());
         rejects([&] { queue_practice(input,viewer); });
         require(!practice_pending());

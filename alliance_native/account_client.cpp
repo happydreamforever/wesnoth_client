@@ -519,7 +519,7 @@ Profile profile(const json::object& data) {
         for(const auto& form : array(entry, "forms", 128)) {
             if(!form.is_string()) invalid();
             const std::string id(form.as_string());
-            if(!catalog_id_valid(id) || !forms.insert(id).second) invalid();
+            if(id.size()>100 || !catalog_id_valid(id) || !forms.insert(id).second) invalid();
             hero.forms.push_back(id);
         }
         if(hero.forms.empty()) invalid();
@@ -637,7 +637,7 @@ Reply perform_request(const TrustedProfile& trusted, const Request& request,
             if(op == "casual_select") {
                 if(request.game_id.empty() || request.game_id.size() > 36 ||
                    !std::all_of(request.game_id.begin(), request.game_id.end(), [](char c){ return c >= '0' && c <= '9'; }) ||
-                   request.side < 1 || request.side > 99 || !catalog_id_valid(request.hero_id) || !catalog_id_valid(request.form_id)) return failure("invalid_input");
+                   request.side < 1 || request.side > 99 || request.hero_id.size()>80 || request.form_id.size()>100 || !catalog_id_valid(request.hero_id) || !catalog_id_valid(request.form_id)) return failure("invalid_input");
                 body = {{"game_id",request.game_id},{"side",request.side},{"hero_id",request.hero_id},{"form_id",request.form_id}};
             }
         } else if(is_extension) {
@@ -659,7 +659,7 @@ Reply perform_request(const TrustedProfile& trusted, const Request& request,
             if(!propose && (!request.team_id.empty() || !request.opponent_team_id.empty() ||
                            !request.map_id.empty() || !request.lineups.empty())) return team_failure("invalid_input");
             if(op == "battle_select_hero") {
-                if(!catalog_id_valid(request.hero_id) || !catalog_id_valid(request.form_id)) return team_failure("invalid_input");
+                if(request.hero_id.size()>80 || request.form_id.size()>100 || !catalog_id_valid(request.hero_id) || !catalog_id_valid(request.form_id)) return team_failure("invalid_input");
                 body["hero_id"] = request.hero_id; body["form_id"] = request.form_id;
             }
             if(op == "battle_maps") {

@@ -11,6 +11,7 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+from hero_catalog_fixture import catalogue_source
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = (ROOT / "alliance_game/account_ui.cpp").read_text(encoding="utf-8")
@@ -35,7 +36,7 @@ class BattlePlanningUiTests(unittest.TestCase):
         compiler = shutil.which(os.environ.get("CXX", "c++"))
         self.assertIsNotNone(compiler, "A C++17 compiler is required for planning UI behavior")
         signatures = ("int select_change(", "std::string battle_validity_text(", "std::string practice_availability_text(",
-                      "std::string battle_text(", "bool can_practice_plan(",
+                      "std::string hero_form_text(", "std::string battle_text(", "bool can_practice_plan(",
                       "void battle_detail(", "void my_battles(")
         functions = "\n\n".join(extract(signature) for signature in signatures)
         template = ROOT / "tests/battle_planning_ui_fixture.cpp.in"
@@ -54,9 +55,11 @@ class BattlePlanningUiTests(unittest.TestCase):
                 str(ROOT / "alliance_game/practice_plan.cpp"), "-o", str(policy)]
             compiled = subprocess.run(policy_command, capture_output=True, text=True, timeout=120)
             self.assertEqual(compiled.returncode, 0, compiled.stdout + compiled.stderr)
+            catalogue = directory / "catalogue.cpp"
+            includes = catalogue_source(ROOT, catalogue)
             command = [compiler, "-std=c++17", "-Wall", "-Wextra", "-Werror", "-O0", "-g",
                        "-fsanitize=address,undefined", "-fno-omit-frame-pointer", "-I" + str(ROOT),
-                       str(cpp), str(policy), "-o", str(binary)]
+                       str(cpp), str(policy), str(catalogue), *includes, "-o", str(binary)]
             built = subprocess.run(command, capture_output=True, text=True, timeout=120)
             self.assertEqual(built.returncode, 0, built.stdout + built.stderr)
             ran = subprocess.run([str(binary)], capture_output=True, text=True, timeout=30)
@@ -110,8 +113,8 @@ class BattlePlanningUiTests(unittest.TestCase):
 
     def test_detail_actions_and_confirmations_default_back_and_require_draft_roles(self):
         detail = function("void battle_detail(", "void my_battles(")
-        self.assertIn('draft && captain && !approved && battle.validity == "valid"', detail)
-        self.assertIn('draft && selected && (ready || (both_approved && battle.validity == "valid"))', detail)
+        self.assertIn('draft && captain && !approved && all_heroes && battle.validity == "valid"', detail)
+        self.assertIn('draft && selected && hero_selected && (ready || (both_approved && battle.validity == "valid"))', detail)
         self.assertIn('draft && captain ? ', detail)
         self.assertIn('select_change("Battle plan"', detail)
         self.assertIn('select_change(title, battle_text(battle)', detail)

@@ -61,9 +61,10 @@ struct BattleSummary {
 struct BattlePlayer {
     std::string id, username, unit_type;
     int level = 0, side = 0; // Native unit tier, never permanent hero level.
+    bool ready = false;
     std::string hero_id, form_id;
     std::int64_t hero_level = 0, hero_revision = 0;
-    bool selection_present = false, ready = false;
+    bool selection_present = false;
 };
 struct BattleTeam {
     std::string id, name, captain_id;

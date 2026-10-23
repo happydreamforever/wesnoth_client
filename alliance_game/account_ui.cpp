@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "alliance_game/account_ui.hpp"
+#include "alliance_game/hero_catalog.hpp"
+#include "alliance_game/story_progression.hpp"
 #include "alliance_game/battle_launch.hpp"
 #include "alliance_game/practice_plan.hpp"
 #include "alliance_game/progression_plan.hpp"
@@ -74,7 +76,7 @@ Session& current_session()
 
 void message(const std::string& text)
 {
-    gui2::show_message("Alliance", text, gui2::dialogs::message::ok_button,
+    gui2::show_message("Wesnoth", text, gui2::dialogs::message::ok_button,
                       false, false);
 }
 
@@ -417,7 +419,7 @@ bool request(const alliance::TrustedProfile& profile, account::Request& input,
 {
     AccountJob job(profile, input);
     gui2::dialogs::network_transmission progress(
-        job, "Alliance", action + "\nYou can cancel this request.");
+        job, "Wesnoth", action + "\nYou can cancel this request.");
     progress.set_allow_plugin_skip(false);
     bool accepted = false;
     try {
@@ -452,37 +454,78 @@ void show_failure(const account::Reply& reply)
 
 std::string profile_text(const account::Profile& profile)
 {
-    return "Player: " + profile.username + "\n"
-        "Player ID: " + profile.account_id + "\n\n"
-        "Personal leader: " + profile.unit_type + "\n"
-        "Level: " + std::to_string(profile.level) + "\n"
-        "Experience: " + std::to_string(profile.experience) + "\n"
-        "Total experience: " + std::to_string(profile.total_experience) + "\n\n"
-        "Your leader is saved on the Windows Alliance server.\n"
-        "Open Campaign progression to earn experience and choose advancement.\n"
-        "Open Teams and Battle plans to prepare, practise or join a shared team battle.";
+    return "Player: " + profile.username + "\nPlayer ID: " + profile.account_id +
+        "\nHeroes unlocked: " + std::to_string(profile.heroes.size()) +
+        "\n\nPlay a campaign and win a scenario with its named heroes to add them to your collection. "
+        "Each hero has independent permanent experience and earned forms. "
+        "Campaigns use their original story strength; Multiplayer uses your collected heroes.";
+}
+
+bool reload_player(const alliance::TrustedProfile& trusted)
+{
+    const auto actor=current_session().profile.account_id;
+    const auto generation=current_session().profile.database_generation;
+    account::Request input; input.operation="me"; input.token=current_session().token;
+    account::Reply output;
+    if(!request(trusted,input,"Loading your heroes…",output)) return false;
+    if(!output.ok) {show_failure(output);return false;}
+    if(output.profile.account_id!=actor || output.profile.database_generation!=generation) {
+        current_session().clear(); message("The signed-in account or game database changed. Log in again.");return false;
+    }
+    current_session().profile=std::move(output.profile);
+    return true;
+}
+
+bool choose_hero(const alliance::TrustedProfile& trusted, std::string& hero_id, std::string& form_id)
+{
+    if(!reload_player(trusted)) return false;
+    const auto actor=current_session().profile.account_id;
+    const auto heroes=current_session().profile.heroes;
+    if(heroes.empty()) {message("No heroes unlocked yet. Win a story campaign scenario with a named hero before joining a multiplayer side.");return false;}
+    std::vector<std::string> rows;
+    for(const auto& hero:heroes) rows.push_back(hero.name+" — level "+std::to_string(hero.hero_level)+" — XP "+std::to_string(hero.experience));
+    gui2::dialogs::simple_item_selector choice("Choose your hero","Each hero keeps its own experience. Choose an earned form next.",rows);
+    choice.set_allow_plugin_skip(false); if(!choice.show()) return false;
+    const int index=choice.selected_index();if(index<0||static_cast<std::size_t>(index)>=heroes.size())return false;
+    const auto& hero=heroes[index];
+    std::vector<std::string> form_labels;
+    for(const auto& id:hero.forms){const auto* spec=find_hero_form(hero.hero_id,id);if(!spec)throw std::runtime_error("Unsupported collected form.");form_labels.push_back(spec->name+" — original unit tier "+std::to_string(spec->native_level));}
+    gui2::dialogs::simple_item_selector forms("Choose hero form",hero.name+" — level "+std::to_string(hero.hero_level),form_labels);
+    forms.set_allow_plugin_skip(false);if(!forms.show())return false;
+    const int form=forms.selected_index();if(form<0||static_cast<std::size_t>(form)>=hero.forms.size())return false;
+    if(!reload_player(trusted)||current_session().profile.account_id!=actor)return false;
+    const auto& latest=current_session().profile.heroes;
+    const auto found=std::find_if(latest.begin(),latest.end(),[&](const auto& h){return h.hero_id==hero.hero_id;});
+    if(found==latest.end()||found->revision!=hero.revision||std::find(found->forms.begin(),found->forms.end(),hero.forms[form])==found->forms.end()) {
+        message("This hero changed while you were choosing. Open the selection again.");return false;
+    }
+    hero_id=hero.hero_id;form_id=hero.forms[form];return true;
+}
+
+void heroes_dialog(const alliance::TrustedProfile& trusted)
+{
+    while(reload_player(trusted)) {
+        const auto heroes=current_session().profile.heroes;
+        if(heroes.empty()){message(profile_text(current_session().profile));return;}
+        std::vector<std::string> rows;
+        for(const auto& h:heroes)rows.push_back(h.name+" — level "+std::to_string(h.hero_level));
+        gui2::dialogs::simple_item_selector choice("Heroes","Your campaign heroes and their earned forms.",rows);
+        choice.set_allow_plugin_skip(false);if(!choice.show())return;
+        const int index=choice.selected_index();if(index<0||static_cast<std::size_t>(index)>=heroes.size())return;
+        const auto& h=heroes[index];
+        std::string detail=h.name+"\nHero level: "+std::to_string(h.hero_level)+"\nExperience: "+std::to_string(h.experience)+
+            "\nTotal experience: "+std::to_string(h.total_experience)+"\n\nEarned forms:";
+        for(const auto& form:h.forms){const auto* spec=find_hero_form(h.hero_id,form);if(!spec)throw std::runtime_error("Unsupported collected form.");detail+="\n"+spec->name+" — original unit tier "+std::to_string(spec->native_level); }
+        detail+="\n\nEvery level adds 2% of original HP and 1% of original attack damage. Movement, number of strikes, resistances and innate abilities stay unchanged. "
+            "Next-level XP is 5 × current level² + 15. Story campaigns start at their original strength.";
+        message(detail);
+    }
 }
 
 void register_player(const alliance::TrustedProfile& profile)
 {
     account::Request input;
     input.operation = "register";
-    const std::vector<std::string> ids{
-        "spearman", "elvish-fighter", "orcish-grunt",
-        "dwarvish-fighter", "drake-fighter", "skeleton"};
-    gui2::dialogs::simple_item_selector starter(
-        "Create an Alliance player", "Choose your personal starting leader.",
-        {"Spearman — Loyalists", "Elvish Fighter — Rebels",
-         "Orcish Grunt — Northerners", "Dwarvish Fighter — Knalgan Alliance",
-         "Drake Fighter — Drakes", "Skeleton — Undead"});
-    starter.set_allow_plugin_skip(false);
-    starter.set_selected_index(0);
-    starter.set_ok_label("Choose leader");
-    if(!starter.show()) return;
-    const int selected = starter.selected_index();
-    if(selected < 0 || static_cast<std::size_t>(selected) >= ids.size()) return;
-    input.starter_id = ids[selected];
-
     CredentialsDialog credentials(input.username, input.password,
         "Create a player account.\nUsername: 3–24 letters, digits or underscores.\n"
         "Password: 12–128 characters. Your administrator account is separate.",
@@ -508,6 +551,8 @@ void register_player(const alliance::TrustedProfile& profile)
         message("Account creation cancelled or the passwords did not match.");
         return;
     }
+    std::string signup_password=input.password;
+    struct ClearSignup { std::string& value; ~ClearSignup(){clear_secret(value);} } clear_signup{signup_password};
     account::Reply output;
     if(!request(profile, input, "Creating your player account…", output)) {
         message("Request cancelled. Account creation may have reached the server. "
@@ -523,8 +568,17 @@ void register_player(const alliance::TrustedProfile& profile)
         }
         return;
     }
-    message("Your player account was created.\n\n" + profile_text(output.profile) +
-            "\n\nChoose Log in to continue.");
+    account::Request admission;
+    admission.operation="login";admission.username=input.username;admission.password=signup_password;
+    account::Reply signed_in;
+    if(!request(profile,admission,"Opening your new account…",signed_in)||!signed_in.ok) {
+        message("Your account was created. Automatic login was not confirmed. Choose Log in with the same username and password; do not create another account.");return;
+    }
+    if(signed_in.profile.account_id!=output.profile.account_id||signed_in.profile.database_generation!=output.profile.database_generation)
+        throw std::runtime_error("Signup account changed.");
+    auto& session=current_session();session.clear();session.token=std::move(signed_in.token);session.profile=std::move(signed_in.profile);
+    session.identity=profile.address+":"+std::to_string(profile.port)+":"+profile.certificate_sha256;
+    message("Welcome, "+session.profile.username+". Your account is ready.\n\nChoose Campaigns to start a story and unlock your first named hero.");
 }
 
 void application_decisions(const alliance::TrustedProfile& profile, bool unread_only);
@@ -534,7 +588,7 @@ void login(const alliance::TrustedProfile& profile)
     account::Request input;
     input.operation = "login";
     CredentialsDialog credentials(input.username, input.password,
-        "Log in to your Alliance player account.\n"
+        "Log in to your player account.\n"
         "The Windows administrator account is separate.", "Log in");
     if(!credentials.show()) {
         clear_secret(input.password);
@@ -568,7 +622,7 @@ void refresh(const alliance::TrustedProfile& profile)
     input.operation = "me";
     input.token = current_session().token;
     account::Reply output;
-    if(!request(profile, input, "Loading your personal leader…", output)) return;
+    if(!request(profile, input, "Loading your heroes…", output)) return;
     if(!output.ok) {
         show_failure(output);
         return;
@@ -755,9 +809,9 @@ std::string team_text(const account::Team& team)
     for(const auto& member : team.members) {
         text += "\n" + member.username;
         if(member.id == team.captain_id) text += " (captain)";
-        text += " — " + member.unit_type + ", leader level " + std::to_string(member.level);
+        text += " — " + std::to_string(member.hero_count) + " heroes";
     }
-    text += "\n\nTeam experience is separate from personal leader experience.\n"
+    text += "\n\nTeam experience is separate from each hero's experience.\n"
             "Open Battle plans for local training or a shared team battle.\n"
             "Open Captain orders for your team's saved plan and instructions.";
     return text;
@@ -861,7 +915,7 @@ void transfer_captain(const alliance::TrustedProfile& profile)
     for(const auto& member : team.members) {
         if(member.id == actor) continue;
         members.push_back(member);
-        rows.push_back(member.username + " — " + member.unit_type + ", leader level " + std::to_string(member.level));
+        rows.push_back(member.username + " — " + std::to_string(member.hero_count) + " heroes");
     }
     if(rows.empty()) {
         message("There is no other current member to become captain. Approve another player's application first.");
@@ -1021,7 +1075,7 @@ void review_applications(const alliance::TrustedProfile& profile)
         if(!team_request(profile, input, "Loading team applications…", output)) return;
         std::vector<std::string> rows;
         for(const auto& member : output.applicants)
-            rows.push_back(member.username + " — " + member.unit_type + ", leader level " + std::to_string(member.level));
+            rows.push_back(member.username + " — " + std::to_string(member.hero_count) + " heroes");
         const int previous = cursors.size() > 1 ? static_cast<int>(rows.size()) : -1;
         if(previous >= 0) rows.push_back("Previous page");
         const int more = output.next.empty() ? -1 : static_cast<int>(rows.size());
@@ -1037,7 +1091,7 @@ void review_applications(const alliance::TrustedProfile& profile)
         if(static_cast<std::size_t>(choice) >= output.applicants.size()) continue;
         const auto& applicant = output.applicants[choice];
         const std::string preview = "Player: " + applicant.username + "\nPlayer ID: " + applicant.id +
-            "\nPersonal leader: " + applicant.unit_type + "\nLeader level: " + std::to_string(applicant.level);
+            "\nHeroes unlocked: " + std::to_string(applicant.hero_count);
         const int action = select_change("Review application", preview, {"Approve application", "Reject application"});
         if(action < 0 || action > 1) continue;
         const bool approve = action == 0;
@@ -1192,8 +1246,7 @@ bool choose_battle_lineup(const account::Team& team, const std::vector<int>& sid
             for(std::size_t i = 0; i < selected.size(); ++i) {
                 if(selected[i] == member.id) prefix = "[Side " + std::to_string(sides[i]) + "] ";
             }
-            rows.push_back(prefix + member.username + " — " + member.unit_type +
-                ", leader level " + std::to_string(member.level));
+            rows.push_back(prefix + member.username + " — " + std::to_string(member.hero_count) + " heroes");
         }
         const int use = selected.size() == sides.size() ? static_cast<int>(rows.size()) : -1;
         if(use >= 0) rows.push_back("Use this lineup");
@@ -1266,6 +1319,13 @@ std::string practice_availability_text(const account::Battle& battle, const acco
     return text;
 }
 
+std::string hero_form_text(const std::string& hero_id,const std::string& form_id,std::int64_t level)
+{
+    const auto* form=find_hero_form(hero_id,form_id);
+    if(!form)throw std::runtime_error("Unsupported hero form.");
+    return hero_name(hero_id)+" / "+form->name+", hero level "+std::to_string(level);
+}
+
 std::string battle_text(const account::Battle& battle)
 {
     const bool historical = battle.state == "cancelled" || battle.state == "completed";
@@ -1289,7 +1349,7 @@ std::string battle_text(const account::Battle& battle)
         text += team.approved ? "Approved" : "Waiting";
         for(const auto& player : team.players) {
             text += "\nSide " + std::to_string(player.side) + ": " + player.username + " — " +
-                player.unit_type + ", level " + std::to_string(player.level);
+                (player.selection_present ? hero_form_text(player.hero_id,player.form_id,player.hero_level) : "Choose a hero before Ready");
             text += historical ? " — Saved readiness (history): " :
                 invalid_draft ? " — Saved readiness (inactive): " : " — ";
             text += player.ready ? "Ready" : "Not ready";
@@ -1387,7 +1447,7 @@ std::string practice_lineup_text(const PracticePlan& plan)
     std::string text = "Local control of saved lineup copies:";
     for(const auto& seat : plan.seats) {
         text += "\nSide " + std::to_string(seat.side) + ": " + seat.username + " — " +
-            seat.unit_type + ", level " + std::to_string(seat.level) + " — " + seat.team_name + " — ";
+            hero_form_text(seat.hero_id,seat.form_id,seat.hero_level) + " — " + seat.team_name + " — ";
         text += seat.human ? "Local player on this device" : "Computer";
     }
     return text;
@@ -1502,11 +1562,11 @@ void battle_detail(const alliance::TrustedProfile& profile, const std::string& b
         confirmed_change.clear();
         const auto& battle = *output.battle;
         const auto actor = current_session().profile.account_id;
-        bool captain = false, approved = false, selected = false, ready = false, both_approved = true, all_ready=true;
+        bool captain = false, approved = false, selected = false, hero_selected = false, ready = false, both_approved = true, all_ready=true;
         for(const auto& team : battle.teams) {
             both_approved = both_approved && team.approved;
             if(team.captain_id == actor) { captain = true; approved = team.approved; }
-            for(const auto& player : team.players) {all_ready=all_ready&&player.ready; if(player.id == actor) { selected = true; ready = player.ready; }}
+            for(const auto& player : team.players) {all_ready=all_ready&&player.ready; if(player.id == actor) { selected = true; hero_selected = player.selection_present; ready = player.ready; }}
         }
         std::vector<std::string> actions{"View fixed lineups", "Refresh plan"};
         const int practice = can_practice_plan(battle, current_session().profile)
@@ -1529,10 +1589,13 @@ void battle_detail(const alliance::TrustedProfile& profile, const std::string& b
         const int result_review=(battle.state=="running"||battle.state=="completed")?static_cast<int>(actions.size()):-1;
         if(result_review>=0) actions.push_back("Review shared battle result");
         const bool draft = battle.state == "draft";
-        const int approve = draft && captain && !approved && battle.validity == "valid"
+        const bool all_heroes=std::all_of(battle.teams.begin(),battle.teams.end(),[](const auto& team){return std::all_of(team.players.begin(),team.players.end(),[](const auto& player){return player.selection_present;});});
+        const int approve = draft && captain && !approved && all_heroes && battle.validity == "valid"
             ? static_cast<int>(actions.size()) : -1;
         if(approve >= 0) actions.push_back("Approve this plan");
-        const int readiness = draft && selected && (ready || (both_approved && battle.validity == "valid"))
+        const int hero_choice = draft && selected ? static_cast<int>(actions.size()) : -1;
+        if(hero_choice >= 0) actions.push_back(hero_selected ? "Change my hero" : "Choose my hero");
+        const int readiness = draft && selected && hero_selected && (ready || (both_approved && battle.validity == "valid"))
             ? static_cast<int>(actions.size()) : -1;
         if(readiness >= 0) actions.push_back(ready ? "Set myself not ready" : "Set myself ready");
         const int cancel = draft && captain ? static_cast<int>(actions.size()) : -1;
@@ -1542,7 +1605,7 @@ void battle_detail(const alliance::TrustedProfile& profile, const std::string& b
             : battle.state == "completed"
             ? "This battle is complete and inactive. Readiness is saved history; captain approval is inactive."
             : battle.state == "running"
-            ? "This Alliance battle has already started. Its saved planning consent cannot be changed here."
+            ? "This team battle has already started. Its saved planning consent cannot be changed here."
             : draft && battle.validity != "valid"
             ? "This draft is not eligible for a shared battle. Captain approval and saved readiness are inactive."
             : "Both captains must approve the saved lineups before selected players can become ready.";
@@ -1576,6 +1639,32 @@ void battle_detail(const alliance::TrustedProfile& profile, const std::string& b
         }
         if(choice == result_review) {shared_result_review(profile,battle);continue;}
         if(choice == practice) { practice_plan(profile, battle); if(practice_pending() || progression_pending() || shared_pending() || replay_pending()) return; continue; }
+        if(choice == hero_choice) {
+            account::Request change;change.operation="battle_select_hero";change.battle_id=battle.id;
+            if(!choose_hero(profile,change.hero_id,change.form_id))continue;
+            if(!same_extension_actor(actor))return;
+            bool same=false;
+            for(const auto& team:battle.teams)for(const auto& player:team.players)
+                if(player.id==actor&&player.selection_present&&player.hero_id==change.hero_id&&player.form_id==change.form_id)
+                    for(const auto& hero:current_session().profile.heroes)
+                        if(hero.hero_id==change.hero_id&&hero.revision==player.hero_revision)same=true;
+            if(same){message("That hero and form are already selected for your side.");continue;}
+            if(select_change("Confirm hero selection","Changing your hero clears this plan's readiness and both captain approvals. Everyone reviews the updated lineups before Ready.",{"Save my hero"})!=0)continue;
+            if(!same_extension_actor(actor))return;
+            account::Reply changed;
+            if(!team_request(profile,change,"Saving your selected hero…",changed))return;
+            if(!changed.battle||changed.battle->id!=battle.id)throw std::runtime_error("Hero selection acknowledgement changed.");
+            bool own=false;
+            for(const auto& team:changed.battle->teams){
+                if(team.approved)throw std::runtime_error("Hero selection kept approval.");
+                for(const auto& player:team.players){
+                    if(player.ready)throw std::runtime_error("Hero selection kept readiness.");
+                    if(player.id==actor&&player.selection_present&&player.hero_id==change.hero_id&&player.form_id==change.form_id)own=true;
+                }
+            }
+            if(!own)throw std::runtime_error("Hero selection changed actor.");
+            message("Your selected hero was saved. Captain approvals and readiness must be confirmed again.");continue;
+        }
         account::Request mutation;
         mutation.battle_id = battle.id;
         std::string title, explanation, affirmative, success;
@@ -1723,7 +1812,7 @@ void propose_battle(const alliance::TrustedProfile& profile)
         for(std::size_t j = 0; j < proposal.lineups[i].account_ids.size(); ++j)
             for(const auto& member : teams[i]->members) if(member.id == proposal.lineups[i].account_ids[j])
                 preview += "\nSide " + std::to_string(map.sides[i][j]) + ": " + member.username + " — " +
-                    member.unit_type + ", level " + std::to_string(member.level);
+                    std::to_string(member.hero_count) + " heroes";
     }
     preview += "\n\nSave this fixed battle plan? Both captains must then review and explicitly approve the saved map and lineups. "
         "This does not start combat or award experience or rating.";
@@ -1759,7 +1848,7 @@ void battle_plans(const alliance::TrustedProfile& profile)
 void teams(const alliance::TrustedProfile& profile)
 {
     while(!current_session().token.empty()) {
-        const int action = select("Alliance teams",
+        const int action = select("Teams",
             "Build your team in an area. Apply to join a team, or review applications as captain.",
             {"Browse areas and teams", "Create team", "My team", "My applications", "Review applications", "Application decisions",
              "Transfer captain", "Leave team", "Area rankings", "Battle plans", "Captain orders"});
@@ -1798,74 +1887,85 @@ void logout(const alliance::TrustedProfile& profile)
 }
 } // namespace
 
+PlayerSession::~PlayerSession() { clear_secret(token); }
+
+std::optional<PlayerSession> player_session()
+{
+    const auto& session=current_session();
+    if(session.token.empty())return std::nullopt;
+    const char* path=std::getenv("WESNOTH_ALLIANCE_PROFILE");
+    if(!path||!*path)return std::nullopt;
+    const auto trusted=account::read_public_profile(path);
+    const auto identity=trusted.address+":"+std::to_string(trusted.port)+":"+trusted.certificate_sha256;
+    if(identity!=session.identity){current_session().clear();return std::nullopt;}
+    return PlayerSession{trusted,session.profile,session.token};
+}
+
+bool player_request(account::Request& input, account::Reply& output)
+{
+    auto session=player_session();if(!session)return false;
+    const auto actor=session->account.account_id,generation=session->account.database_generation;
+    input.token=session->token;
+    if(!request(session->trusted,input,"Checking your game account…",output))return false;
+    if(!output.ok){show_failure(output);return false;}
+    if(current_session().token.empty()||current_session().profile.account_id!=actor||current_session().profile.database_generation!=generation)return false;
+    return true;
+}
+
+bool ensure_player_session()
+{
+    static bool active=false;
+    if(active)return false;
+    struct Guard{bool& flag;Guard(bool& f):flag(f){flag=true;}~Guard(){flag=false;}}guard(active);
+    try {
+        if(auto existing=player_session()) {
+            if(reload_player(existing->trusted))return true;
+            if(!current_session().token.empty())return false;
+        }
+        const char* path=std::getenv("WESNOTH_ALLIANCE_PROFILE");
+        if(!path||!*path){message("Import the trusted Windows server profile before starting the game.");return false;}
+        const auto trusted=account::read_public_profile(path);
+        while(current_session().token.empty()) {
+            gui2::dialogs::simple_item_selector menu("Welcome to Wesnoth","Log in once to play Campaigns, Multiplayer and Teams.",{"Log in","Sign up"});
+            menu.set_allow_plugin_skip(false);menu.set_cancel_label("Quit game");
+            if(!menu.show())return false;
+            if(menu.selected_index()==0)login(trusted);else if(menu.selected_index()==1)register_player(trusted);
+        }
+        retry_story_results();
+        return true;
+    } catch(const account::ProfileReadError& e){message(e.what());}
+    catch(...){message("The game could not open its account connection. Check the trusted server and Windows services.");}
+    return false;
+}
+
+bool choose_owned_hero(std::string& hero_id,std::string& form_id)
+{
+    auto session=player_session();return session&&choose_hero(session->trusted,hero_id,form_id);
+}
+
 void show_account_dialog()
 {
-    // A title-screen hotkey must not open another account flow while a modal
-    // request is pumping events. This flag is used only by the game UI thread.
-    static bool active = false;
-    if(active || practice_pending() || progression_pending() || shared_pending() || replay_pending()) return;
-    struct ActiveFlow {
-        bool& active;
-        explicit ActiveFlow(bool& value) : active(value) { active = true; }
-        ~ActiveFlow() { active = false; }
-    } flow(active);
-    enum class OpenStage { profile, menu, account_screen };
-    auto stage = OpenStage::profile;
     try {
-        const char* path = std::getenv("WESNOTH_ALLIANCE_PROFILE");
-        if(path == nullptr || *path == '\0') {
-            message("Import the Windows Alliance public connection profile "
-                    "before opening your player account.");
-            return;
+        auto session=player_session();if(!session)return;
+        for(;;){
+            const int action=select("Heroes and account","Signed in as "+current_session().profile.username,{"My heroes","Account details","Log out"});
+            if(action<0)return;
+            if(action==0)heroes_dialog(session->trusted);
+            else if(action==1)refresh(session->trusted);
+            else if(action==2){logout(session->trusted);return;}
+            if(current_session().token.empty())return;
         }
-        const alliance::TrustedProfile profile = account::read_public_profile(path);
-        auto& session = current_session();
-        const std::string identity = profile.address + ":" + std::to_string(profile.port)
-                                   + ":" + profile.certificate_sha256;
-        if(!session.token.empty() && session.identity != identity) session.clear();
-        for(;;) {
-            stage = OpenStage::menu;
-            const bool logged_in = !session.token.empty();
-            gui2::dialogs::simple_item_selector menu(
-                "Alliance",
-                logged_in ? "Logged in as " + session.profile.username
-                          : "Grow your personal leader.\nCreate a player account or log in.",
-                logged_in
-                    ? std::vector<std::string>{"View personal leader", "Teams", "Campaign progression", "Log out"}
-                    : std::vector<std::string>{"Create player account", "Log in"});
-            menu.set_allow_plugin_skip(false);
-            menu.set_selected_index(0);
-            menu.set_ok_label("Open");
-            menu.set_cancel_label("Back to game");
-            if(!menu.show()) return;
-            const int action = menu.selected_index();
-            stage = OpenStage::account_screen;
-            if(logged_in) {
-                if(action == 0) refresh(profile);
-                else if(action == 1) teams(profile);
-                else if(action == 2) campaign_progression(profile);
-                else if(action == 3) logout(profile);
-            } else {
-                if(action == 0) register_player(profile);
-                else if(action == 1) login(profile);
-            }
-            if(practice_pending() || progression_pending() || shared_pending() || replay_pending()) return;
-        }
-    } catch(const account::ProfileReadError& error) {
-        // This type accepts only an enum and returns fixed public strings.
-        // Arbitrary exceptions below never expose their what() text.
-        message(error.what());
-    } catch(...) {
-        // Never surface arbitrary exception strings containing request material.
-        if(stage == OpenStage::profile) {
-            message("Alliance could not validate the saved server profile "
-                    "[profile-unexpected]. Please report this message.");
-        } else if(stage == OpenStage::menu) {
-            message("Alliance could not open the account menu. Please report this message.");
-        } else {
-            message("Alliance could not open the selected account screen. Please report "
-                    "which screen you were opening.");
-        }
-    }
+    }catch(...){message("The heroes screen could not be opened. Return to the title screen and try again.");}
+}
+void show_teams_dialog()
+{
+    if(practice_pending()||progression_pending()||shared_pending()||replay_pending())return;
+    try {auto session=player_session();if(session)teams(session->trusted);}
+    catch(...){message("The teams screen could not be opened. Return to the title screen and try again.");}
+}
+void show_training_dialog()
+{
+    try {auto session=player_session();if(session)campaign_progression(session->trusted);}
+    catch(...){message("The training campaign could not be opened. Return to Campaigns and try again.");}
 }
 } // namespace alliance_game

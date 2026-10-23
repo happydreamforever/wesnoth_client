@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+from hero_catalog_fixture import catalogue_source
 
 ROOT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location('practice_engine_overlay', ROOT / 'alliance_game/engine_overlay.py')
@@ -20,10 +21,12 @@ class PracticePlanTests(unittest.TestCase):
         self.assertIsNotNone(compiler, 'A C++17 compiler is required; execute in the cached verification container.')
         with tempfile.TemporaryDirectory(prefix='wesnoth-practice-plan-') as temp:
             executable = Path(temp) / 'practice-plan'
-            build = subprocess.run([compiler, '-std=c++17', '-Wall', '-Wextra', '-Werror', '-O1',
+            catalogue = Path(temp) / 'catalogue.cpp'
+            includes = catalogue_source(ROOT, catalogue)
+            build = subprocess.run([compiler, '-std=c++17', '-Wall', '-Wextra', '-Werror', '-O0',
                                     '-fsanitize=address,undefined', '-fno-omit-frame-pointer',
                                     '-I', str(ROOT), str(ROOT / 'tests/practice_plan_fixture.cpp'),
-                                    str(ROOT / 'alliance_game/practice_plan.cpp'), '-o', str(executable)],
+                                    str(ROOT / 'alliance_game/practice_plan.cpp'), str(catalogue), *includes, '-o', str(executable)],
                                    capture_output=True, text=True)
             self.assertEqual(build.returncode, 0, build.stdout + build.stderr)
             result = subprocess.run([str(executable)], capture_output=True, text=True,

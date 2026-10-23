@@ -1,6 +1,7 @@
 // Actual planning controllers; only modal selection and request boundaries are scripted.
 #include "alliance_native/account_client.hpp"
 #include "alliance_game/practice_plan.hpp"
+#include "alliance_game/hero_catalog.hpp"
 #include "alliance_game/replay_launch.hpp"
 #include <algorithm>
 #include <deque>
@@ -20,7 +21,8 @@ std::deque<Step> steps;
 std::vector<Menu> menus;
 std::vector<std::string> messages, requests;
 account::Battle server_plan;
-int detail_reads = 0, fail_read = 0, empty_read = 0, practice_calls = 0;
+int detail_reads = 0, fail_read = 0, empty_read = 0, practice_calls = 0, hero_mutations=0;
+bool hero_cancel=false,hero_actor_change=false,bad_hero_ack=false;
 
 namespace alliance_game {
 struct Session { std::string token; account::Profile profile; } session;
@@ -60,6 +62,14 @@ bool team_request(const alliance::TrustedProfile&, account::Request input,
         output.battles.push_back(summary);
         summary.id = "200599c9-610f-4d81-b8bb-1cb1b79e5f27";
         output.battles.push_back(summary);
+    } else if(input.operation=="battle_select_hero") {
+        ++hero_mutations;require(input.battle_id==server_plan.id,"Selection plan mismatch");
+        const auto& form=hero_forms().front();require(input.hero_id==form.hero_id&&input.form_id==form.id,"Selection identity mismatch");
+        for(auto& team:server_plan.teams){team.approved=false;for(auto& player:team.players){
+            player.ready=false;if(player.id==session.profile.account_id){player.selection_present=true;player.hero_id=input.hero_id;player.form_id=input.form_id;player.hero_revision=session.profile.heroes.front().revision;}
+        }}
+        if(bad_hero_ack)server_plan.teams[1].players[0].ready=true;
+        output.battle=server_plan;
     } else throw std::runtime_error("Unexpected request: " + input.operation);
     output.ok = true;
     return true;
@@ -87,7 +97,13 @@ struct SharedJournalBoundary { std::string run_id, status; };
 std::vector<SharedJournalBoundary> inspect_pending_shared(const std::string&) { return {}; }
 std::string verified_shared_replay(const std::string&, const std::string&) { throw std::runtime_error("No local recording"); }
 void queue_alliance_replay(AllianceReplay, const std::string&, const std::string&) { throw std::runtime_error("Unexpected replay action"); }
-bool same_extension_actor(const std::string&) { throw std::runtime_error("Unexpected replay consent"); }
+bool same_extension_actor(const std::string& id) { return id==session.profile.account_id; }
+bool choose_hero(const alliance::TrustedProfile&, std::string& hero,std::string& form) {
+    if(hero_cancel)return false;
+    hero=hero_forms().front().hero_id;form=hero_forms().front().id;
+    if(hero_actor_change)session.profile.account_id="00000000-0000-0000-0000-000000000099";
+    return true;
+}
 
 // @FUNCTIONS@
 }
@@ -95,20 +111,31 @@ bool same_extension_actor(const std::string&) { throw std::runtime_error("Unexpe
 void reset()
 {
     steps.clear(); menus.clear(); messages.clear(); requests.clear();
-    detail_reads = fail_read = empty_read = practice_calls = 0;
+    detail_reads = fail_read = empty_read = practice_calls = hero_mutations = 0;
+    hero_cancel=hero_actor_change=bad_hero_ack=false;
     server_plan = {};
     server_plan.id = "100599c9-610f-4d81-b8bb-1cb1b79e5f27";
     server_plan.state = "draft"; server_plan.validity = "valid";
     server_plan.created_at = "2026-10-22T12:00:00Z";
     server_plan.map = {"isars-cross", "Isar's Cross", "multiplayer_Isars_Cross", 2, {{1,4},{2,3}}};
     server_plan.teams = {{"00000000-0000-0000-0000-000000000020", "Koichi", "00000000-0000-0000-0000-000000000001", true,
-        {{"00000000-0000-0000-0000-000000000001", "UniPlayer", "Spearman", 1, 1, true},
-         {"00000000-0000-0000-0000-000000000002", "UniRecruit", "Spearman", 1, 4, true}}},
+        {{"00000000-0000-0000-0000-000000000001", "UniPlayer", "Spearman", 1, 1, true, {}, {}},
+         {"00000000-0000-0000-0000-000000000002", "UniRecruit", "Spearman", 1, 4, true, {}, {}}}},
         {"00000000-0000-0000-0000-000000000021", "RivalPlan", "00000000-0000-0000-0000-000000000003", true,
-        {{"00000000-0000-0000-0000-000000000003", "UniSolo", "Elvish Fighter", 1, 2, false},
-         {"00000000-0000-0000-0000-000000000004", "UniRival", "Spearman", 1, 3, true}}}};
-    alliance_game::session = {"fixture-token", {"00000000-0000-0000-0000-000000000001", "UniPlayer", "Spearman", "spearman", 1, 0, 0}};
+        {{"00000000-0000-0000-0000-000000000003", "UniSolo", "Elvish Fighter", 1, 2, false, {}, {}},
+         {"00000000-0000-0000-0000-000000000004", "UniRival", "Spearman", 1, 3, true, {}, {}}}}};
+    for(auto& team:server_plan.teams)for(auto& player:team.players){
+        const auto& form=alliance_game::hero_forms().front();
+        player.hero_id=form.hero_id;player.form_id=form.id;player.unit_type=form.unit_type;player.level=form.native_level;
+        player.hero_level=7;player.hero_revision=4;player.selection_present=true;
+    }
+    alliance_game::session={};alliance_game::session.token="fixture-token";
+    alliance_game::session.profile.account_id="00000000-0000-0000-0000-000000000001";
+    alliance_game::session.profile.username="UniPlayer";
+    account::Hero hero;hero.hero_id=alliance_game::hero_forms().front().hero_id;hero.forms={alliance_game::hero_forms().front().id};hero.revision=4;
+    alliance_game::session.profile.heroes={hero};
 }
+std::string hero_label(const std::string& username){const auto& f=alliance_game::hero_forms().front();return username+" — "+alliance_game::hero_name(f.hero_id)+" / "+f.name+", hero level 7";}
 void contains(const std::string& text, const std::string& needle)
 {
     require(text.find(needle) != std::string::npos, "Missing text: " + needle);
@@ -135,8 +162,8 @@ int main()
             alliance_game::battle_detail({}, server_plan.id);
             require(detail_reads == 3 && messages.size() == 1, "The view needs its own fresh read");
             contains(messages[0], "Team membership changed after this plan was saved.");
-            contains(messages[0], "UniRival — Spearman, level 1 — Saved readiness (inactive): Not ready");
-            contains(messages[0], "UniPlayer — Spearman, level 1 — Saved readiness (inactive): Ready");
+            contains(messages[0], hero_label("UniRival") + " — Saved readiness (inactive): Not ready");
+            contains(messages[0], hero_label("UniPlayer") + " — Saved readiness (inactive): Ready");
             absent(messages[0], "The saved lineups match the current teams and leaders.");
         });
         check("concurrent cancellation is visible in the first opened detail", [] {
@@ -179,9 +206,9 @@ int main()
             contains(text, "The saved lineups match the current teams and leaders.");
             contains(text, "cancelled and inactive");
             contains(text, "Captain approval (inactive): Approved");
-            contains(text, "UniRival — Spearman, level 1 — Saved readiness (history): Ready");
-            contains(text, "UniSolo — Elvish Fighter, level 1 — Saved readiness (history): Not ready");
-            absent(text, "level 1 — Ready");
+            contains(text, hero_label("UniRival") + " — Saved readiness (history): Ready");
+            contains(text, hero_label("UniSolo") + " — Saved readiness (history): Not ready");
+            absent(text, "hero level 7 — Ready");
             require(server_plan.teams[1].players[1].ready && server_plan.teams[1].approved,
                     "Rendering must not rewrite server history");
             require(!alliance_game::can_practice_plan(server_plan, alliance_game::session.profile), "Cancelled practice must be unavailable");
@@ -206,7 +233,7 @@ int main()
             server_plan.teams[0].approved = false;
             const auto text = alliance_game::battle_text(server_plan);
             contains(text, "Team: Koichi\nTeam ID: 00000000-0000-0000-0000-000000000020\nCaptain approval (inactive): Waiting");
-            contains(text, "UniPlayer — Spearman, level 1 — Saved readiness (history): Ready");
+            contains(text, hero_label("UniPlayer") + " — Saved readiness (history): Ready");
             absent(text, "Saved captain approval (history)");
             require(!server_plan.teams[0].approved, "UI changed the protocol approval projection");
         });
@@ -217,16 +244,16 @@ int main()
                 const auto text = alliance_game::battle_text(server_plan);
                 contains(text, "This draft cannot start a shared battle while these changes remain.");
                 contains(text, "Captain approval (inactive): Approved");
-                contains(text, "UniRival — Spearman, level 1 — Saved readiness (inactive): Ready");
-                absent(text, "level 1 — Ready");
+                contains(text, hero_label("UniRival") + " — Saved readiness (inactive): Ready");
+                absent(text, "hero level 7 — Ready");
                 require(server_plan.teams[1].players[1].ready, "Rendering rewrote saved consent");
             }
         });
         check("valid draft displays the server's exact current ready values", [] {
             const auto text = alliance_game::battle_text(server_plan);
             contains(text, "Captain approval: Approved");
-            contains(text, "UniRival — Spearman, level 1 — Ready");
-            contains(text, "UniSolo — Elvish Fighter, level 1 — Not ready");
+            contains(text, hero_label("UniRival") + " — Ready");
+            contains(text, hero_label("UniSolo") + " — Not ready");
             absent(text, "inactive");
             absent(text, "(history)");
         });
@@ -253,6 +280,50 @@ int main()
             require(menus[0].rows.size() == 2 && menus[0].rows[0] != menus[0].rows[1], "Identical plans ambiguous");
             contains(menus[0].rows[0], server_plan.id);
             contains(menus[0].rows[1], "200599c9-610f-4d81-b8bb-1cb1b79e5f27");
+        });
+        check("empty side requires owned hero before ready or approval", [] {
+            server_plan.teams[0].players[0].selection_present=false;server_plan.teams[0].players[0].ready=false;
+            server_plan.teams[0].approved=false;
+            steps={{"Battle plan","<close>",""}};alliance_game::battle_detail({},server_plan.id);
+            require(offered(menus[0],"Choose my hero"),"Missing hero selection");
+            for(const auto* action:{"Set myself ready","Practice this plan","Approve this plan"})require(!offered(menus[0],action),"Unselected hero exposed consent");
+            contains(alliance_game::battle_text(server_plan),"Choose a hero before Ready");
+        });
+        check("both selected lineups allow captain review but no early ready", [] {
+            server_plan.teams[0].approved=false;server_plan.teams[0].players[0].ready=false;
+            steps={{"Battle plan","<close>",""}};alliance_game::battle_detail({},server_plan.id);
+            require(offered(menus[0],"Approve this plan")&&!offered(menus[0],"Set myself ready"),"Approval/ready order broken");
+        });
+        check("hero chooser cancellation does not mutate", [] {
+            hero_cancel=true;steps={{"Battle plan","Change my hero",""},{"Battle plan","<close>",""}};
+            alliance_game::battle_detail({},server_plan.id);require(hero_mutations==0,"Cancelled chooser mutated");
+        });
+        check("same current hero and form is a no-op", [] {
+            steps={{"Battle plan","Change my hero",""},{"Battle plan","<close>",""}};
+            alliance_game::battle_detail({},server_plan.id);require(hero_mutations==0,"Same selection mutated");
+            contains(messages.back(),"already selected");
+        });
+        check("fresh hero revision requires selection confirmation and resets consent", [] {
+            ++alliance_game::session.profile.heroes[0].revision;
+            steps={{"Battle plan","Change my hero",""},{"Confirm hero selection","Save my hero",""},{"Battle plan","<close>",""}};
+            alliance_game::battle_detail({},server_plan.id);require(hero_mutations==1,"Upgrade selection not saved");
+            for(const auto& t:server_plan.teams){require(!t.approved,"Approval retained");for(const auto& p:t.players)require(!p.ready,"Ready retained");}
+            require(!offered(menus.back(),"Set myself ready"),"Ready offered before renewed approval");
+        });
+        check("selection confirmation Back preserves consent", [] {
+            ++alliance_game::session.profile.heroes[0].revision;
+            steps={{"Battle plan","Change my hero",""},{"Confirm hero selection","<close>",""},{"Battle plan","<close>",""}};
+            alliance_game::battle_detail({},server_plan.id);require(hero_mutations==0&&server_plan.teams[0].approved,"Back mutated consent");
+        });
+        check("actor change while choosing prevents selection mutation", [] {
+            hero_actor_change=true;steps={{"Battle plan","Change my hero",""}};
+            alliance_game::battle_detail({},server_plan.id);require(hero_mutations==0,"Changed actor mutated selection");
+        });
+        check("malformed selection acknowledgement retaining ready is rejected", [] {
+            ++alliance_game::session.profile.heroes[0].revision;bad_hero_ack=true;
+            steps={{"Battle plan","Change my hero",""},{"Confirm hero selection","Save my hero",""}};
+            bool rejected=false;try{alliance_game::battle_detail({},server_plan.id);}catch(const std::runtime_error&){rejected=true;}
+            require(rejected&&hero_mutations==1,"Invalid acknowledgement accepted or retried");
         });
         std::cout << "PASS all planning refresh and history cases\n";
         return 0;

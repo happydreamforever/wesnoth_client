@@ -21,6 +21,8 @@ struct PracticeSeat {
     std::string id, username, team_id, team_name, faction, unit_type;
     int level = 0, side = 0;
     bool human = false;
+    std::string hero_id, form_id;
+    std::int64_t hero_level = 1, hero_revision = 0;
 };
 struct PracticePlan {
     std::string battle_id, map_id, map_name, scenario_id, map_file;

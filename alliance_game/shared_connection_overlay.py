@@ -27,7 +27,7 @@ def transform_source(text):
     strict = ctor.replace('const std::string& host, const std::string& service', 'const alliance::TrustedProfile& profile', 1).replace('host_(host)', 'host_(profile.address)').replace('service_(service)', 'service_(std::to_string(profile.port))')
     a = strict.index('\terror_code ec;')
     b = strict.index('\n\t// Starts the worker thread.', a)
-    strict = strict[:a] + '''\tif(profile.port != 15002 || !alliance::validate_profile(profile))
+    strict = strict[:a] + '''\tif((profile.port != 15000 && profile.port != 15002) || !alliance::validate_profile(profile))
         throw error(boost::asio::error::make_error_code(boost::asio::error::invalid_argument));
     auto state = std::make_shared<alliance_socket_state>(profile, io_context_);
     tls_context_.add_certificate_authority(boost::asio::buffer(profile.certificate_pem));
@@ -86,12 +86,20 @@ def transform_source(text):
     text = once(text, 'if(err.code() == boost::asio::error::operation_aborted || err.code() == boost::asio::error::eof) {', 'if(!alliance_socket_lookup(this) && (err.code() == boost::asio::error::operation_aborted || err.code() == boost::asio::error::eof)) {')
     text = once(text, '\tio::write_gz(os, request);', '''    if(alliance_socket_lookup(this)) {
         std::ostringstream plain; io::write(plain, request);
-        if(plain.str().size() > alliance_socket_plain_limit) throw error(boost::asio::error::make_error_code(boost::asio::error::message_size));
+        if(plain.str().size() > alliance_plain_limit(this)) throw error(boost::asio::error::make_error_code(boost::asio::error::message_size));
     }
 \tio::write_gz(os, request);
-    if(alliance_socket_lookup(this) && (buf_ptr->size() == 0 || buf_ptr->size() > alliance_socket_frame_limit))
+    if(alliance_socket_lookup(this) && (buf_ptr->size() == 0 || buf_ptr->size() > alliance_frame_limit(this)))
         throw error(boost::asio::error::make_error_code(boost::asio::error::message_size));''')
-    text = once(text, '\t\tsend_queue_.push(std::move(buf_ptr));', '\t\tif(alliance_socket_lookup(this) && send_queue_.size() >= 128) { alliance_fail(boost::asio::error::no_buffer_space); return; }\n\t\tsend_queue_.push(std::move(buf_ptr));')
+    text = once(text, '\t\tsend_queue_.push(std::move(buf_ptr));', '''        if(auto state=alliance_socket_lookup(this)) {
+            if(send_queue_.size()>=128 || state->queued_send_bytes+buf_ptr->size()>8*1024*1024) {
+                alliance_fail(boost::asio::error::no_buffer_space); return;
+            }
+            state->queued_send_bytes+=buf_ptr->size();
+        }
+\t\tsend_queue_.push(std::move(buf_ptr));''')
+    text = once(text, '\tsend_queue_.pop();', '''    if(auto state=alliance_socket_lookup(this)) state->queued_send_bytes-=send_queue_.front()->size();
+\tsend_queue_.pop();''')
     text = once(text, '\tbytes_read_ = bytes_transferred;','''    if(auto state=alliance_socket_lookup(this)) {
         if(bytes_transferred && !state->partial_frame) {
             state->partial_frame=true;
@@ -101,7 +109,7 @@ def transform_source(text):
     }
 \tbytes_read_ = bytes_transferred;''')
     text = once(text, '\t\tbytes_to_read_ = ntohl(data_size) + 4;', '''        const auto length=ntohl(data_size);
-        if(alliance_socket_lookup(this) && (length == 0 || length > alliance_socket_frame_limit)) {
+        if(alliance_socket_lookup(this) && (length == 0 || length > alliance_frame_limit(this))) {
             alliance_fail(boost::asio::error::message_size); return 0;
         }
 \t\tbytes_to_read_ = static_cast<std::size_t>(length) + 4;''')
@@ -113,9 +121,21 @@ def transform_source(text):
 \tbytes_to_read_ = 0;
 \tif(last_error_''')
     text = once(text, '\tconfig data = io::read_gz(is);\n\tif(!data.empty()) { DBG_NW << "Received:\\n" << data; }', '''    const bool strict=bool(alliance_socket_lookup(this));
-    config data = strict ? io::read(alliance_inflate_frame(is)) : io::read_gz(is);
+    std::string plain;
+    if(strict) plain=alliance_inflate_frame(is, alliance_frame_limit(this), alliance_plain_limit(this));
+    config data = strict ? io::read(plain) : io::read_gz(is);
     if(!strict && !data.empty()) { DBG_NW << "Received:\\n" << data; }''')
-    text = once(text, '\t\trecv_queue_.emplace(std::move(data));', '\t\tif(strict && recv_queue_.size() >= 128) { alliance_fail(boost::asio::error::no_buffer_space); return; }\n\t\trecv_queue_.emplace(std::move(data));')
+    text = once(text, '\t\trecv_queue_.emplace(std::move(data));', '''        if(auto state=alliance_socket_lookup(this)) {
+            if(recv_queue_.size()>=128 || state->queued_receive_bytes+plain.size()>64*1024*1024) {
+                alliance_fail(boost::asio::error::no_buffer_space); return;
+            }
+            state->queued_receive_bytes+=plain.size();state->queued_receive_sizes.push_back(plain.size());
+        }
+\t\trecv_queue_.emplace(std::move(data));''')
+    text = once(text, '\t\t\trecv_queue_.pop();', '''            if(auto state=alliance_socket_lookup(this)) {
+                state->queued_receive_bytes-=state->queued_receive_sizes.front();state->queued_receive_sizes.pop_front();
+            }
+\t\t\trecv_queue_.pop();''')
     text = once(text, 'bool wesnothd_connection::wait_and_receive_data(config& data)\n{', 'bool wesnothd_connection::wait_and_receive_data(config& data)\n{\n    if(alliance_socket_lookup(this)) {\n        while(!receive_data(data)) { gui2::dialogs::loading_screen::spin(); std::this_thread::sleep_for(10ms); }\n        return true;\n    }')
     text += '''
 void wesnothd_connection::alliance_fail(const error_code& code)
