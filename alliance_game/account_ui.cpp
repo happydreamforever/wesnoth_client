@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "alliance_game/account_ui.hpp"
 #include "alliance_game/android_lifecycle.hpp"
+#include "alliance_game/session_watch.hpp"
 #include "alliance_game/hero_catalog.hpp"
 #include "alliance_game/story_progression.hpp"
 #include "alliance_game/battle_launch.hpp"
@@ -501,6 +502,7 @@ private:
 bool request(const alliance::TrustedProfile& profile, account::Request& input,
              const std::string& action, account::Reply& output)
 {
+    AccountNetworkActivity foreground;
     AccountJob job(profile, input);
     gui2::dialogs::network_transmission progress(
         job, "Wesnoth", action + "\nYou can cancel this request.");
@@ -529,6 +531,8 @@ void show_failure(const account::Reply& reply)
     if(reply.error_code == "invalid_session" || reply.error_code == "unauthorized" ||
        reply.error_code == "session_expired" ||
        reply.error_code == "account_unavailable") {
+        if(!current_session().token.empty())
+            request_session_reauthentication(current_session().profile.account_id, current_session().profile.database_generation);
         current_session().clear();
     }
     message(reply.error_message.empty()
@@ -554,6 +558,7 @@ bool reload_player(const alliance::TrustedProfile& trusted)
     if(!request(trusted,input,"Loading your heroes…",output)) return false;
     if(!output.ok) {show_failure(output);return false;}
     if(output.profile.account_id!=actor || output.profile.database_generation!=generation) {
+        request_session_reauthentication(actor, generation);
         current_session().clear(); message("The signed-in account or game database changed. Log in again.");return false;
     }
     current_session().profile=std::move(output.profile);
@@ -1967,7 +1972,7 @@ void teams(const alliance::TrustedProfile& profile)
 
 
 
-void logout(const alliance::TrustedProfile& profile)
+void logout(const alliance::TrustedProfile& profile, bool notify = true)
 {
     account::Request input;
     input.operation = "logout";
@@ -1975,6 +1980,7 @@ void logout(const alliance::TrustedProfile& profile)
     account::Reply output;
     const bool completed = request(profile, input, "Logging out…", output);
     current_session().clear();
+    if(!notify) return;
     if(completed && output.ok) {
         message("Logged out. The server has revoked this session.");
     } else {
@@ -1994,7 +2000,10 @@ std::optional<PlayerSession> player_session()
     if(!path||!*path)return std::nullopt;
     const auto trusted=account::read_public_profile(path);
     const auto identity=trusted.address+":"+std::to_string(trusted.port)+":"+trusted.certificate_sha256;
-    if(identity!=session.identity){current_session().clear();return std::nullopt;}
+    if(identity!=session.identity){
+        request_session_reauthentication(session.profile.account_id, session.profile.database_generation);
+        current_session().clear();return std::nullopt;
+    }
     return PlayerSession{trusted,session.profile,session.token};
 }
 
@@ -2013,29 +2022,49 @@ bool ensure_player_session(const std::string& required_account,
                            const std::string& required_generation,
                            const std::string& notice)
 {
+    AccountNetworkActivity foreground;
     static bool active=false;
     if(active)return false;
     struct Guard{bool& flag;Guard(bool& f):flag(f){flag=true;}~Guard(){flag=false;}}guard(active);
     AuthenticationBackdrop background;
+    auto bound_account = required_account;
+    auto bound_generation = required_generation;
+    auto gate_notice = notice;
     try {
         if(auto existing=player_session()) {
             if((!required_account.empty() && existing->account.account_id != required_account) ||
                (!required_generation.empty() && existing->account.database_generation != required_generation)) {
                 logout(existing->trusted);
-            } else if(reload_player(existing->trusted))return true;
-            if(!current_session().token.empty())return false;
+            } else if(reload_player(existing->trusted)) {
+                clear_session_reauthentication();
+                return true;
+            } else {
+                // A failed or cancelled foreground verification must return
+                // to authentication, never translate into the engine's Quit.
+                // Retain the actor even if reload_player cleared the session.
+                if(bound_account.empty()) bound_account = existing->account.account_id;
+                if(bound_generation.empty()) bound_generation = existing->account.database_generation;
+                current_session().clear();
+                if(gate_notice.empty()) gate_notice =
+                    "Connection to the Windows server was lost. You have been signed out. Log in again.";
+            }
         }
         const char* path=std::getenv("WESNOTH_ALLIANCE_PROFILE");
         if(!path||!*path){message("Import the trusted Windows server profile before starting the game.");return false;}
         const auto trusted=account::read_public_profile(path);
-        while(current_session().token.empty()) {
-            const int action=welcome_action(required_account.empty() && required_generation.empty(), notice);
-            if(action<0)return false;
-            if(action==0)login(trusted, required_account, required_generation);
-            else if(action==1)register_player(trusted);
+        for(;;) {
+            while(current_session().token.empty()) {
+                const int action=welcome_action(bound_account.empty() && bound_generation.empty(), gate_notice);
+                if(action<0)return false;
+                if(action==0)login(trusted, bound_account, bound_generation);
+                else if(action==1)register_player(trusted);
+            }
+            clear_session_reauthentication();
+            retry_story_results();
+            // A queued-result response can revoke an account after login.
+            // Keep the same opaque gate open until a current session exists.
+            if(!current_session().token.empty()) return true;
         }
-        retry_story_results();
-        return true;
     } catch(const account::ProfileReadError& e){message(e.what());}
     catch(...){message("The game could not open its account connection. Check the trusted server and Windows services.");}
     return false;
@@ -2071,13 +2100,15 @@ void invalidate_player_session()
 
 void logout_player()
 {
+    AccountNetworkActivity foreground;
+    AuthenticationBackdrop background;
+    clear_session_reauthentication();
     try {
         auto session=player_session();
-        if(session)logout(session->trusted);
+        if(session)logout(session->trusted, false);
         else current_session().clear();
     }catch(...){
         current_session().clear();
-        message("You are signed out on this device. The server did not confirm session revocation.");
     }
 }
 void show_teams_dialog()
