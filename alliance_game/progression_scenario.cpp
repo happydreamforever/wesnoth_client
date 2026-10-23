@@ -1,3 +1,4 @@
+#include "alliance_game/hero_catalog.hpp"
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "alliance_game/progression_scenario.hpp"
 #include "alliance_game/practice_plan.hpp"
@@ -51,7 +52,7 @@ config make_progression_scenario(const ProgressionRun& run,const config& era) {
     scenario["next_scenario"]="";scenario["victory_when_enemies_defeated"]=mission!=1;
     scenario["experience_modifier"]=100;scenario["random_start_time"]=false;
     scenario["objectives"]="<big>"+at->name+"</big>\n"+at->description+
-      "\nDefeat: your personal leader dies, or time runs out.\nYour personal leader keeps the registered type and level; recruits can advance in this mission.\nA completed victory can earn 20 leader experience after server settlement. Defeat awards none.\nOnly this newly started mission can report a result. Quitting or interruption requires cancellation and a new run; loading a save does not resume progression.";
+      "\nDefeat: your personal leader dies, or time runs out.\nYour selected hero keeps its registered form and Hero Level; recruits can advance in this mission.\nA completed victory earns 20 hero experience after automatic server confirmation. Defeat awards none.\nOnly this newly started mission can report a result. Quitting or interruption requires cancellation and a new run; loading a save does not resume progression.";
     scenario.add_child("time",config{"id","day","name","Day","image","misc/time-schedules/default/schedule-dawn.png","lawful_bonus",0});
     auto& vars=scenario.add_child("variables");
     vars["alliance_progression"]=true;vars["alliance_run_id"]=run.id;vars["alliance_account_id"]=run.account_id;
@@ -70,8 +71,9 @@ config make_progression_scenario(const ProgressionRun& run,const config& era) {
         leader["name"]=side==1?run.username:(side==3?"The Silent Warden":mission==0?"Rovan the Raider":"Gorak");
         leader["canrecruit"]=true;leader["random_traits"]=false;leader["generate_name"]=false;
         if(side==1) {
+            apply_hero_level(leader,run.hero_id,run.form_id,run.hero_level);
             leader["experience"]=0;leader["max_experience"]=1000000000;leader["advances_to"]="null";
-            auto& lock=leader.add_child("modifications").add_child("object");lock["id"]="alliance_progression_leader_lock";lock["duration"]="forever";lock["silent"]=true;
+            auto& lock=leader.mandatory_child("modifications").add_child("object");lock["id"]="alliance_progression_leader_lock";lock["duration"]="forever";lock["silent"]=true;
             lock.add_child("effect",config{"apply_to","remove_advancement","types",practice_advancement_targets()});
             leader.add_child("advancement",config{"id","alliance_progression_locked","max_times",0});
         }

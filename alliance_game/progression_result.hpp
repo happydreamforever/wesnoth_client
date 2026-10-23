@@ -36,4 +36,5 @@ void observe_progression_completion(saved_game&, level_result::type) noexcept;
 bool progression_save(const saved_game&) noexcept;
 // Fixed message only, consumed by UI after launch; no exception/path/nonce data.
 std::string take_progression_notice();
+void retry_training_results() noexcept;
 }

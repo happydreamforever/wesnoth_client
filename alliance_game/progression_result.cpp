@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "alliance_game/progression_result.hpp"
+#include "alliance_game/account_ui.hpp"
+#include "alliance_native/progression_protocol.hpp"
 #include "alliance_game/progression_scenario.hpp"
 #include "filesystem.hpp"
 #include "saved_game.hpp"
@@ -81,16 +83,18 @@ void write_atomic(const fs::path& path,const config& cfg) {
     } catch(...) {if(fd>=0)::close(fd);std::error_code ignored;fs::remove(temporary,ignored);throw;}
 }
 config encode(const ProgressionPending& p) {
-    config c;c["format"]="alliance-private-progression-v1";
+    config c;c["format"]="alliance-private-progression-v2";
     c["id"]=p.run.id;c["account_id"]=p.run.account_id;c["username"]=p.run.username;c["mission_id"]=p.run.mission_id;
     c["mission_version"]=p.run.mission_version;c["ruleset_version"]=p.run.ruleset_version;c["unit_type"]=p.run.unit_type;c["leader_level"]=p.run.leader_level;c["nonce"]=p.run.nonce;
+    c["hero_id"]=p.run.hero_id;c["form_id"]=p.run.form_id;c["database_generation"]=p.run.database_generation;c["hero_level"]=static_cast<long long>(p.run.hero_level);
     c["status"]=p.status;c["outcome"]=p.outcome;c["replay_sha256"]=p.replay_sha256;c["replay_filename"]=p.replay_filename;c["replay_bytes"]=static_cast<unsigned long long>(p.replay_bytes);return c;
 }
 ProgressionPending decode(const fs::path& file) {
     const auto c=io::read(read_bounded(file,max_record));ProgressionPending p;
     p.run={c["id"].str(),c["account_id"].str(),c["username"].str(),c["mission_id"].str(),c["mission_version"].str(),c["ruleset_version"].str(),c["unit_type"].str(),c["nonce"].str(),c["leader_level"].to_int()};
+    p.run.hero_id=c["hero_id"].str();p.run.form_id=c["form_id"].str();p.run.database_generation=c["database_generation"].str();p.run.hero_level=c["hero_level"].to_long_long();
     p.status=c["status"].str();p.outcome=c["outcome"].str();p.replay_sha256=c["replay_sha256"].str();p.replay_filename=c["replay_filename"].str();p.replay_bytes=c["replay_bytes"].to_unsigned();
-    if(c["format"].str()!="alliance-private-progression-v1"||!valid_progression_run(p.run)||
+    if(c["format"].str()!="alliance-private-progression-v2"||!valid_progression_run(p.run)||
        (p.status!="started"&&p.status!="pending"&&p.status!="acknowledged"&&p.status!="cancelled")||
        file.filename()!=p.run.id+".cfg"||file.parent_path().filename()!=p.run.account_id)throw std::runtime_error("Invalid mission record.");
     if(p.status=="pending"||p.status=="acknowledged") {
@@ -168,8 +172,20 @@ void observe_progression_completion(saved_game& state,level_result::type result)
         record.status="pending";record.outcome=result==level_result::type::victory?"win":"loss";
         record.replay_filename=replay.filename().string();record.replay_bytes=bytes.size();record.replay_sha256=digest(bytes);
         write_atomic(path,encode(record));
-        notice="Mission result and replay saved. Open Alliance to submit this result to your Windows server. Experience is awarded only after the server confirms settlement.";
+        notice="Training result saved. It is sent automatically; pending results retry when you reconnect.";
+        retry_training_results();
     } catch(...) {notice="The mission ended, but its result could not be saved safely. No reward was submitted. Open Alliance to inspect the active run. [progression-save]";}
+}
+void retry_training_results() noexcept {
+ try {const auto s=player_session();if(!s)return;for(const auto& item:inspect_pending_progression(s->account.account_id)) {
+  if(item.status!="pending"||item.run.database_generation!=s->account.database_generation)continue;
+  boost::json::object body{{"run_id",item.run.id},{"mission_id",item.run.mission_id},{"mission_version",item.run.mission_version},{"nonce",item.run.nonce},{"outcome",item.outcome},{"replay_sha256",item.replay_sha256},{"format","alliance-native-campaign-result-v1"}};
+  alliance::account::Request request;request.operation="progression_finish";request.progression_json=boost::json::serialize(body);alliance::account::Reply reply;
+  if(!player_request(request,reply))return;
+  const auto result=boost::json::parse(reply.progression_json).as_object();alliance::progression_protocol::response(request.operation,result);
+  const auto& run=result.at("run").as_object();if(run.at("id").as_string()!=item.run.id||run.at("outcome").as_string()!=item.outcome)throw std::runtime_error("Training acknowledgement differs.");
+  acknowledge_progression_result(s->account.account_id,item.run.id,item.outcome);
+ }}catch(...){}
 }
 std::string take_progression_notice(){auto value=std::move(notice);notice.clear();return value;}
 }
