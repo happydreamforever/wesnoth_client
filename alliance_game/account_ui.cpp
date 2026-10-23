@@ -954,7 +954,7 @@ void leave_team(const alliance::TrustedProfile& profile)
     const std::string preview = "Team: " + team.name + "\nTeam ID: " + team.id +
         "\nArea: " + team.area_name + "\nMembers: " + std::to_string(team.members.size()) + "/8";
     if(select_change("Confirm leaving team", preview + "\n\n" + consequence +
-        "\nYour personal leader and experience are unchanged.",
+        "\nYour heroes and their experience are unchanged.",
         {captain ? "Leave and archive this team" : "Leave this team"}) != 0) return;
     account::Request input;
     input.operation = "leave_team";
@@ -1278,7 +1278,7 @@ std::string battle_validity_text(const std::string& value)
     if(value == "roster_changed") return "Team membership changed after this plan was saved.";
     if(value == "area_changed") return "A team's area changed after this plan was saved.";
     if(value == "map_unavailable") return "This map is no longer enabled in the area.";
-    if(value == "leader_changed") return "A selected personal leader changed after this plan was saved.";
+    if(value == "leader_changed") return "A selected hero changed after this plan was saved.";
     if(value == "player_unavailable") return "A selected player is unavailable.";
     if(value == "team_unavailable") return "A participating team is unavailable.";
     if(value == "busy") return "A participating team or player is currently busy.";
