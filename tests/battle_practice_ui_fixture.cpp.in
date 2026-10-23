@@ -324,7 +324,7 @@ int main()
             require(std::find(seen[0].rows.begin(), seen[0].rows.end(), "Practice this plan") != seen[0].rows.end(), "Missing personal practice");
             require(std::find(seen[0].rows.begin(), seen[0].rows.end(), "Ready and practice") == seen[0].rows.end(), "Already Ready offered redundant mutation");
             for(const auto* part : {"Your personal practice is available", "Other players do not need to be Ready",
-                                   "Team readiness: 1/4 selected players Ready", "future shared battle requires everyone Ready"})
+                                   "Team readiness: 1/4 selected players Ready", "Shared battles require everyone Ready"})
                 require(seen[0].description.find(part) != std::string::npos, "Personal/team readiness explanation lost");
             require(mutations == 0 && !pending, "Read-only preview changed Ready or launched");
         });

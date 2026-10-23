@@ -41,7 +41,11 @@ void shared_fixture_decorate(config& scenario) {
         for i=1,#wesnoth.sides do
             assert(wesnoth.sides[i].gold==100)
             local leaders=wesnoth.units.find_on_map{side=i,canrecruit=true}
-            assert(#leaders==1 and leaders[1].type=='Spearman')
+            assert(#leaders==1 and leaders[1].type:match('^AH_konrad_'))
+            assert(leaders[1].variables.alliance_hero_id=='konrad')
+            assert(leaders[1].variables.alliance_hero_level==2)
+            local base=wesnoth.unit_types[leaders[1].type].max_hitpoints
+            assert(leaders[1].max_hitpoints==math.floor(base*1.02+0.5))
         end
         std_print('SHARED REAL INITIAL CONFIG VERIFIED')
     )";

@@ -1313,7 +1313,7 @@ std::string practice_availability_text(const account::Battle& battle, const acco
     }
     text += "\nCaptains approved: " + std::to_string(approved) + "/2\nTeam readiness: " +
         std::to_string(ready) + "/" + std::to_string(players) + " selected players Ready. "
-        "A future shared battle requires everyone Ready.";
+        "Shared battles require everyone Ready.";
     if(!captains_waiting.empty()) text += "\nWaiting for captain approval: " + captains_waiting;
     if(!players_waiting.empty()) text += "\nNot ready for a shared battle: " + players_waiting;
     return text;
