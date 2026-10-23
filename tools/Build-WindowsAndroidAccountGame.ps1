@@ -76,7 +76,7 @@ try {
         '--cmake', $CMakePath, '--ninja', $NinjaPath, '--sdk', (Get-Item -LiteralPath $SdkRoot -Force).FullName,
         '--java', (Get-Item -LiteralPath $java -Force).FullName, '--gradle-user-home', $GradleUserHome)
     if ($ArchiveDirectory) { $arguments += @('--archive-directory', $ArchiveDirectory) }
-    Write-Host 'Building the Alliance account game offline: reuse 563 completed engine objects, compile account/practice sources, package APK x86_64/API23. Original APK, engine and OBB are preserved.'
+    Write-Host 'Building the unified game offline: reuse verified original engine objects, compile owned game changes, package APK x86_64/API23. Original APK, engine and OBB are preserved.'
     $process = New-Object System.Diagnostics.Process
     $process.StartInfo.FileName = (Get-Item -LiteralPath $PythonPath -Force).FullName
     $process.StartInfo.Arguments = (($arguments | ForEach-Object { ConvertTo-ProcessArgument $_ }) -join ' ')

@@ -8,7 +8,7 @@ android {
         applicationId 'org.wesnoth.offline'
         minSdk @MIN_SDK@
         targetSdk @TARGET_SDK@
-        versionCode 1192615
+        versionCode 1192616
         versionName '1.19.26'
         ndk { abiFilters 'x86_64' }
     }
