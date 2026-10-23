@@ -6,6 +6,7 @@
 #include <atomic>
 #include <chrono>
 #include <cstdlib>
+#include <optional>
 #include <string>
 #include <thread>
 #include <utility>
@@ -16,6 +17,8 @@ using Clock = std::chrono::steady_clock;
 constexpr auto interval = std::chrono::seconds(3);
 // All reads/writes are on the engine thread; workers never touch this state.
 unsigned foreground_requests = 0;
+struct LostIdentity { std::string account_id, generation; };
+std::optional<LostIdentity> pending_reauthentication;
 
 void erase_secret(std::string& value) noexcept
 {
@@ -71,6 +74,12 @@ struct Probe final {
 
 AccountNetworkActivity::AccountNetworkActivity() noexcept { ++foreground_requests; }
 AccountNetworkActivity::~AccountNetworkActivity() { --foreground_requests; }
+void request_session_reauthentication(const std::string& account_id,
+                                      const std::string& generation)
+{
+    pending_reauthentication = LostIdentity{account_id, generation};
+}
+void clear_session_reauthentication() noexcept { pending_reauthentication.reset(); }
 
 struct SessionWatch::Impl {
     std::unique_ptr<Probe> probe;
@@ -83,6 +92,9 @@ struct SessionWatch::Impl {
     {
         probe.reset();
         invalidate_player_session();
+        // Without a known resume identity, a fresh account could take over an
+        // already open game or dialog. Exit instead of allowing that fallback.
+        if(account_id.empty() || generation.empty()) finish_authentication_task();
         try {
             if(!ensure_player_session(account_id, generation,
                 "The connection to your Windows game account was lost. You have been signed out. "
@@ -100,6 +112,13 @@ struct SessionWatch::Impl {
     {
         if(active || foreground_requests != 0) return;
         struct Guard { bool& value; Guard(bool& v):value(v){value=true;} ~Guard(){value=false;} } guard(active);
+        if(pending_reauthentication) {
+            account_id = std::move(pending_reauthentication->account_id);
+            generation = std::move(pending_reauthentication->generation);
+            pending_reauthentication.reset();
+            require_login();
+            return;
+        }
         if(!has_player_session()) {
             probe.reset();
             account_id.clear();

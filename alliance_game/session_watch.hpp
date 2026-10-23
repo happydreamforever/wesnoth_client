@@ -3,8 +3,16 @@
 
 #include "events.hpp"
 #include <memory>
+#include <string>
 
 namespace alliance_game {
+
+// Foreground server/session failures record their old identity before clearing
+// the token. The next unblocked pump must authenticate before it returns.
+void request_session_reauthentication(const std::string& account_id,
+                                      const std::string& generation);
+// Explicit logout and a completed fresh authentication discard older notices.
+void clear_session_reauthentication() noexcept;
 
 // Main-thread scope for foreground account requests. A background read may
 // finish meanwhile, but it cannot open authentication inside that request.

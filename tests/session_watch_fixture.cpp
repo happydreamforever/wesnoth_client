@@ -39,6 +39,7 @@ void reset()
     reads = gates = invalidations = 0;
     read_error = metadata_changed = false;
     pumping = nullptr;
+    alliance_game::clear_session_reauthentication();
 }
 
 template<class Predicate> void wait_for(Predicate test)
@@ -97,7 +98,7 @@ bool ensure_player_session(const std::string& actor, const std::string& realm, c
 }
 void finish_game_task() noexcept
 {
-    assert(!current && gates == 1 && invalidations == 1);
+    assert(!current && gates == (gate_mode == "unknown-identity" ? 0 : 1) && invalidations == 1);
     assert(entered == completed); // Probe thread joined before activity completion.
     std::cout << "TASK FINISHED" << std::endl;
 }
@@ -136,6 +137,7 @@ int main(int argc, char** argv)
     reset();
     if(gate_mode != "normal") {
         mode = 1;
+        read_error = gate_mode == "unknown-identity";
         alliance_game::SessionWatch watch;
         pumping = &watch;
         watch.process();
@@ -171,6 +173,29 @@ int main(int argc, char** argv)
         assert(current->token == "private-token-after-login");
         watch.process();
         assert(gates == 1 && calls == 1); // No repeated warning or automatic login.
+    }
+    reset();
+    {
+        alliance_game::SessionWatch watch;
+        pumping = &watch;
+        {
+            alliance_game::AccountNetworkActivity foreground;
+            alliance_game::request_session_reauthentication("actor", "realm");
+            current.reset(); // Foreground invalid_session consumed the token already.
+            watch.process();
+            assert(gates == 0);
+        }
+        watch.process();
+        assert(gates == 1 && current && reads == 0 && calls == 0);
+    }
+    reset();
+    {
+        alliance_game::SessionWatch watch;
+        alliance_game::request_session_reauthentication("actor", "realm");
+        current.reset();
+        alliance_game::clear_session_reauthentication(); // Explicit logout supersedes an older notice.
+        watch.process();
+        assert(gates == 0 && reads == 0 && calls == 0);
     }
     reset();
     {
@@ -237,5 +262,5 @@ int main(int argc, char** argv)
         }
         assert(cancellations == 1 && entered == completed && gates == 0);
     }
-    std::cout << "PASS 15 session watcher groups\n";
+    std::cout << "PASS 17 session watcher groups\n";
 }
