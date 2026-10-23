@@ -21,13 +21,11 @@ int main(int argc, char** argv) {
         alliance::CancellationToken cancel;
         Request request;
         request.operation = "register"; request.username = username; request.password = password;
-        request.starter_id = "spearman";
+
         auto created = perform_request(profile, request, cancel);
-        if(!created.ok || created.profile.username != username || created.profile.unit_type != "Spearman"
-           || created.profile.level != 1 || created.profile.experience != 0
-           || created.profile.total_experience != 0 || !created.token.empty())
+        if(!created.ok || created.profile.username != username || !created.profile.heroes.empty() || !created.token.empty())
             throw std::runtime_error("register");
-        std::cout << "PASS register creates personal leader\n";
+        std::cout << "PASS register creates empty hero collection\n";
         auto duplicate = perform_request(profile, request, cancel);
         if(duplicate.ok || duplicate.error_code != "conflict") throw std::runtime_error("duplicate");
         std::cout << "PASS duplicate registration rejected\n";
@@ -40,7 +38,7 @@ int main(int argc, char** argv) {
         auto login = perform_request(profile, request, cancel);
         if(!login.ok || !token_valid(login.token) || login.profile.account_id != created.profile.account_id)
             throw std::runtime_error("login");
-        std::cout << "PASS login returns same personal leader\n";
+        std::cout << "PASS login returns same account\n";
         request = {}; request.operation = "me"; request.token = login.token;
         auto me = perform_request(profile, request, cancel);
         if(!me.ok || me.profile.account_id != created.profile.account_id) throw std::runtime_error("me");

@@ -15,7 +15,7 @@ int main(int argc,char** argv) {
         for(char c;std::cin.get(c);) {if(raw.size()>=4096) throw std::runtime_error("input");raw+=c;}
         const auto data=parse_document(raw);alliance::CancellationToken cancel;
         Request request;request.operation="register";request.username=std::string(data.at("username").as_string());
-        request.password=std::string(data.at("password").as_string());request.starter_id="spearman";
+        request.password=std::string(data.at("password").as_string());
         stage="register";auto created=perform_request(trusted,request,cancel);if(!created.ok) throw std::runtime_error("failed");
         request.operation="login";request.starter_id.clear();stage="login";
         auto logged=perform_request(trusted,request,cancel);if(!logged.ok) throw std::runtime_error("failed");

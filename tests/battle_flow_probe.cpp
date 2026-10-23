@@ -30,7 +30,7 @@ int main(int argc, char** argv)
             stage = "register-four-players";
             for(const auto& username : names) {
                 Request input;
-                input.operation = "register"; input.username = username; input.password = password; input.starter_id = "spearman";
+                input.operation = "register"; input.username = username; input.password = password;
                 need(perform(input).ok);
             }
         }
@@ -174,8 +174,7 @@ int main(int argc, char** argv)
                  mine.team->captain_id == actors[(actor / 2) * 2].profile.account_id && mine.team->level == 1 &&
                  mine.team->experience == 0 && mine.team->rating == 1000);
             const auto me = call(actor, "me");
-            need(me.ok && me.profile.account_id == actors[actor].profile.account_id && me.profile.level == 1 &&
-                 me.profile.unit_type == "Spearman" && me.profile.experience == 0 && me.profile.total_experience == 0);
+            need(me.ok && me.profile.account_id == actors[actor].profile.account_id && me.profile.heroes.empty());
             const auto list = call(actor, "my_battles");
             need(list.ok && list.battles.size() == 1 && list.battles.front().id == battle_id &&
                  list.battles.front().state == battle.state);

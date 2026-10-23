@@ -5,6 +5,7 @@
 #include <string>
 #include <optional>
 #include <vector>
+#include <cstdint>
 
 namespace alliance::account {
 struct Lineup { std::string team_id; std::vector<std::string> account_ids; };
@@ -13,14 +14,21 @@ struct Request {
     std::string name, area_id, team_id, account_id, after, decision_id;
     bool allow_archive = false;
     std::string battle_id, opponent_team_id, map_id;
+    std::string hero_id, form_id, game_id;
+    int side = 0;
     std::vector<Lineup> lineups;
     bool ready = false;
     // Closed progression extension; validated before opening any socket.
     std::string progression_json;
 };
+struct Hero {
+    std::string hero_id, name;
+    std::int64_t hero_level = 1, experience = 0, total_experience = 0, revision = 0;
+    std::vector<std::string> forms;
+};
 struct Profile {
-    std::string account_id, username, unit_type, starter_id;
-    int level = 0, experience = 0, total_experience = 0;
+    std::string account_id, username, database_generation;
+    std::vector<Hero> heroes;
 };
 struct Area { std::string id, name; };
 struct TeamSummary {
@@ -28,8 +36,8 @@ struct TeamSummary {
     int level = 0, experience = 0, rating = 0, member_count = 0;
 };
 struct Member {
-    std::string id, username, unit_type;
-    int level = 0;
+    std::string id, username;
+    int hero_count = 0;
 };
 struct Team {
     std::string id, name, area_id, area_name, captain_id;
@@ -52,8 +60,10 @@ struct BattleSummary {
 };
 struct BattlePlayer {
     std::string id, username, unit_type;
-    int level = 0, side = 0;
-    bool ready = false;
+    int level = 0, side = 0; // Native unit tier, never permanent hero level.
+    std::string hero_id, form_id;
+    std::int64_t hero_level = 0, hero_revision = 0;
+    bool selection_present = false, ready = false;
 };
 struct BattleTeam {
     std::string id, name, captain_id;
@@ -69,6 +79,7 @@ struct Reply {
     std::string progression_json;
     bool ok = false;
     std::string error_code, error_message, token;
+    std::string ticket, selection_ticket, username, database_generation, expires_at;
     Profile profile;
     std::vector<Area> areas;
     std::vector<TeamSummary> teams;
@@ -81,7 +92,9 @@ struct Reply {
     std::vector<BattleMap> maps;
     std::vector<BattleSummary> battles;
     std::optional<Battle> battle;
+    std::optional<BattlePlayer> selection;
 };
+bool catalog_id_valid(const std::string&);
 bool team_name_valid(const std::string&);
 // Same strict public battle projection used by account responses and the shared relay.
 Battle parse_shared_battle_descriptor(const std::string&);

@@ -54,8 +54,7 @@ int main(int argc, char** argv)
         auto unchanged = [&](const Reply& actor) {
             const auto result = call(actor.token, "me");
             need(result.ok && result.profile.account_id == actor.profile.account_id &&
-                 result.profile.unit_type == "Spearman" && result.profile.level == 1 &&
-                 result.profile.experience == 0 && result.profile.total_experience == 0);
+                 result.profile.heroes.empty());
         };
         auto application_ids = [&](const std::string& token, const std::string& team_id) {
             Request request;
@@ -94,7 +93,7 @@ int main(int argc, char** argv)
             for(const auto& username : {captain_name, applicant_name}) {
                 Request request;
                 request.operation = "register"; request.username = username;
-                request.password = password; request.starter_id = "spearman";
+                request.password = password;
                 need(perform_request(trusted, request, cancellation).ok);
             }
         }

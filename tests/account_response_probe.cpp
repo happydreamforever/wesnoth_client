@@ -37,8 +37,9 @@ void output(const alliance::account::Reply& reply, long long elapsed_ms)
     boost::json::object result{
         {"ok", reply.ok}, {"error_code", safe_error(reply.error_code)},
         {"has_token", !reply.token.empty()},
+        {"has_ticket", !reply.ticket.empty()}, {"has_selection_ticket", !reply.selection_ticket.empty()},
         {"has_profile", !reply.profile.account_id.empty()},
-        {"level", reply.profile.level}, {"elapsed_ms", elapsed_ms},
+        {"hero_count", reply.profile.heroes.size()}, {"elapsed_ms", elapsed_ms},
         {"area_count", reply.areas.size()}, {"team_count", reply.teams.size()},
         {"has_next", !reply.next.empty()}, {"has_team", reply.team.has_value()},
         {"member_count", reply.team ? reply.team->members.size() : 0},
@@ -104,6 +105,10 @@ int main(int argc, char** argv)
         request.battle_id = field(input, "battle_id");
         request.opponent_team_id = field(input, "opponent_team_id");
         request.map_id = field(input, "map_id");
+        request.hero_id = field(input, "hero_id");
+        request.form_id = field(input, "form_id");
+        request.game_id = field(input, "game_id");
+        if(const auto* side=input.if_contains("side")) {if(!side->is_int64())throw std::runtime_error("input");request.side=static_cast<int>(side->as_int64());}
         if(const auto* ready = input.if_contains("ready")) {
             if(!ready->is_bool()) throw std::runtime_error("input");
             request.ready = ready->as_bool();

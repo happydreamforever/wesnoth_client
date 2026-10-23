@@ -30,7 +30,7 @@ int main(int argc, char** argv)
         if(!restart) {
             stage = "register";
             request.operation = "register"; request.username = username;
-            request.password = password; request.starter_id = "spearman";
+            request.password = password;
             need(perform_request(trusted, request, cancel).ok);
         }
         stage = "login";
@@ -114,8 +114,7 @@ int main(int argc, char** argv)
         stage = "unchanged-leader";
         request = {}; request.operation = "me";
         const auto me = call(request);
-        need(me.ok && me.profile.account_id == player_id && me.profile.unit_type == "Spearman"
-             && me.profile.level == 1 && me.profile.experience == 0 && me.profile.total_experience == 0);
+        need(me.ok && me.profile.account_id == player_id && me.profile.heroes.empty());
         stage = "logout";
         request.operation = "logout"; need(call(request).ok);
         request.operation = "my_team";

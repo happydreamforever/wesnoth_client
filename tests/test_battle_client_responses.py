@@ -23,7 +23,7 @@ class BattleClientResponseTests(AccountClientResponseTests):
         teams = []
         for i in range(2):
             players = [{"id": f"{i * 4 + j + 1:08x}-1234-4321-8765-0123456789ab", "username": f"Player_{i}_{j}",
-                        "unit_type": "Spearman", "level": 1, "side": side, "ready": False}
+                        "selection": {"hero_id":"konrad", "form_id":"konrad_fighter", "unit_type":"AllianceHero_konrad_fighter", "unit_level":1, "hero_level":1, "hero_revision":1}, "side": side, "ready": False}
                        for j, side in enumerate(map_entry["sides"][i])]
             teams.append({"id": f"{i + 100:08x}-1234-4321-8765-0123456789ab", "name": f"Team {i}",
                           "captain_id": players[0]["id"], "approved": False, "players": players})
@@ -246,7 +246,7 @@ class BattleClientResponseTests(AccountClientResponseTests):
         cases += [(403, "forbidden", "forbidden"), (401, "forbidden", "invalid_session"), (503, "private", "team_failed")]
         for status, code, expected in cases:
             def responder(request):
-                return {"v": 1, "id": request["id"], "ok": False, "status": status,
+                return {"v": 2, "id": request["id"], "ok": False, "status": status,
                         "data": {"code": code, "message": "Private backend detail must not be shown"}}
             output, _ = self.exercise(responder, self.team_request("approve_battle", battle_id=battle["id"]))
             self.assertEqual(output["error_code"], expected)
