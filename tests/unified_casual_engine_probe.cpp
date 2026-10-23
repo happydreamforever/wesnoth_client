@@ -15,6 +15,8 @@ extern "C" int __real_main(int,char**);
 namespace alliance_game {
 PlayerSession::~PlayerSession()=default;
 std::optional<PlayerSession> player_session(){return std::nullopt;}
+bool has_player_session() noexcept{return false;}
+bool account_session_interaction_active() noexcept{return false;}
 bool player_request(alliance::account::Request&,alliance::account::Reply&){return false;}
 bool choose_owned_hero(std::string&,std::string&){return false;}
 }

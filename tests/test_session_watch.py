@@ -60,7 +60,7 @@ namespace alliance_game { void finish_game_task() noexcept; }
         return result.stdout
 
     def test_real_worker_state_and_pause_lifecycle(self):
-        self.assertIn("PASS 17 session watcher groups", self.run_fixture("normal"))
+        self.assertIn("PASS 18 session watcher groups", self.run_fixture("normal"))
 
     def test_cancelled_auth_finishes_task_before_terminal_exit(self):
         self.assertEqual(self.run_fixture("quit"), "TASK FINISHED\n")

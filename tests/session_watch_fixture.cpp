@@ -85,6 +85,7 @@ bool ensure_player_session(const std::string& actor, const std::string& realm, c
     assert(actor == "actor" && realm == "realm");
     assert(warning.find("local network") != std::string::npos);
     assert(warning.find("signed out") != std::string::npos);
+    assert(account_session_interaction_active());
     ++gates;
     if(pumping) {
         const auto before = reads;
@@ -145,6 +146,19 @@ int main(int argc, char** argv)
         assert(false); // Terminal auth choices may not return to this paused caller.
     }
     {
+        assert(!alliance_game::account_session_interaction_active());
+        const auto prior_reads=reads;
+        {
+            alliance_game::AccountNetworkActivity outer;
+            assert(alliance_game::account_session_interaction_active());
+            { alliance_game::AccountNetworkActivity inner; assert(alliance_game::account_session_interaction_active()); }
+            assert(alliance_game::account_session_interaction_active());
+        }
+        assert(!alliance_game::account_session_interaction_active());
+        alliance_game::request_session_reauthentication("actor", "realm");
+        assert(alliance_game::account_session_interaction_active());
+        alliance_game::clear_session_reauthentication();
+        assert(!alliance_game::account_session_interaction_active() && reads==prior_reads && calls==0);
         current.reset();
         alliance_game::SessionWatch watch;
         for(int i = 0; i < 1000; ++i) watch.process();
@@ -262,5 +276,5 @@ int main(int argc, char** argv)
         }
         assert(cancellations == 1 && entered == completed && gates == 0);
     }
-    std::cout << "PASS 17 session watcher groups\n";
+    std::cout << "PASS 18 session watcher groups\n";
 }

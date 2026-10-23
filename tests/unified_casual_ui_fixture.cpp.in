@@ -1,5 +1,6 @@
 // Actual controller; config, modal, account and socket boundaries are substituted.
 #include "alliance_game/casual_sides.hpp"
+#include "alliance_game/individual_rooms.hpp"
 #include "alliance_game/casual_session.hpp"
 #include "alliance_game/account_ui.hpp"
 #include "alliance_game/hero_catalog.hpp"
@@ -18,9 +19,9 @@ public:
  struct attribute {
   std::string value;
   std::string str()const{return value;}
-  int to_int()const{return value.empty()?0:std::stoi(value);}
+  int to_int(int fallback=0)const{return value.empty()?fallback:std::stoi(value);}
   long long to_long_long()const{return value.empty()?0:std::stoll(value);}
-  bool to_bool()const{return value=="yes"||value=="true"||value=="1";}
+  bool to_bool(bool fallback=false)const{return value.empty()?fallback:value=="yes"||value=="true"||value=="1";}
   attribute& operator=(const std::string& v){value=v;return *this;}
   attribute& operator=(const char* v){value=v;return *this;}
   attribute& operator=(bool v){value=v?"yes":"no";return *this;}
@@ -30,6 +31,7 @@ public:
  struct optional_ref {
   const config* value=nullptr;
   explicit operator bool()const{return value;}
+  const config& operator*()const{return *value;}
   const attribute& operator[](const std::string& k)const{return (*value)[k];}
  };
  std::map<std::string,attribute> attributes;
@@ -40,6 +42,10 @@ public:
  bool has_child(const std::string& key)const{return !child_range(key).empty();}
  optional_ref optional_child(const std::string& key)const{const auto& list=child_range(key);return {list.empty()?nullptr:&list.front()};}
  const std::vector<config>& child_range(const std::string& key)const{static std::vector<config> empty;auto f=children.find(key);return f==children.end()?empty:f->second;}
+ std::vector<config>& child_range(const std::string& key){return children[key];}
+ std::size_t child_count(const std::string& key)const{return child_range(key).size();}
+ void clear(){attributes.clear();children.clear();}
+ void remove_attribute(const std::string& key){attributes.erase(key);}
  void remove_children(const std::string& key){children.erase(key);}
 };
 const std::string game_one="11111111-1111-4111-8111-111111111111",game_two="22222222-2222-4222-8222-222222222222";
@@ -47,16 +53,19 @@ const std::string actor_one="33333333-3333-4333-8333-333333333333",generation_on
 std::optional<alliance_game::PlayerSession> current;
 std::vector<config> sent;
 std::vector<std::string> notices,rows;
+std::deque<int> actions;
 int action=0,chooser_calls=0,ticket_calls=0,cleared_secrets=0,scale_calls=0;
+bool auth_activity=false;
 bool modal_accept=true,hero_accept=true,ticket_accept=true,send_failure=false;
 std::function<void()> modal_change,hero_change,ticket_change;
 namespace gui2 {
 namespace dialogs {
 struct message{static constexpr int ok_button=1;};
 struct simple_item_selector {
- simple_item_selector(const std::string&,const std::string&,const std::vector<std::string>& options,bool,bool){rows=options;}
+ simple_item_selector(const std::string&,const std::string& text,const std::vector<std::string>& options,bool,bool){rows=options;notices.push_back(text);}
  void set_allow_plugin_skip(bool){}void set_selected_index(int){}void set_ok_label(const std::string&){}void set_cancel_label(const std::string&){}
- bool show(){if(modal_change)modal_change();return modal_accept;}int selected_index()const{return action;}
+ bool show(){if(modal_change)modal_change();if(!actions.empty()){selected=actions.front();actions.pop_front();}else selected=action;return modal_accept;}int selected_index()const{return selected;}
+ int selected=0;
 };
 }
 void show_message(const std::string&,const std::string& text,int,bool,bool){notices.push_back(text);}
@@ -70,6 +79,8 @@ public:
 namespace alliance_game {
 PlayerSession::~PlayerSession()=default;
 std::optional<PlayerSession> player_session(){return current;}
+bool has_player_session() noexcept{return current.has_value();}
+bool account_session_interaction_active() noexcept{return auth_activity;}
 bool choose_owned_hero(std::string& hero,std::string& form){++chooser_calls;if(hero_change)hero_change();hero="konrad";form="fighter";return hero_accept;}
 std::optional<std::string> casual_selection_ticket(const std::string& game,int side,const std::string& hero,const std::string& form){++ticket_calls;need(game==game_one&&side==1&&hero=="konrad"&&form=="fighter");if(ticket_change)ticket_change();if(!ticket_accept)return std::nullopt;return "fixture-one-use-ticket";}
 void clear_casual_secret(std::string& value) noexcept{if(!value.empty())++cleared_secrets;value.clear();}
@@ -83,8 +94,18 @@ void apply_hero_level(config& leader,const std::string& hero,const std::string& 
 // @PRODUCTION@
 config context(const std::string& id=game_one,bool resumed=false){config result;auto& child=result.add_child("alliance_game");child["id"]=id;child["resume"]=resumed;return result;}
 config selection(bool ready=false){config packet;auto& row=packet.add_child("alliance_selection");row["game_id"]=game_one;row["side"]=1;row["username"]="Player";row["account_id"]=actor_one;row["hero_id"]="konrad";row["form_id"]="fighter";row["hero_level"]=25;row["hero_revision"]=7;row["unit_type"]="AH_konrad_fighter";row["unit_level"]=1;row["ready"]=ready;return packet;}
-void reset(){alliance_game::reset_casual_game();current.emplace();current->account.account_id=actor_one;current->account.username="Player";current->account.database_generation=generation_one;current->token="fixture-session";sent.clear();notices.clear();rows.clear();action=chooser_calls=ticket_calls=cleared_secrets=scale_calls=0;modal_accept=hero_accept=ticket_accept=true;send_failure=false;modal_change=hero_change=ticket_change={};}
+void reset(){alliance_game::reset_casual_game();alliance_game::reset_individual_capability();auth_activity=false;actions.clear();current.emplace();current->account.account_id=actor_one;current->account.username="Player";current->account.database_generation=generation_one;current->token="fixture-session";sent.clear();notices.clear();rows.clear();action=chooser_calls=ticket_calls=cleared_secrets=scale_calls=0;modal_accept=hero_accept=ticket_accept=true;send_failure=false;modal_change=hero_change=ticket_change={};}
 void prepare(bool ready=false){alliance_game::observe_casual_message(context());alliance_game::observe_casual_message(selection(ready));}
+config room_context(int rev=1) {
+ config result=context();auto& room=result.children["alliance_game"][0];room["individual_room"]=true;room["room_revision"]=rev;
+ room["room_id"]=17;room["name"]="Evening battle";room["mp_scenario"]="map_two";room["mp_scenario_name"]="The Freelands";
+ room["room_status"]="waiting";room["room_members"]=1;room["room_capacity"]=2;room["room_ready"]=0;room["room_gold"]=150;room["room_turns"]=30;
+ auto& side=room.add_child("room_side");side["side"]=1;side["team_name"]="North";side["gold"]=150;side["income"]=2;side["village_gold"]=2;side["village_support"]=1;
+ return result;
+}
+void prepare_room(bool ready=false) {alliance_game::observe_casual_message(room_context());alliance_game::observe_casual_message(selection(ready));}
+config start_hint(int rev=1,const std::string& id=game_one) {config result;auto& row=result.add_child("individual_start");row["game_id"]=id;row["room_revision"]=rev;return result;}
+void support_rooms(){config packet;packet.add_child("version")["individual_rooms"]="1";alliance_game::observe_individual_room(packet);}
 void check(const std::string& name,void(*body)()){reset();body();std::cout<<"PASS "<<name<<'\n';}
 int main(){try{
  check("missing game context never opens selection or sends",[]{need(!alliance_game::choose_casual_side(1));need(rows.empty()&&sent.empty()&&ticket_calls==0);});
@@ -112,5 +133,25 @@ int main(){try{
  check("matching server Start acknowledgement permits start",[]{prepare(true);wesnothd_connection conn;config response;auto& ack=response.add_child("alliance_start");ack["game_id"]=game_one;ack["accepted"]=true;conn.incoming.push_back(response);need(alliance_game::await_casual_start(conn));});
  check("wrong game Start acknowledgement cannot start",[]{prepare(true);wesnothd_connection conn;config response;auto& ack=response.add_child("alliance_start");ack["game_id"]=game_two;ack["accepted"]=true;conn.incoming.push_back(response);need(!alliance_game::await_casual_start(conn));});
  check("server rejection and leave stop Start",[]{for(const auto* tag:{"error","leave_game"}){prepare(true);wesnothd_connection conn;config response;response.add_child(tag);conn.incoming.push_back(response);need(!alliance_game::await_casual_start(conn));}});
+ check("individual greeting required and reset on new connection",[]{need(!alliance_game::individual_rooms_supported());support_rooms();need(alliance_game::individual_rooms_supported());alliance_game::reset_individual_capability();need(!alliance_game::individual_rooms_supported());});
+ check("individual review shows numeric ID rules and map alliances",[]{prepare_room();const auto review=alliance_game::individual_room_summary();for(const auto* value:{"Room ID: 17","Revision: 1","The Freelands","Starting gold: 150","Turn limit: 30","Team North","Income 2","Village gold 2 / support 1"})need(review.find(value)!=std::string::npos,value);});
+ check("individual Ready requires explicit rules approval with matching revision",[]{prepare_room();actions={2,1};need(alliance_game::choose_casual_side(1));need(sent.size()==1&&sent[0].optional_child("alliance_ready")["room_revision"].to_int()==1);});
+ check("individual Ready Back sends nothing",[]{prepare_room();actions={2,0};need(!alliance_game::choose_casual_side(1));need(sent.empty());});
+ check("room revision changes during Ready review refuse mutation",[]{prepare_room();actions={2,1};int calls=0;modal_change=[&]{if(++calls==2)alliance_game::observe_casual_message(room_context(2));};need(!alliance_game::choose_casual_side(1));need(sent.empty()&&alliance_game::individual_room_revision()==2);});
+ check("actor changes during Ready review refuse mutation",[]{prepare_room();actions={2,1};int calls=0;modal_change=[&]{if(++calls==2)current->account.account_id=game_two;};need(!alliance_game::choose_casual_side(1));need(sent.empty());});
+ check("individual ready withdrawal needs no extra confirmation",[]{prepare_room(true);actions={2};need(alliance_game::choose_casual_side(1));need(sent.size()==1&&!sent[0].optional_child("alliance_ready")["ready"].to_bool());});
+ check("room details sends no mutation",[]{prepare_room();actions={3,0};need(!alliance_game::choose_casual_side(1));need(sent.empty()&&notices.back().find("Room ID: 17")!=std::string::npos);});
+ check("automatic start requires exact server hint and one consumption",[]{prepare_room(true);need(!alliance_game::consume_individual_start());alliance_game::observe_casual_message(start_hint(2));need(!alliance_game::consume_individual_start());alliance_game::observe_casual_message(start_hint(1,game_two));need(!alliance_game::consume_individual_start());alliance_game::observe_casual_message(start_hint());need(alliance_game::consume_individual_start()&&alliance_game::individual_start_authorized());need(!alliance_game::consume_individual_start());});
+ check("automatic start waits until all interaction scopes have closed",[]{prepare_room(true);alliance_game::observe_casual_message(start_hint());{alliance_game::IndividualRoomInteraction first;{alliance_game::IndividualRoomInteraction second;need(!alliance_game::consume_individual_start());}need(!alliance_game::consume_individual_start());}need(alliance_game::consume_individual_start());});
+ check("automatic start waits through foreground authentication and missing session",[]{prepare_room(true);alliance_game::observe_casual_message(start_hint());auth_activity=true;need(!alliance_game::consume_individual_start()&&alliance_game::individual_start_requested());auth_activity=false;auto saved=*current;current.reset();need(!alliance_game::consume_individual_start()&&alliance_game::individual_start_requested());current=saved;need(alliance_game::consume_individual_start());});
+ check("settings update invalidates pending and consumed auto-start",[]{prepare_room(true);alliance_game::observe_casual_message(start_hint());need(alliance_game::consume_individual_start());alliance_game::observe_casual_message(room_context(2));need(!alliance_game::individual_start_authorized()&&!alliance_game::consume_individual_start());alliance_game::observe_casual_message(start_hint(1));need(!alliance_game::consume_individual_start());});
+ check("leave and protocol error invalidate automatic start",[]{for(const auto* tag:{"error","leave_game"}){prepare_room(true);alliance_game::observe_casual_message(start_hint());config packet;packet.add_child(tag);alliance_game::observe_casual_message(packet);need(!alliance_game::consume_individual_start());}});
+ check("dashboard filtering uses published status gold turns and capacity",[]{auto packet=room_context();auto room=packet.children["alliance_game"][0];need(alliance_game::individual_filter_token(&room,"status:waiting")==1);need(alliance_game::individual_filter_token(&room,"slots:open")==1);need(alliance_game::individual_filter_token(&room,"gold:150")==1);need(alliance_game::individual_filter_token(&room,"turns:30")==1);need(alliance_game::individual_filter_token(&room,"gold:100")==0);need(alliance_game::individual_filter_token(&room,"Freelands")==-1);need(alliance_game::individual_filter_token(nullptr,"type:standard")==1);room["room_status"]="playing";need(alliance_game::individual_filter_token(&room,"slots:open")==0&&alliance_game::individual_filter_token(&room,"status:playing")==1);});
+ check("room details observation remains explicit and respects permission",[]{auto packet=room_context();auto room=packet.children["alliance_game"][0];actions={1};need(alliance_game::show_individual_details(room,true));actions={1};need(!alliance_game::show_individual_details(room,false));actions={0};need(!alliance_game::show_individual_details(room,true));need(sent.empty());});
+ check("revised room explains why readiness must be reviewed",[]{prepare_room();alliance_game::observe_casual_message(room_context(2));need(alliance_game::individual_room_summary().find("room rules, heroes or players changed")!=std::string::npos);});
+ check("running room exposes disconnected seats without hiding ownership",[]{auto packet=room_context();auto room=packet.children["alliance_game"][0];room["room_status"]="playing";auto& side=room.children["room_side"][0];side["player_id"]="DepartedPlayer";side["connected"]=false;need(alliance_game::individual_listing_review(room).find("DepartedPlayer")!=std::string::npos);need(alliance_game::individual_listing_review(room).find("(disconnected)")!=std::string::npos);});
+ check("individual creation refuses old service and invalid capacity",[]{config scenario;scenario.add_child("side");scenario.add_child("side");actions={0};need(!alliance_game::configure_individual_creation(scenario,true));need(!scenario["individual_room"].to_bool());support_rooms();scenario.add_child("side")["allow_player"]=false;actions={0};need(!alliance_game::configure_individual_creation(scenario,true));});
+ check("individual creation configures full human seats and reviewed common gold",[]{support_rooms();config scenario;scenario["name"]="Map";scenario["turns"]=30;for(int i=0;i<4;++i){auto& side=scenario.add_child("side");side["controller"]="ai";side["current_player"]="old";}actions={0,2,1};need(alliance_game::configure_individual_creation(scenario,true));need(scenario["individual_room"].to_bool());for(const auto& side:scenario.child_range("side"))need(side["controller"].str()=="human"&&side["gold"].to_int()==200&&side["current_player"].str().empty());});
+ check("cancelled publish preserves authored sides and manual mode",[]{support_rooms();config scenario;scenario.add_child("side")["gold"]=80;scenario.add_child("side")["gold"]=120;actions={0,2,0};need(!alliance_game::configure_individual_creation(scenario,true));need(scenario.child_range("side")[0]["gold"].to_int()==80&&!scenario["individual_room"].to_bool());actions={1};need(alliance_game::configure_individual_creation(scenario,true));need(scenario.child_range("side")[1]["gold"].to_int()==120);});
  std::cout<<"PASS all unified casual UI cases\n";return 0;
 }catch(const std::exception& e){std::cerr<<"FAIL "<<e.what()<<'\n';return 1;}}

@@ -4,7 +4,7 @@ import os, shutil, subprocess, tempfile, unittest
 ROOT=Path(__file__).resolve().parents[1]
 class CasualUi(unittest.TestCase):
     def test_actual_selection_readiness_identity_resume_and_start(self):
-        source=(ROOT/'alliance_game/casual_sides.cpp').read_text()
+        source=(ROOT/'alliance_game/individual_rooms.cpp').read_text()+'\n'+(ROOT/'alliance_game/casual_sides.cpp').read_text()
         source='\n'.join(line for line in source.splitlines() if not line.startswith('#include "'))
         fixture=(ROOT/'tests/unified_casual_ui_fixture.cpp.in').read_text().replace('// @PRODUCTION@',source)
         compiler=shutil.which(os.environ.get('CXX','c++'));self.assertIsNotNone(compiler)

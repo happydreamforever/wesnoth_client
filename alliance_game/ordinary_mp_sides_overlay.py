@@ -104,7 +104,7 @@ bool side_engine::ready_for_start()''')
     }''')
         text = text.replace('params.shuffle_sides = shuffle_sides_->get_widget_value();',
                             'params.shuffle_sides = local_mode_ && shuffle_sides_->get_widget_value();')
-    return text.encode()
+    return add_individual_side_hooks(name, text.encode())
 
 
 def add_auth_side_hooks(source):
@@ -112,14 +112,19 @@ def add_auth_side_hooks(source):
     text = source.decode()
     text = once(text, '#include "alliance_game/casual_session.hpp"',
                 '#include "alliance_game/casual_session.hpp"\n#include "alliance_game/casual_sides.hpp"')
+    text = once(text, '#include "alliance_game/casual_sides.hpp"', '#include "alliance_game/casual_sides.hpp"\n#include "alliance_game/individual_rooms.hpp"')
     text = once(text, '    auto admission = alliance_game::prepare_casual_admission();',
-                '    alliance_game::reset_casual_game();\n    auto admission = alliance_game::prepare_casual_admission();')
+                '    alliance_game::reset_casual_game();\n    alliance_game::reset_individual_capability();\n    auto admission = alliance_game::prepare_casual_admission();')
     text = once(text, '\t} // end connect_engine\n\n\tif(dlg_ok) {',
                 '\t} // end connect_engine\n\n    if(dlg_ok && connection) dlg_ok=alliance_game::await_casual_start(*connection);\n\n\tif(dlg_ok) {')
     text = once(text, '\t\tconnection->send_data(config{"leave_game"});\n\t}\n}\n\nvoid mp_manager::enter_wait_mode',
                 '\t\tconnection->send_data(config{"leave_game"});\n\t}\n    alliance_game::reset_casual_game();\n}\n\nvoid mp_manager::enter_wait_mode')
     text = once(text, '\tconnection->send_data(config{"leave_game"});\n}\n\nbool mp_manager::post_scenario_staging',
                 '\tconnection->send_data(config{"leave_game"});\n    alliance_game::reset_casual_game();\n}\n\nbool mp_manager::post_scenario_staging')
+    text = once(text, '\t} else if(gui2::dialogs::mp_create_game::execute(state, connection == nullptr)) {\n\t\tenter_staging_mode(queue_type::type::normal);',
+                '\t} else if(gui2::dialogs::mp_create_game::execute(state, connection == nullptr)) {\n        if(connection && !alliance_game::configure_individual_creation(state.get_starting_point(), state.classification().is_normal_mp_game() && state.mp_settings().saved_game == saved_game_mode::type::no)) {\n            connection->send_data(config{"refresh_lobby"}); return;\n        }\n        if(connection && state.get_starting_point()["individual_room"].to_bool())state.mp_settings().password.clear();\n\t\tenter_staging_mode(queue_type::type::normal);')
+    text = once(text, 'void mp_manager::enter_staging_mode(queue_type::type queue_type, int queue_id)\n{',
+                'void mp_manager::enter_staging_mode(queue_type::type queue_type, int queue_id)\n{\n    if(state.mp_settings().saved_game != saved_game_mode::type::no)\n        state.get_starting_point()["individual_room"]=false; // Saved games retain manual resume.')
     return text.encode()
 
 
@@ -130,4 +135,81 @@ def add_socket_side_hooks(source):
                 '#include "wesnothd_connection.hpp"\n#include "alliance_game/casual_sides.hpp"')
     text = once(text, '\t\t\trecv_queue_.pop();',
                 '\t\t\trecv_queue_.pop();\n            if(service_=="15000" && alliance_socket_lookup(this)) alliance_game::observe_casual_message(result);')
+    return text.encode()
+
+
+def add_individual_side_hooks(name, source):
+    text = source.decode()
+    text = once(text, '#include "alliance_game/casual_sides.hpp"',
+                '#include "alliance_game/casual_sides.hpp"\n#include "alliance_game/individual_rooms.hpp"')
+    if name.endswith('connect_engine.cpp'):
+        text = once(text, '\t\t\t\t"name", params_.name,',
+                    '\t\t\t\t"name", params_.name,\n                "individual_room", level_.child_or_empty("scenario")["individual_room"].to_bool(),')
+        text = once(text, '\t\t\t\t"ignored", prefs::get().get_ignored_delim(),', '\t\t\t\t"ignored", level_.child_or_empty("scenario")["individual_room"].to_bool() ? std::string() : prefs::get().get_ignored_delim(),')
+        text = once(text, '\tmp::send_to_server(config{"start_game"});\n}\n\nvoid connect_engine::start_game_commandline',
+                    '''    config start;
+    auto& command=start.add_child("start_game");
+    if(alliance_game::individual_room_active())command["room_revision"]=alliance_game::individual_room_revision();
+    mp::send_to_server(start);
+}
+
+void connect_engine::start_game_commandline''')
+        text = once(text, 'if(data.has_child("alliance_game") || data.has_child("alliance_selection")) {',
+                    'if(data.has_child("alliance_game") || data.has_child("alliance_selection") || data.has_child("individual_start")) {')
+    elif name.endswith('mp_staging.cpp'):
+        # Do not let the old start button, hotkey or plugin bypass Ready consent.
+        text = once(text, 'register_hotkey(hotkey::HOTKEY_MP_START_GAME, [this](auto&&...) { start_game(); return true; });',
+                    'register_hotkey(hotkey::HOTKEY_MP_START_GAME, [this](auto&&...) { if(!connect_engine_.scenario()["individual_room"].to_bool()) start_game(); return true; });')
+        text = once(text, 'plugins_context_->set_callback("launch", [this](const config&) { set_retval(retval::OK); }, false);',
+                    'plugins_context_->set_callback("launch", [this](const config&) { if(!connect_engine_.scenario()["individual_room"].to_bool())set_retval(retval::OK); }, false);')
+        text = once(text, '\tfind_widget<button>("ok").set_active(connect_engine_.can_start_game());',
+                    '''    auto& start=find_widget<button>("ok");
+    const bool individual=connect_engine_.scenario()["individual_room"].to_bool();
+    start.set_active(!individual && connect_engine_.can_start_game());
+    if(individual) {
+        start.set_label("Automatic start");
+        auto& status=find_widget<label>("status_label");
+        status.set_can_wrap(true); status.set_characters_per_line(24);
+        status.set_label(alliance_game::individual_room_active()
+            ? "Room #" + std::to_string(connect_engine_.params().game_id) + " — waiting for every seat and Ready"
+            : "The server is preparing this individual battle room...");
+        start.set_tooltip("Choose your side's hero, review the room settings and set Ready. The full room starts automatically.");
+    }''')
+        # Read numeric room identity from the server snapshot, not mp settings.
+        text = text.replace('"Room #" + std::to_string(connect_engine_.params().game_id) + " — waiting for every seat and Ready"',
+                            'std::string("Waiting for every seat and Ready. Open your hero to review room settings.")')
+        # Configured seats remain public human slots. Owner cannot assign a
+        # second side, turn a slot into AI or silently change gold/team settings.
+        text = text.replace('controller_selection.set_active(controller_names.size() > 1);',
+                            'controller_selection.set_active(!connect_engine_.scenario()["individual_room"].to_bool() && controller_names.size() > 1);')
+        text = text.replace('team_selection.set_active(!lock_team);','team_selection.set_active(!lock_team && !connect_engine_.scenario()["individual_room"].to_bool());')
+        text = text.replace('slider_gold.set_active(!lock_gold);','slider_gold.set_active(!lock_gold && !connect_engine_.scenario()["individual_room"].to_bool());')
+        text = text.replace('slider_income.set_active(!lock_income);','slider_income.set_active(!lock_income && !connect_engine_.scenario()["individual_room"].to_bool());')
+        text = once(text, 'team_selection.set_active(!saved_game);',
+                    'team_selection.set_active(!saved_game && !connect_engine_.scenario()["individual_room"].to_bool());')
+        text = once(text, '\tslider_setup_helper(slider_gold, side->gold());',
+                    '\tslider_setup_helper(slider_gold, side->gold());\n    if(connect_engine_.scenario()["individual_room"].to_bool())slider_gold.set_active(false);')
+        text = once(text, '\tslider_setup_helper(slider_income, side->income());',
+                    '\tslider_setup_helper(slider_income, side->income());\n    if(connect_engine_.scenario()["individual_room"].to_bool())slider_income.set_active(false);')
+        old='''\tif(!state_changed_ && (!network_connection_ || !network_connection_->receive_data(data))) {
+\t\treturn;
+\t}'''
+        new='''    if(!state_changed_ && (!network_connection_ || !network_connection_->receive_data(data))) {
+        if(network_connection_ && connect_engine_.can_start_game() && alliance_game::consume_individual_start())
+            start_game();
+        return;
+    }'''
+        text = once(text,old,new)
+        text = once(text, '\tstate_changed_ = false;\n}\n\nvoid mp_staging::post_show()',
+                    '''    state_changed_ = false;
+    if(!quit_signal_received && network_connection_ && connect_engine_.can_start_game() && alliance_game::consume_individual_start())
+        start_game();
+}
+
+void mp_staging::post_show()''')
+        text = once(text, '\tif(get_retval() == retval::OK) {\n\t\tconnect_engine_.start_game();',
+                    '''    if(get_retval() == retval::OK && connect_engine_.scenario()["individual_room"].to_bool()
+            && !alliance_game::individual_start_authorized())set_retval(retval::CANCEL);
+    if(get_retval() == retval::OK) {
+        connect_engine_.start_game();''')
     return text.encode()

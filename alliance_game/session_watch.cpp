@@ -72,6 +72,7 @@ struct Probe final {
 }
 }
 
+bool account_session_interaction_active() noexcept { return foreground_requests != 0 || pending_reauthentication.has_value(); }
 AccountNetworkActivity::AccountNetworkActivity() noexcept { ++foreground_requests; }
 AccountNetworkActivity::~AccountNetworkActivity() { --foreground_requests; }
 void request_session_reauthentication(const std::string& account_id,
@@ -96,6 +97,7 @@ struct SessionWatch::Impl {
         // already open game or dialog. Exit instead of allowing that fallback.
         if(account_id.empty() || generation.empty()) finish_authentication_task();
         try {
+            AccountNetworkActivity authentication;
             if(!ensure_player_session(account_id, generation,
                 "The connection to your Windows game account was lost. You have been signed out. "
                 "Check the local network and Windows services, then log in again to continue.")) {

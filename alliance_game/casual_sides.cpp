@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "alliance_game/casual_sides.hpp"
+#include "alliance_game/individual_rooms.hpp"
 #include "alliance_game/casual_session.hpp"
 #include "alliance_game/account_ui.hpp"
 #include "alliance_game/hero_catalog.hpp"
@@ -40,7 +41,7 @@ struct ClearSecret { std::string& value; ~ClearSecret(){ clear_casual_secret(val
 struct ClearTicketField { config& value; ~ClearTicketField(){ value["ticket"]=""; } };
 }
 
-void reset_casual_game() noexcept { game_id.clear(); selections.clear(); resumed=false; }
+void reset_casual_game() noexcept { game_id.clear(); selections.clear(); resumed=false; reset_individual_room(); }
 bool casual_game_active() noexcept { return !game_id.empty(); }
 bool casual_game_resumed() noexcept { return resumed; }
 
@@ -51,6 +52,7 @@ void observe_casual_message(const config& data) {
         if(id!=game_id) { reset_casual_game(); game_id=id; }
         resumed=context["resume"].to_bool();
     }
+    observe_individual_room(data);
     for(const auto& row:data.child_range("alliance_selection")) {
         if(game_id.empty() || row["game_id"].str()!=game_id) continue;
         const int side=row["side"].to_int();
@@ -68,6 +70,7 @@ void observe_casual_message(const config& data) {
 
 bool choose_casual_side(int side) {
     if(!casual_game_active()) { message("The server is preparing this game. Wait a moment, then choose your hero."); return false; }
+    IndividualRoomInteraction interaction;
     auto session=player_session();
     if(!session) return false;
     const auto original_game=game_id;
@@ -77,11 +80,14 @@ bool choose_casual_side(int side) {
     const bool selected=found!=selections.end()&&found->second.account_id==original_account;
     std::vector<std::string> rows{"Back", resumed ? (selected && found->second.ready ? "Keep saved hero and set myself not ready" : "Keep saved hero and set myself ready") : "Choose hero and form"};
     if(selected&&!resumed) rows.push_back(found->second.ready ? "Set myself not ready" : "Set myself ready");
+    const int details_index=individual_room_active()?static_cast<int>(rows.size()):-1;
+    if(details_index>=0) rows.push_back("View room settings");
     gui2::dialogs::simple_item_selector dialog("My multiplayer side",
         "Choose one of your heroes, then set yourself Ready. Casual multiplayer gives no permanent experience or rating.",rows,false,false);
     dialog.set_allow_plugin_skip(false); dialog.set_selected_index(0);
     dialog.set_ok_label("Choose"); dialog.set_cancel_label("Back");
     if(!dialog.show()||dialog.selected_index()==0) return false;
+    if(details_index>=0&&dialog.selected_index()==details_index) {show_individual_settings();return false;}
     const int action=resumed && dialog.selected_index()==1 ? 2 : dialog.selected_index();
     if(action==1) {
         std::string hero,form;
@@ -93,6 +99,7 @@ bool choose_casual_side(int side) {
         auto current=player_session();
         if(!current||current->account.account_id!=original_account||current->account.database_generation!=original_generation||game_id!=original_game) return false;
         selections.erase(side);
+        invalidate_individual_start();
         config command;
         auto& selection=command.add_child("alliance_hero"); selection["ticket"]=*ticket;
         ClearTicketField command_guard{selection};
@@ -105,8 +112,19 @@ bool choose_casual_side(int side) {
     auto choice=selections.find(side);
     if(action!=2||!current||current->account.account_id!=original_account||current->account.database_generation!=original_generation||game_id!=original_game
             ||choice==selections.end()||choice->second.account_id!=original_account) return false;
+    const auto reviewed_revision=individual_room_revision();
+    const bool wants_ready=!choice->second.ready;
+    if(wants_ready&&!confirm_individual_ready())return false;
+    // The confirmation can pump events or require authentication. Never reuse
+    // the old iterator or publish consent for a changed actor/room/selection.
+    current=player_session(); choice=selections.find(side);
+    if(!current||current->account.account_id!=original_account||current->account.database_generation!=original_generation
+            ||game_id!=original_game||choice==selections.end()||choice->second.account_id!=original_account
+            ||individual_room_revision()!=reviewed_revision||choice->second.ready==wants_ready)return false;
+    invalidate_individual_start();
     config command;
     auto& ready=command.add_child("alliance_ready"); ready["side"]=side;
+    if(individual_room_active())ready["room_revision"]=reviewed_revision;
     ready["ready"]=!choice->second.ready;
     choice->second.ready=false; // A pending acknowledgement cannot authorize Start.
     mp::send_to_server(command);

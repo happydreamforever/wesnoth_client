@@ -24,6 +24,10 @@ public:
     AccountNetworkActivity& operator=(const AccountNetworkActivity&) = delete;
 };
 
+// GUI transitions must wait until foreground authentication/request work and
+// any latched recovery have completed. This performs no I/O.
+bool account_session_interaction_active() noexcept;
+
 // Own one for the interactive engine lifetime, outside individual dialogs.
 // The worker only reads the saved LAN account endpoint. WAN is never probed.
 class SessionWatch final : public events::pump_monitor {
