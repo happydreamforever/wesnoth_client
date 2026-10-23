@@ -84,6 +84,17 @@ class AccountBuildTests(unittest.TestCase):
         self.assertIn(b'alliance_game::show_account_dialog();', result)
         self.assertEqual(original.read_bytes(), before)
         self.assertNotIn(b'if(manage_addons())', result)
+    def test_command_overlay_rejects_changed_engine_and_preserves_pinned_source(self):
+        source = ROOT / 'engine/src/synced_commands.cpp'
+        before = source.read_bytes()
+        overlay = module('captain_command_overlay_test', ROOT / 'alliance_game/engine_overlay.py')
+        result = A.synced_commands_overlay(ROOT)
+        self.assertEqual(source.read_bytes(), before)
+        self.assertIn(b'if(child["name"] == "alliance_captain_v1")', result)
+        with self.assertRaises(ValueError):
+            overlay.generate_synced_commands_overlay(before + b'\n')
+        with self.assertRaises(ValueError):
+            overlay.generate_synced_commands_overlay(result)
     def test_only_owned_overlays_replace_the_exact_original_objects(self):
         names = A.source_names(ROOT)
         objects = {name: {'path': 'build/android-engine/original/' + name + '.o'} for name in names}
@@ -92,6 +103,7 @@ class AccountBuildTests(unittest.TestCase):
              patch.object(A, 'main_overlay', return_value=b'owned main'), \
              patch.object(A, 'launcher_overlay', return_value=b'owned launcher'), \
              patch.object(A, 'campaign_overlay', return_value=b'owned campaign'), \
+             patch.object(A, 'synced_commands_overlay', return_value=b'owned commands'), \
              patch.object(A, 'shared_connection_overlay', return_value={
                  'wesnothd_connection.cpp': b'owned shared connection',
                  'wesnothd_connection.hpp': b'owned shared connection header'}):
@@ -100,7 +112,7 @@ class AccountBuildTests(unittest.TestCase):
         self.assertEqual(len(linked), 568 - len(A.REPLACED_SOURCES))
         self.assertEqual(A.REPLACED_SOURCES, frozenset((
             "gui/dialogs/title_screen.cpp", "wesnoth.cpp", "game_launcher.cpp",
-            "game_initialization/playcampaign.cpp", "wesnothd_connection.cpp")))
+            "game_initialization/playcampaign.cpp", "wesnothd_connection.cpp", "synced_commands.cpp")))
         for name, record in objects.items():
             line = ' ' + A.cmake_literal(self.repo / record['path'])
             self.assertEqual(line in linked, name not in A.REPLACED_SOURCES, name)
@@ -108,6 +120,7 @@ class AccountBuildTests(unittest.TestCase):
         self.assertEqual(generated['wesnoth.cpp'], b'owned main')
         self.assertEqual(generated['game_launcher.cpp'], b'owned launcher')
         self.assertEqual(generated['playcampaign.cpp'], b'owned campaign')
+        self.assertEqual(generated['synced_commands.cpp'], b'owned commands')
         self.assertEqual(generated['wesnothd_connection.cpp'], b'owned shared connection')
         self.assertEqual(generated['wesnothd_connection.hpp'], b'owned shared connection header')
         self.assertEqual(generated['config.h'], b'fixed-config\n')

@@ -2,7 +2,7 @@
 """Build the account-enabled game in separate owned stages, entirely offline.
 
 Completed engine sources, objects, prefixes, APK and OBB are read-only. Exactly
-565 verified base objects are relinked with owned title/main-loop/launcher overlays and
+562 verified base objects are relinked with owned title/main-loop/launcher overlays and
 account/practice code; no completed dependency is rebuilt or reconfigured.
 """
 import argparse
@@ -32,9 +32,9 @@ ENGINE_KIND = 'wesnoth-android-account-engine'
 LOCK = '.wesnoth-account-game-operation.json'
 MARKER = '.wesnoth-account-game.json'
 ENGINE_MARKER = '.wesnoth-account-engine.json'
-VERSION_CODE = 1192614
-PREVIOUS_VERSION_CODES = frozenset((1192608, 1192609, 1192610, 1192611, 1192612, 1192613))
-UPDATE_JOURNAL = '.wesnoth-account-game-update-1192614.json'
+VERSION_CODE = 1192615
+PREVIOUS_VERSION_CODES = frozenset((1192608, 1192609, 1192610, 1192611, 1192612, 1192613, 1192614))
+UPDATE_JOURNAL = '.wesnoth-account-game-update-1192615.json'
 UPDATE_KIND = 'wesnoth-android-account-game-update'
 UPDATE_STAGES = ('android-account-engine', 'android-account-game')
 PACKAGE = G.PACKAGE
@@ -49,6 +49,14 @@ NEW_INPUTS = ('tools/build_android_account_game.py', 'tools/native-account-game/
               'alliance_game/practice_plan.cpp', 'alliance_game/practice_plan.hpp',
               'alliance_game/practice_scenario.cpp', 'alliance_game/practice_scenario.hpp',
               'alliance_native/transport.cpp', 'alliance_native/transport.hpp',
+              'alliance_native/progression_protocol.hpp', 'alliance_game/progression_ui.inc', 'alliance_game/team_extension_ui.inc',
+              *(f'alliance_game/progression_{name}.{suffix}' for name in ('plan', 'scenario', 'result') for suffix in ('hpp','cpp')),
+              'alliance_game/progression_launch.cpp',
+              *(f'alliance_game/shared_{name}.{suffix}' for name in ('launch','scenario','result') for suffix in ('hpp','cpp')),
+              'alliance_game/shared_connection_overlay.py', 'alliance_game/shared_connection_state.hpp',
+              'alliance_game/replay_launch.hpp', 'alliance_game/replay_launch.cpp',
+              'alliance_game/companion.hpp', 'alliance_game/companion.cpp',
+              'alliance_game/shared_controls.hpp', 'alliance_game/shared_controls.cpp',
               'alliance_native/account_protocol.cpp', 'alliance_native/account_protocol.hpp',
               'alliance_native/account_client.cpp', 'alliance_native/account_client.hpp',
               *(str('tools/native-account-game/' + name) for name in TEMPLATES))
@@ -56,7 +64,10 @@ safe, regular, fingerprint, write_new = G.safe, G.regular, G.fingerprint, G.writ
 TITLE_SOURCE = 'gui/dialogs/title_screen.cpp'
 MAIN_SOURCE = 'wesnoth.cpp'
 LAUNCHER_SOURCE = 'game_launcher.cpp'
-REPLACED_SOURCES = frozenset((TITLE_SOURCE, MAIN_SOURCE, LAUNCHER_SOURCE))
+CAMPAIGN_SOURCE = 'game_initialization/playcampaign.cpp'
+CONNECTION_SOURCE = 'wesnothd_connection.cpp'
+SYNCED_COMMANDS_SOURCE = 'synced_commands.cpp'
+REPLACED_SOURCES = frozenset((TITLE_SOURCE, MAIN_SOURCE, LAUNCHER_SOURCE, CAMPAIGN_SOURCE, CONNECTION_SOURCE, SYNCED_COMMANDS_SOURCE))
 
 
 def call(function, *args, **kwargs):
@@ -107,7 +118,7 @@ def base_objects(repo, engine_receipt):
         objects[name] = {'path': path.relative_to(repo).as_posix(), **fingerprint(path)}
     if set(objects) != set(expected):
         raise BuildError('Original engine objects are incomplete; preserve the stage and send the log.')
-    # Bind all three replaced original objects too; they remain untouched and are not linked.
+    # Bind all replaced original objects too; they remain untouched and are not linked.
     return {'objects': objects, 'configuration': records,
             'configuration_receipt': fingerprint(root / 'configured.json')}
 
@@ -152,6 +163,29 @@ def launcher_overlay(repo):
     return module.generate_launcher_overlay(regular(repo / 'engine/src' / LAUNCHER_SOURCE, 'Pinned launcher source').read_bytes())
 
 
+def campaign_overlay(repo):
+    spec = importlib.util.spec_from_file_location('account_campaign_overlay', repo / 'alliance_game/engine_overlay.py')
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.generate_campaign_overlay(regular(repo / 'engine/src' / CAMPAIGN_SOURCE, 'Pinned campaign source').read_bytes())
+
+
+def shared_connection_overlay(repo):
+    spec = importlib.util.spec_from_file_location('account_shared_connection_overlay', repo / 'alliance_game/shared_connection_overlay.py')
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return {name: transform(regular(repo / 'engine/src' / name, 'Pinned connection source').read_text(encoding='utf-8')).encode('utf-8')
+            for name, transform in (('wesnothd_connection.cpp', module.transform_source),
+                                    ('wesnothd_connection.hpp', module.transform_header))}
+
+
+def synced_commands_overlay(repo):
+    spec = importlib.util.spec_from_file_location('account_synced_commands_overlay', repo / 'alliance_game/engine_overlay.py')
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.generate_synced_commands_overlay(regular(repo / 'engine/src' / SYNCED_COMMANDS_SOURCE, 'Pinned command source').read_bytes())
+
+
 def cmake_literal(path):
     text = str(path).replace('\\', '/')
     if any(value in text for value in (';', '\n', '\r', '"', '$', '[', ']')):
@@ -164,10 +198,12 @@ def engine_generated(repo, prior):
     lines = ['set(account_base_objects']
     lines.extend(' ' + cmake_literal(repo / record['path']) for name, record in sorted(objects.items()) if name not in REPLACED_SOURCES)
     lines.append(')\n')
-    return {'objects.cmake': '\n'.join(lines).encode('utf-8'),
+    return {**shared_connection_overlay(repo), 'objects.cmake': '\n'.join(lines).encode('utf-8'),
             'title_screen.cpp': title_overlay(repo),
             'wesnoth.cpp': main_overlay(repo),
             'game_launcher.cpp': launcher_overlay(repo),
+            'playcampaign.cpp': campaign_overlay(repo),
+            'synced_commands.cpp': synced_commands_overlay(repo),
             'config.h': regular(repo / 'build/android-engine/build/config.h', 'Original config header').read_bytes()}
 
 
@@ -425,7 +461,7 @@ def previous_version(root, marker, receipt):
     apk = validation.get('apk') if isinstance(validation, dict) else None
     version = apk.get('version_code') if isinstance(apk, dict) else None
     if type(version) is not int or version not in PREVIOUS_VERSION_CODES:
-        raise BuildError('Expected a completed 1192608, 1192609, 1192610, 1192611, 1192612 or 1192613 account APK; nothing was renamed.')
+        raise BuildError('Expected a completed 1192608, 1192609, 1192610, 1192611, 1192612 1192613 or 1192614 account APK; nothing was renamed.')
     if 'app/build.gradle' not in marker['files']:
         raise BuildError('The previous account version is not bound to its owned Gradle input.')
     data = call(N.ninja_read, root / 'app/build.gradle', 64 * 1024)
@@ -459,7 +495,7 @@ def completed_previous_stages(repo, profile, current_inputs):
     version = previous_version(game_root, marker, receipt)
     # A pending later transaction can leave older completed source directories
     # in place before its first move. Do not start another upgrade on top of it
-    # or reinterpret its immutable journal as a 1192614 update.
+    # or reinterpret its immutable journal as a 1192615 update.
     for later in PREVIOUS_VERSION_CODES:
         if later > version and safe(repo / 'build' / ('.wesnoth-account-game-update-' + str(later) + '.json')).exists():
             raise BuildError('A later account update journal exists beside older completed stages. Preserve it and send the log.')
@@ -488,7 +524,7 @@ def checked_update_journal(record, current_inputs):
         entry = record['stages'][name]
         if not isinstance(entry, dict) or set(entry) != {'backup', 'snapshot'}:
             raise BuildError('Invalid account update stage record.')
-        match = re.fullmatch(re.escape(name) + r'-before-local-training-(\d{8}T\d{6}Z-[0-9a-f]{32})', str(entry['backup']))
+        match = re.fullmatch(re.escape(name) + r'-before-team-progression-(\d{8}T\d{6}Z-[0-9a-f]{32})', str(entry['backup']))
         if not match:
             raise BuildError('Invalid account backup location; no paths were changed.')
         suffixes.add(match.group(1))
@@ -552,7 +588,7 @@ def prepare_update(repo):
             token = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ-') + uuid.uuid4().hex
             record = {'schema_version': 1, 'kind': UPDATE_KIND, 'target_version': VERSION_CODE,
                       'target_inputs': inputs, 'stages': {name: {
-                          'backup': name + '-before-local-training-' + token, 'snapshot': snapshots[name]}
+                          'backup': name + '-before-team-progression-' + token, 'snapshot': snapshots[name]}
                           for name in UPDATE_STAGES}}
             checked_update_journal(record, inputs)
             write_new(journal, B.json_bytes(record))
@@ -657,7 +693,7 @@ def main(argv=None):
     parser.add_argument('--gradle-user-home', type=Path, default=Path.home() / '.gradle')
     parser.add_argument('--jobs', type=int, default=2)
     parser.add_argument('--verify', '--verify-only', action='store_true')
-    parser.add_argument('--prepare-update', action='store_true', help='Preserve completed 1192608, 1192609, 1192610, 1192611, 1192612 or 1192613 stages before the 1192614 local-training update.')
+    parser.add_argument('--prepare-update', action='store_true', help='Preserve completed 1192608, 1192609, 1192610, 1192611, 1192612 1192613 or 1192614 stages before the 1192615 team-progression update.')
     args = parser.parse_args(argv)
     try:
         for name, value in vars(args).items():

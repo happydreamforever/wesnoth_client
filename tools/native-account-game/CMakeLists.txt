@@ -23,6 +23,19 @@ add_library(main SHARED ${account_base_objects}
  "${ACCOUNT_STAGE}/title_screen.cpp"
  "${ACCOUNT_STAGE}/wesnoth.cpp"
  "${ACCOUNT_STAGE}/game_launcher.cpp"
+ "${ACCOUNT_STAGE}/playcampaign.cpp"
+ "${ACCOUNT_STAGE}/wesnothd_connection.cpp"
+ "${ACCOUNT_STAGE}/synced_commands.cpp"
+ "${REPO}/alliance_game/shared_launch.cpp"
+ "${REPO}/alliance_game/shared_scenario.cpp"
+ "${REPO}/alliance_game/shared_result.cpp"
+ "${REPO}/alliance_game/replay_launch.cpp"
+ "${REPO}/alliance_game/companion.cpp"
+ "${REPO}/alliance_game/shared_controls.cpp"
+ "${REPO}/alliance_game/progression_plan.cpp"
+ "${REPO}/alliance_game/progression_scenario.cpp"
+ "${REPO}/alliance_game/progression_result.cpp"
+ "${REPO}/alliance_game/progression_launch.cpp"
  "${REPO}/alliance_game/battle_launch.cpp"
  "${REPO}/alliance_game/practice_plan.cpp"
  "${REPO}/alliance_game/practice_scenario.cpp"
@@ -30,7 +43,7 @@ add_library(main SHARED ${account_base_objects}
  "${REPO}/alliance_native/account_protocol.cpp"
  "${REPO}/alliance_native/account_client.cpp"
  "${REPO}/alliance_native/transport.cpp")
-target_include_directories(main PRIVATE "${ENGINE}/src" "${CMAKE_BINARY_DIR}" "${REPO}")
+target_include_directories(main PRIVATE "${ACCOUNT_STAGE}" "${ENGINE}/src" "${CMAKE_BINARY_DIR}" "${REPO}")
 # Upstream requires assertions even for Release builds.
 target_compile_options(main PRIVATE -O2 -UNDEBUG -fexceptions -pthread)
 target_compile_definitions(main PRIVATE BOOST_ERROR_CODE_HEADER_ONLY HAVE_CONFIG_H HAS_RELATIVE_LOCALEDIR=1 BOOST_ALL_NO_LIB BOOST_ALL_NO_EMBEDDED_GDB_SCRIPTS BOOST_CHARCONV_NO_QUADMATH U_STATIC_IMPLEMENTATION)
