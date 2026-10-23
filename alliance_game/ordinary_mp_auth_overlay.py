@@ -48,3 +48,14 @@ def generate_multiplayer_auth_overlay(source: bytes) -> bytes:
             throw wesnothd_error("The trusted server returned an unsupported account admission response.");
 ''' + text[end:]
     return text.encode()
+
+
+def generate_lobby_overlay(source: bytes) -> bytes:
+    if sha256(source).hexdigest() != "21f59dd32fede0e66c225b2e210407c740e0ba530278e1eb6a07bff3912994c5":
+        raise ValueError("Pinned multiplayer lobby source differs; original preserved.")
+    text = source.decode()
+    text = once(text, 'return show_prompt(_("Do you really want to log out?"));',
+                'return true; // Back leaves the lobby, retaining the startup account session.')
+    text = once(text, 'void mp_lobby::pre_show()\n{\n',
+                'void mp_lobby::pre_show()\n{\n\tfind_widget<button>("quit").set_label("Back");\n')
+    return text.encode()

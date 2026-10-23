@@ -74,4 +74,32 @@ def generate_title_overlay(source: bytes) -> bytes:
     set_retval(MP_CONNECT);
 }
 ''' + result[end:]
-    return result
+    logout = b'\t// A sanity check, exit immediately if the .cfg file didn\'t have a "quit" button.\n'
+    addition = b'''    // Share the existing exit row, preserving its height and all other menus.
+    auto& exit_button = find_widget<button>("quit");
+    auto* exit_parent = dynamic_cast<grid*>(exit_button.parent());
+    if(!exit_parent) throw std::runtime_error("The title exit row is unavailable.");
+    auto controls = std::make_unique<grid>(1, 2);
+    controls->set_id("account_exit_controls");
+    auto* row = controls.get();
+    auto original_exit = exit_parent->swap_child("quit", std::move(controls), false);
+    if(original_exit.get() != &exit_button) throw std::runtime_error("The title exit row changed.");
+    config logout_config;
+    logout_config["id"] = "account_logout";
+    logout_config["definition"] = "large";
+    logout_config["label"] = "Log out";
+    auto logout_button = std::make_unique<button>(implementation::builder_button(logout_config));
+    row->set_child(std::move(logout_button), 0, 0,
+        grid::HORIZONTAL_GROW_SEND_TO_CLIENT | grid::VERTICAL_ALIGN_CENTER | grid::BORDER_RIGHT, 4);
+    row->set_child(std::move(original_exit), 0, 1,
+        grid::HORIZONTAL_GROW_SEND_TO_CLIENT | grid::VERTICAL_ALIGN_CENTER, 0);
+    row->set_column_grow_factor(0, 1);
+    row->set_column_grow_factor(1, 1);
+    register_button("account_logout", hotkey::HOTKEY_NULL, [this]() {
+        hide();
+        alliance_game::logout_player();
+        set_retval(RELOAD_UI);
+    });
+'''
+    if result.count(logout) != 1: raise ValueError("Pinned title logout boundary differs.")
+    return result.replace(logout, addition + logout)

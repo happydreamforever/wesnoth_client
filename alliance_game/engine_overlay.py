@@ -33,7 +33,15 @@ def generate_engine_overlay(source: bytes) -> bytes:
     if result.count(anchor) != 1:
         raise ValueError("Pinned initialized companion dispatch differs.")
     result = result.replace(b'#include "alliance_game/shared_launch.hpp"\n', b'#include "alliance_game/shared_launch.hpp"\n#include "alliance_game/companion.hpp"\n')
-    return result.replace(anchor, b'\t\tif(alliance_game::companion_requested()) return alliance_game::run_companion();\n'+anchor)
+    result = result.replace(anchor, b'\t\tif(alliance_game::companion_requested()) return alliance_game::run_companion();\n'+anchor)
+    result = b'#include "alliance_game/session_watch.hpp"\n#include "alliance_game/android_lifecycle.hpp"\n' + result
+    exit_anchor = b'static void safe_exit(int res)\n{\n'
+    if result.count(exit_anchor) != 1: raise ValueError('Pinned Android task exit differs.')
+    result = result.replace(exit_anchor, exit_anchor + b'\talliance_game::finish_game_task();\n')
+    loop = b'\twhile(true) {\n\t\tif(!game->has_load_data()) {'
+    if result.count(loop) != 1: raise ValueError('Pinned session monitor lifetime differs.')
+    return result.replace(loop, b'\tstd::unique_ptr<alliance_game::SessionWatch> account_connection_watch;\n\tif(!alliance_game::companion_requested()) account_connection_watch = std::make_unique<alliance_game::SessionWatch>();\n' + loop)
+
 
 
 def generate_launcher_overlay(source: bytes) -> bytes:
