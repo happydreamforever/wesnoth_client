@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "alliance_game/practice_scenario.hpp"
+#include "alliance_game/hero_catalog.hpp"
 #include <algorithm>
 #include <stdexcept>
 
@@ -95,13 +96,14 @@ config make_practice_scenario(const PracticePlan& plan, const config& original, 
         leader["generate_name"] = false;
         leader["gender"] = "male";
         leader["experience"] = 0;
+        apply_hero_level(leader, seat.hero_id, seat.form_id, seat.hero_level);
         leader["max_experience"] = 1000000000;
         leader["advances_to"] = "null";
         // unit::write serializes an empty advances_to vector as an empty
         // string; the stock reader then retains the type's default advances.
         // Saved modifications are reapplied on every construction, so remove
         // the permitted branches persistently as well as on this first load.
-        auto& lock = leader.add_child("modifications").add_child("object");
+        auto& lock = leader.mandatory_child("modifications").add_child("object");
         lock["id"] = "alliance_practice_leader_lock";
         lock["duration"] = "forever";
         lock["silent"] = true;

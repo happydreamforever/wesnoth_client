@@ -1,0 +1,577 @@
+{
+  "format": "explicit-story-heroes-v1",
+  "campaigns": {
+    "Dead_Water": [
+      {
+        "unit_id": "Kai Krellis",
+        "hero_id": "kai_krellis"
+      },
+      {
+        "unit_id": "Cylanna",
+        "hero_id": "cylanna"
+      },
+      {
+        "unit_id": "Gwabbo",
+        "hero_id": "gwabbo"
+      },
+      {
+        "unit_id": "Teeloa",
+        "hero_id": "teeloa"
+      },
+      {
+        "unit_id": "Keshan",
+        "hero_id": "keshan"
+      },
+      {
+        "unit_id": "Caladon",
+        "hero_id": "caladon"
+      }
+    ],
+    "Descent_Into_Darkness": [
+      {
+        "unit_id": "Malin Keshar",
+        "hero_id": "malin_keshar"
+      },
+      {
+        "unit_id": "Mal Keshar",
+        "hero_id": "malin_keshar"
+      },
+      {
+        "unit_id": "Darken Volk",
+        "hero_id": "darken_volk"
+      }
+    ],
+    "Dusk_of_Dawn": [
+      {
+        "unit_id": "OL",
+        "hero_id": "ougl"
+      },
+      {
+        "unit_id": "AU",
+        "hero_id": "arru"
+      },
+      {
+        "unit_id": "GO",
+        "hero_id": "gao"
+      },
+      {
+        "unit_id": "NM",
+        "hero_id": "nuum"
+      },
+      {
+        "unit_id": "UG",
+        "hero_id": "ullg"
+      },
+      {
+        "unit_id": "SK",
+        "hero_id": "spark"
+      },
+      {
+        "unit_id": "RE",
+        "hero_id": "refumee"
+      }
+    ],
+    "Eastern_Invasion": [
+      {
+        "unit_id": "Gweddry",
+        "hero_id": "gweddry"
+      },
+      {
+        "unit_id": "Dacyn",
+        "hero_id": "dacyn"
+      },
+      {
+        "unit_id": "Owaec",
+        "hero_id": "owaec"
+      },
+      {
+        "unit_id": "Konrad",
+        "hero_id": "konrad_ii"
+      },
+      {
+        "unit_id": "Terraent",
+        "hero_id": "terraent"
+      },
+      {
+        "unit_id": "Grug",
+        "hero_id": "grug"
+      },
+      {
+        "unit_id": "Dolburras",
+        "hero_id": "dolburras"
+      }
+    ],
+    "Heir_To_The_Throne": [
+      {
+        "unit_id": "Konrad",
+        "hero_id": "konrad"
+      },
+      {
+        "unit_id": "Delfador",
+        "hero_id": "delfador"
+      },
+      {
+        "unit_id": "Lisar",
+        "hero_id": "lisar"
+      },
+      {
+        "unit_id": "Kalenz",
+        "hero_id": "kalenz"
+      },
+      {
+        "unit_id": "Chantal",
+        "hero_id": "chantal"
+      },
+      {
+        "unit_id": "Ethiliel",
+        "hero_id": "ethiliel"
+      },
+      {
+        "unit_id": "Kaylan",
+        "hero_id": "kaylan"
+      },
+      {
+        "unit_id": "Maddock",
+        "hero_id": "maddock"
+      },
+      {
+        "unit_id": "Reglok",
+        "hero_id": "reglok"
+      },
+      {
+        "unit_id": "Galdrad",
+        "hero_id": "galdrad"
+      },
+      {
+        "unit_id": "Isolde",
+        "hero_id": "isolde"
+      },
+      {
+        "unit_id": "Mirya",
+        "hero_id": "mirya"
+      },
+      {
+        "unit_id": "Warven",
+        "hero_id": "warven"
+      },
+      {
+        "unit_id": "Ulfdain",
+        "hero_id": "ulfdain"
+      },
+      {
+        "unit_id": "Harper",
+        "hero_id": "harper"
+      },
+      {
+        "unit_id": "Moremirmu",
+        "hero_id": "moremirmu"
+      },
+      {
+        "unit_id": "Haldiel",
+        "hero_id": "haldiel"
+      }
+    ],
+    "Heir_To_The_Throne_Classic": [
+      {
+        "unit_id": "Konrad",
+        "hero_id": "konrad"
+      },
+      {
+        "unit_id": "Delfador",
+        "hero_id": "delfador"
+      },
+      {
+        "unit_id": "Li'sar",
+        "hero_id": "lisar"
+      },
+      {
+        "unit_id": "Kalenz",
+        "hero_id": "kalenz"
+      },
+      {
+        "unit_id": "Moremirmu",
+        "hero_id": "moremirmu"
+      },
+      {
+        "unit_id": "Haldiel",
+        "hero_id": "haldiel"
+      },
+      {
+        "unit_id": "Chantal",
+        "hero_id": "chantal"
+      }
+    ],
+    "Legend_of_Wesmere": [
+      {
+        "unit_id": "Kalenz",
+        "hero_id": "kalenz"
+      },
+      {
+        "unit_id": "Landar",
+        "hero_id": "landar"
+      },
+      {
+        "unit_id": "Cleodil",
+        "hero_id": "cleodil"
+      },
+      {
+        "unit_id": "Olurf",
+        "hero_id": "olurf"
+      },
+      {
+        "unit_id": "Huraldur",
+        "hero_id": "huraldur"
+      },
+      {
+        "unit_id": "Laril",
+        "hero_id": "laril"
+      },
+      {
+        "unit_id": "Tameril-Isimeril",
+        "hero_id": "tameril_isimeril"
+      },
+      {
+        "unit_id": "Galtrid",
+        "hero_id": "galtrid"
+      },
+      {
+        "unit_id": "Eradion",
+        "hero_id": "eradion"
+      },
+      {
+        "unit_id": "El_Isomithir",
+        "hero_id": "el_isomithir"
+      },
+      {
+        "unit_id": "Uradredia",
+        "hero_id": "uradredia"
+      },
+      {
+        "unit_id": "Anduilas",
+        "hero_id": "anduilas"
+      },
+      {
+        "unit_id": "Arkildur",
+        "hero_id": "arkildur"
+      }
+    ],
+    "Liberty": [
+      {
+        "unit_id": "Baldras",
+        "hero_id": "baldras"
+      },
+      {
+        "unit_id": "Harper",
+        "hero_id": "harper"
+      },
+      {
+        "unit_id": "Relana",
+        "hero_id": "relana"
+      },
+      {
+        "unit_id": "Helicrom",
+        "hero_id": "helicrom"
+      }
+    ],
+    "Northern_Rebirth": [
+      {
+        "unit_id": "Tallin",
+        "hero_id": "tallin"
+      },
+      {
+        "unit_id": "Hamel",
+        "hero_id": "hamel"
+      },
+      {
+        "unit_id": "Sister Thera",
+        "hero_id": "sister_thera"
+      },
+      {
+        "unit_id": "Father Morvin",
+        "hero_id": "father_morvin"
+      },
+      {
+        "unit_id": "Eryssa",
+        "hero_id": "eryssa"
+      },
+      {
+        "unit_id": "Ro'Arthian",
+        "hero_id": "ro_arthian"
+      },
+      {
+        "unit_id": "Ro'Sothian",
+        "hero_id": "ro_sothian"
+      },
+      {
+        "unit_id": "Abhai",
+        "hero_id": "abhai"
+      }
+    ],
+    "Of_Pearls_and_Pirates": [
+      {
+        "unit_id": "Thea",
+        "hero_id": "thea"
+      },
+      {
+        "unit_id": "Rael",
+        "hero_id": "rael"
+      },
+      {
+        "unit_id": "Elyn",
+        "hero_id": "elyn"
+      },
+      {
+        "unit_id": "Diondra",
+        "hero_id": "diondra"
+      }
+    ],
+    "Sceptre_of_Fire": [
+      {
+        "unit_id": "Rugnur",
+        "hero_id": "rugnur"
+      },
+      {
+        "unit_id": "Baglur",
+        "hero_id": "baglur"
+      },
+      {
+        "unit_id": "Krawg",
+        "hero_id": "krawg"
+      },
+      {
+        "unit_id": "Thursagan",
+        "hero_id": "thursagan"
+      },
+      {
+        "unit_id": "Haldric II",
+        "hero_id": "haldric_ii"
+      }
+    ],
+    "Secrets_of_the_Ancients": [
+      {
+        "unit_id": "Ardonna",
+        "hero_id": "ardonna"
+      },
+      {
+        "unit_id": "Ras-Tabahn",
+        "hero_id": "ras_tabahn"
+      },
+      {
+        "unit_id": "Bone Captain",
+        "hero_id": "rudic"
+      },
+      {
+        "unit_id": "Carcyn",
+        "hero_id": "carcyn"
+      },
+      {
+        "unit_id": "Shynal",
+        "hero_id": "shynal"
+      },
+      {
+        "unit_id": "Vendraxis",
+        "hero_id": "vendraxis"
+      }
+    ],
+    "Son_Of_The_Black_Eye": [
+      {
+        "unit_id": "Kapou'e",
+        "hero_id": "kapoue"
+      },
+      {
+        "unit_id": "Inarix",
+        "hero_id": "inarix"
+      },
+      {
+        "unit_id": "Grüü",
+        "hero_id": "gruu"
+      },
+      {
+        "unit_id": "Gork",
+        "hero_id": "gork"
+      },
+      {
+        "unit_id": "Pirk",
+        "hero_id": "pirk"
+      },
+      {
+        "unit_id": "Vraurk",
+        "hero_id": "vraurk"
+      }
+    ],
+    "The_Deceivers_Gambit": [
+      {
+        "unit_id": "Delfador",
+        "hero_id": "delfador"
+      },
+      {
+        "unit_id": "Methor",
+        "hero_id": "methor"
+      },
+      {
+        "unit_id": "Deoran",
+        "hero_id": "deoran"
+      },
+      {
+        "unit_id": "Arand",
+        "hero_id": "arand"
+      },
+      {
+        "unit_id": "Lionel",
+        "hero_id": "lionel"
+      },
+      {
+        "unit_id": "Maddock",
+        "hero_id": "maddock"
+      },
+      {
+        "unit_id": "Dommel",
+        "hero_id": "dommel"
+      },
+      {
+        "unit_id": "Kestrel",
+        "hero_id": "kestrel"
+      },
+      {
+        "unit_id": "Omaranth",
+        "hero_id": "omaranth"
+      },
+      {
+        "unit_id": "Garard",
+        "hero_id": "garard"
+      },
+      {
+        "unit_id": "Kalenz",
+        "hero_id": "kalenz"
+      },
+      {
+        "unit_id": "Chantal",
+        "hero_id": "chantal"
+      }
+    ],
+    "The_Hammer_of_Thursagan": [
+      {
+        "unit_id": "Aiglondur",
+        "hero_id": "aiglondur"
+      },
+      {
+        "unit_id": "Angarthing",
+        "hero_id": "angarthing"
+      },
+      {
+        "unit_id": "Ratheln",
+        "hero_id": "ratheln"
+      },
+      {
+        "unit_id": "Dulcatulos",
+        "hero_id": "dulcatulos"
+      }
+    ],
+    "The_Rise_Of_Wesnoth": [
+      {
+        "unit_id": "Prince Haldric",
+        "hero_id": "haldric"
+      },
+      {
+        "unit_id": "Lady Jessene",
+        "hero_id": "jessene"
+      },
+      {
+        "unit_id": "Burin the Lost",
+        "hero_id": "burin_the_lost"
+      },
+      {
+        "unit_id": "Minister Edren",
+        "hero_id": "minister_edren"
+      },
+      {
+        "unit_id": "Sir Ruddry",
+        "hero_id": "sir_ruddry"
+      },
+      {
+        "unit_id": "Sir Ladoc",
+        "hero_id": "sir_ladoc"
+      }
+    ],
+    "The_South_Guard": [
+      {
+        "unit_id": "Deoran",
+        "hero_id": "deoran"
+      },
+      {
+        "unit_id": "Minister Hylas",
+        "hero_id": "minister_hylas"
+      },
+      {
+        "unit_id": "Sir Gerrick",
+        "hero_id": "sir_gerrick"
+      },
+      {
+        "unit_id": "Mari",
+        "hero_id": "mari"
+      },
+      {
+        "unit_id": "Ethiliel",
+        "hero_id": "ethiliel"
+      }
+    ],
+    "Two_Brothers": [
+      {
+        "unit_id": "Arvith",
+        "hero_id": "arvith"
+      },
+      {
+        "unit_id": "Baran",
+        "hero_id": "baran"
+      }
+    ],
+    "Under_the_Burning_Suns": [
+      {
+        "unit_id": "Kaleh",
+        "hero_id": "kaleh"
+      },
+      {
+        "unit_id": "Nym",
+        "hero_id": "nym"
+      },
+      {
+        "unit_id": "Garak",
+        "hero_id": "garak"
+      },
+      {
+        "unit_id": "Zhul",
+        "hero_id": "zhul"
+      },
+      {
+        "unit_id": "Grog",
+        "hero_id": "grog"
+      },
+      {
+        "unit_id": "Rogrimir",
+        "hero_id": "rogrimir"
+      }
+    ],
+    "Winds_of_Fate": [
+      {
+        "unit_id": "Gorlack",
+        "hero_id": "gorlack"
+      },
+      {
+        "unit_id": "Resha",
+        "hero_id": "resha"
+      },
+      {
+        "unit_id": "Karron",
+        "hero_id": "karron"
+      },
+      {
+        "unit_id": "Arinexis",
+        "hero_id": "arinexis"
+      },
+      {
+        "unit_id": "Zedrix",
+        "hero_id": "zedrix"
+      }
+    ]
+  }
+}
