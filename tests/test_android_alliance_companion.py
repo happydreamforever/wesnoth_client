@@ -408,7 +408,7 @@ print(''' + repr(C.FINISHED + 'acknowledged') + ''',flush=True)
             with self.assertRaisesRegex(C.CompanionError, 'installed_version_differs'): C.check_device(device, apk)
             device.private.assert_not_called()
             device.reset_mock()
-            device.call.side_effect = [b'device\n', b'1\n', b'x86_64\n', b'28\n', b'versionCode=1192616', b'package:/data/app/example/base.apk\n', b'wrong hash']
+            device.call.side_effect = [b'device\n', b'1\n', b'x86_64\n', b'28\n', b'versionCode=1192617', b'package:/data/app/example/base.apk\n', b'wrong hash']
             with self.assertRaisesRegex(C.CompanionError, 'installed_apk_differs'): C.check_device(device, apk)
             device.private.assert_not_called()
 
@@ -416,7 +416,7 @@ print(''' + repr(C.FINISHED + 'acknowledged') + ''',flush=True)
         with tempfile.TemporaryDirectory() as tmp:
             apk = Path(tmp) / 'app.apk'; apk.write_bytes(b'installed-apk')
             device = mock.Mock()
-            device.call.side_effect = [b'device\n', b'1\n', b'x86_64\n', b'28\n', b'versionCode=1192616', b'package:/data/app/example/base.apk\n', C.digest(apk).encode() + b' path']
+            device.call.side_effect = [b'device\n', b'1\n', b'x86_64\n', b'28\n', b'versionCode=1192617', b'package:/data/app/example/base.apk\n', C.digest(apk).encode() + b' path']
             raw = json.dumps(self.profile).encode()
             device.private.side_effect = [b'/data/user/0/org.wesnoth.offline\n', raw, b'']
             checked = C.check_device(device, apk)
