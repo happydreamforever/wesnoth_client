@@ -32,9 +32,9 @@ ENGINE_KIND = 'wesnoth-android-account-engine'
 LOCK = '.wesnoth-account-game-operation.json'
 MARKER = '.wesnoth-account-game.json'
 ENGINE_MARKER = '.wesnoth-account-engine.json'
-VERSION_CODE = 1192617
-PREVIOUS_VERSION_CODES = frozenset((1192608, 1192609, 1192610, 1192611, 1192612, 1192613, 1192614, 1192615, 1192616))
-UPDATE_JOURNAL = '.wesnoth-account-game-update-1192617.json'
+VERSION_CODE = 1192618
+PREVIOUS_VERSION_CODES = frozenset((1192608, 1192609, 1192610, 1192611, 1192612, 1192613, 1192614, 1192615, 1192616, 1192617))
+UPDATE_JOURNAL = '.wesnoth-account-game-update-1192618.json'
 UPDATE_KIND = 'wesnoth-android-account-game-update'
 UPDATE_STAGES = ('android-account-engine', 'android-account-game')
 PACKAGE = G.PACKAGE
@@ -42,10 +42,13 @@ ACTIVITY = PACKAGE + '.AccountSetupActivity'
 APK, JNI_ROOT, LIBRARIES, ARTIFACTS = G.APK, G.JNI_ROOT, G.LIBRARIES, G.ARTIFACTS
 TEMPLATES = dict(G.TEMPLATES)
 TEMPLATES.update({name + '.java': 'app/src/main/java/org/wesnoth/offline/' + name + '.java'
-                  for name in ('AccountSetupActivity', 'AlliancePublicProfile')})
+                  for name in ('AccountSetupActivity', 'AlliancePublicProfile', 'WesnothGameTask')})
+TEMPLATES.update({name + '.java': 'app/src/main/java/org/libsdl/app/' + name + '.java'
+                  for name in ('WesnothKeyboard', 'WesnothKeyboardState')})
 NEW_INPUTS = ('tools/build_android_account_game.py', 'tools/native-account-game/CMakeLists.txt',
               'alliance_game/account_ui.cpp', 'alliance_game/account_ui.hpp', 'alliance_game/title_overlay.py',
-              'alliance_game/engine_overlay.py', 'alliance_game/battle_launch.cpp', 'alliance_game/battle_launch.hpp',
+              'alliance_game/engine_overlay.py',
+              *(f'alliance_game/{name}.{suffix}' for name in ('session_watch', 'android_lifecycle') for suffix in ('cpp', 'hpp')), 'alliance_game/battle_launch.cpp', 'alliance_game/battle_launch.hpp',
               'alliance_game/practice_plan.cpp', 'alliance_game/practice_plan.hpp',
               'alliance_game/practice_scenario.cpp', 'alliance_game/practice_scenario.hpp',
               'alliance_native/transport.cpp', 'alliance_native/transport.hpp',
@@ -80,8 +83,9 @@ STORY_OVERLAYS = {'game_config_manager.cpp': 'generate_config_manager_overlay',
 CASUAL_OVERLAYS = ('game_initialization/connect_engine.cpp', 'gui/dialogs/multiplayer/mp_staging.cpp',
                    'gui/dialogs/multiplayer/mp_join_game.cpp', 'gui/dialogs/multiplayer/mp_create_game.cpp')
 MULTIPLAYER_SOURCE = 'game_initialization/multiplayer.cpp'
+LOBBY_SOURCE = 'gui/dialogs/multiplayer/lobby.cpp'
 REPLACED_SOURCES = frozenset((TITLE_SOURCE, MAIN_SOURCE, LAUNCHER_SOURCE, CAMPAIGN_SOURCE, CONNECTION_SOURCE,
-                              SYNCED_COMMANDS_SOURCE, MULTIPLAYER_SOURCE, *STORY_OVERLAYS, *CASUAL_OVERLAYS))
+                              SYNCED_COMMANDS_SOURCE, MULTIPLAYER_SOURCE, LOBBY_SOURCE, *STORY_OVERLAYS, *CASUAL_OVERLAYS))
 
 
 def call(function, *args, **kwargs):
@@ -214,6 +218,7 @@ def unified_overlays(repo):
         result[Path(name).name] = flatten_includes(repo, name, sides.generate_side_overlay(name, regular(repo / 'engine/src' / name, 'Pinned multiplayer source').read_bytes()))
     result['multiplayer.cpp'] = flatten_includes(repo, MULTIPLAYER_SOURCE, sides.add_auth_side_hooks(auth.generate_multiplayer_auth_overlay(
         regular(repo / 'engine/src' / MULTIPLAYER_SOURCE, 'Pinned multiplayer source').read_bytes())))
+    result['lobby.cpp'] = flatten_includes(repo, LOBBY_SOURCE, auth.generate_lobby_overlay(regular(repo / 'engine/src' / LOBBY_SOURCE, 'Pinned lobby source').read_bytes()))
     return result
 
 
@@ -393,6 +398,21 @@ def game_generated(repo, profile, wrapper, source_files):
         if re.search(r'@[A-Z_]+@', content):
             raise BuildError('Unresolved account APK template setting.')
         files[output] = content.encode('utf-8')
+    sdl_name = 'app/src/main/java/org/libsdl/app/SDLActivity.java'
+    sdl = files[sdl_name].decode('utf-8')
+    edits = {
+        'mTextEdit.setInputType(input_type);': 'mTextEdit.setInputType(WesnothKeyboard.inputType(input_type));',
+        '        if (event.getAction() == KeyEvent.ACTION_DOWN) {\n            onNativeKeyDown(keyCode);':
+            '        event = WesnothKeyboard.event(event);\n\n        if (event.getAction() == KeyEvent.ACTION_DOWN) {\n            onNativeKeyDown(keyCode);',
+    }
+    for before, after in edits.items():
+        if sdl.count(before) != 1: raise BuildError('Pinned SDL keyboard boundary differs; original preserved.')
+        sdl = sdl.replace(before, after)
+    for direction in ('Down', 'Up'):
+        before = '            onNativeKey' + direction + '(keyCode);'
+        if sdl.count(before) != 1: raise BuildError('Pinned SDL modifier delivery differs; original preserved.')
+        sdl = sdl.replace(before, before + '\n            WesnothKeyboard.delivered(event);')
+    files[sdl_name] = sdl.encode('utf-8')
     return files
 
 
@@ -545,7 +565,7 @@ def completed_previous_stages(repo, profile, current_inputs):
     version = previous_version(game_root, marker, receipt)
     # A pending later transaction can leave older completed source directories
     # in place before its first move. Do not start another upgrade on top of it
-    # or reinterpret its immutable journal as a 1192617 update.
+    # or reinterpret its immutable journal as a 1192618 update.
     for later in PREVIOUS_VERSION_CODES:
         if later > version and safe(repo / 'build' / ('.wesnoth-account-game-update-' + str(later) + '.json')).exists():
             raise BuildError('A later account update journal exists beside older completed stages. Preserve it and send the log.')
@@ -574,7 +594,7 @@ def checked_update_journal(record, current_inputs):
         entry = record['stages'][name]
         if not isinstance(entry, dict) or set(entry) != {'backup', 'snapshot'}:
             raise BuildError('Invalid account update stage record.')
-        match = re.fullmatch(re.escape(name) + r'-before-unified-game-(\d{8}T\d{6}Z-[0-9a-f]{32})', str(entry['backup']))
+        match = re.fullmatch(re.escape(name) + r'-before-session-ui-(\d{8}T\d{6}Z-[0-9a-f]{32})', str(entry['backup']))
         if not match:
             raise BuildError('Invalid account backup location; no paths were changed.')
         suffixes.add(match.group(1))
@@ -638,7 +658,7 @@ def prepare_update(repo):
             token = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ-') + uuid.uuid4().hex
             record = {'schema_version': 1, 'kind': UPDATE_KIND, 'target_version': VERSION_CODE,
                       'target_inputs': inputs, 'stages': {name: {
-                          'backup': name + '-before-unified-game-' + token, 'snapshot': snapshots[name]}
+                          'backup': name + '-before-session-ui-' + token, 'snapshot': snapshots[name]}
                           for name in UPDATE_STAGES}}
             checked_update_journal(record, inputs)
             write_new(journal, B.json_bytes(record))
@@ -743,7 +763,7 @@ def main(argv=None):
     parser.add_argument('--gradle-user-home', type=Path, default=Path.home() / '.gradle')
     parser.add_argument('--jobs', type=int, default=2)
     parser.add_argument('--verify', '--verify-only', action='store_true')
-    parser.add_argument('--prepare-update', action='store_true', help='Preserve completed 1192608, 1192609, 1192610, 1192611, 1192612 1192613, 1192614, 1192615 or 1192616 stages before the 1192617 unified-game update.')
+    parser.add_argument('--prepare-update', action='store_true', help='Preserve completed 1192608, 1192609, 1192610, 1192611, 1192612 1192613, 1192614, 1192615, 1192616 or 1192617 stages before the 1192618 session and input update.')
     args = parser.parse_args(argv)
     try:
         for name, value in vars(args).items():
