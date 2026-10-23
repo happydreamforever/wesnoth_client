@@ -2110,6 +2110,9 @@ void logout_player()
     }catch(...){
         current_session().clear();
     }
+    // Reading a replaced profile can itself latch reauthentication. Explicit
+    // logout always ends that old-account intent, including this failure path.
+    clear_session_reauthentication();
 }
 void show_teams_dialog()
 {
