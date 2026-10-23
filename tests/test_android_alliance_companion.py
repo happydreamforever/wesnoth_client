@@ -36,7 +36,7 @@ TOKEN = 't' * 43
 def battle():
     players = [{'id': ACCOUNT if i == 1 else f'{i:08d}-1111-4111-8111-111111111111', 'side': i, 'ready': True} for i in range(1, 5)]
     return {'battle': {'id': RUN, 'state': 'draft', 'validity': 'valid', 'map': {'size': 2},
-        'teams': [{'approved': True, 'players': players[:2]}, {'approved': True, 'players': players[2:]}]}}
+        'teams': [{'approved': True, 'captain_id': ACCOUNT, 'players': players[:2]}, {'approved': True, 'captain_id': players[2]['id'], 'players': players[2:]}]}}
 
 
 class FixtureServer:
@@ -161,6 +161,29 @@ class CompanionTests(unittest.TestCase):
             link = Path(tmp) / 'link'; link.symlink_to(path)
             with self.assertRaises(C.CompanionError): C.regular(link)
 
+    def test_policy_requires_exact_supported_pair_and_cannot_retry(self):
+        for action in C.CAPTAIN_ACTIONS:
+            for turn in (1, 100):
+                args = argparse.Namespace(captain_action=action, after_turn=turn, retry_result=False)
+                self.assertEqual(C.captain_policy(args), {'captain_action': action, 'after_turn': turn})
+        self.assertEqual(C.captain_policy(argparse.Namespace(retry_result=False)), {})
+        for action, turn, retry in ((None, 1, False), ('surrender', None, False), ('arbitrary_lua', 1, False),
+                                    ('surrender', 0, False), ('surrender', 101, False), ('surrender', True, False),
+                                    ('surrender', '2', False), ('surrender', 2, True)):
+            with self.subTest(action=action, turn=turn), self.assertRaisesRegex(C.CompanionError, 'invalid_captain_policy'):
+                C.captain_policy(argparse.Namespace(captain_action=action, after_turn=turn, retry_result=retry))
+
+    def test_policy_selected_account_must_be_current_captain(self):
+        self.assertEqual(C.selected_side(battle(), RUN, ACCOUNT, True), 1)
+        changed = battle(); changed['battle']['teams'][0]['captain_id'] = RUN
+        self.assertEqual(C.selected_side(changed, RUN, ACCOUNT), 1)
+        with self.assertRaisesRegex(C.CompanionError, 'account_not_selected_captain'):
+            C.selected_side(changed, RUN, ACCOUNT, True)
+        changed['battle']['teams'][0]['captain_id'] = ACCOUNT
+        changed['battle']['teams'][0]['players'][0]['id'] = RUN
+        with self.assertRaisesRegex(C.CompanionError, 'account_not_selected'):
+            C.selected_side(changed, RUN, ACCOUNT, True)
+
     def test_capture_is_bounded_and_does_not_emit_untrusted_output(self):
         with contextlib.redirect_stdout(io.StringIO()) as output:
             with self.assertRaises(C.CompanionError):
@@ -244,6 +267,19 @@ print(''' + repr(C.FINISHED + 'acknowledged') + ''',flush=True)
             root = Path(tmp); stage, private, hashes = self.make_payload(root, "print('" + C.FINISHED + "acknowledged')\n")
             session, script = C.launch_script(str(private), str(stage), ACCOUNT, RUN, 'a' * 32, '/data', hashes, hashlib.sha256(b'public-profile-fixture').hexdigest())
             with self.assertRaises(C.CompanionError): C.run_native(self.shell_device(), script, {'token': TOKEN}, session)
+
+    def test_real_shell_start_marker_must_match_selected_control_policy(self):
+        for requested, emitted, accepted in ((True, C.START, False), (False, C.CAPTAIN_START, False), (True, C.CAPTAIN_START, True)):
+            with self.subTest(requested=requested, emitted=emitted), tempfile.TemporaryDirectory() as tmp:
+                code = "import json,sys\nvalue=json.loads(sys.stdin.readline())\nprint(" + repr(emitted) + ",flush=True)\nprint(" + repr(C.FINISHED + 'acknowledged') + ",flush=True)\n"
+                stage, private, hashes = self.make_payload(Path(tmp), code)
+                session, script = C.launch_script(str(private), str(stage), ACCOUNT, RUN, 'a' * 32, '/data', hashes, hashlib.sha256(b'public-profile-fixture').hexdigest())
+                admission = {'token': TOKEN}
+                if requested: admission.update(captain_action='surrender', after_turn=3)
+                if accepted:
+                    self.assertEqual(C.run_native(self.shell_device(), script, admission, session, emit=lambda *a, **k: None), 'acknowledged')
+                else:
+                    with self.assertRaises(C.CompanionError): C.run_native(self.shell_device(), script, admission, session, emit=lambda *a, **k: None)
 
     def test_real_shell_public_profile_copy_is_bound_and_original_preserved(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -362,6 +398,44 @@ print(''' + repr(C.FINISHED + 'acknowledged') + ''',flush=True)
             C.execute(args, report)
         self.assertEqual(report['session_logout'], 'unconfirmed')
 
+    def test_captain_policy_exact_consent_stdin_and_two_permission_reads(self):
+        for action in C.CAPTAIN_ACTIONS:
+            with self.subTest(action=action):
+                args, report, stack = self.execute_fixture()
+                args.captain_action, args.after_turn = action, 3
+                consent = 'CONTROL UniRecruit ' + action + ' TURN 3'
+                with stack, mock.patch('builtins.input', return_value=consent) as prompt, mock.patch.object(C, 'account_request', side_effect=[battle(), battle(), {'status': 'logged_out'}]) as requests, mock.patch.object(C, 'run_native', return_value='acknowledged') as native:
+                    C.execute(args, report)
+                self.assertIn(consent, prompt.call_args.args[0])
+                self.assertEqual(native.call_args.args[2], {'run_id': RUN, 'account_id': ACCOUNT, 'token': TOKEN, 'intent': 'play', 'captain_action': action, 'after_turn': 3})
+                self.assertEqual([call.args[1] for call in requests.call_args_list], ['battle_detail', 'battle_detail', 'logout'])
+                self.assertEqual(report['captain_policy'], {'captain_action': action, 'after_turn': 3})
+                self.assertNotIn(TOKEN, json.dumps(report))
+                self.assertNotIn('plugin', native.call_args.args[1])
+
+    def test_captain_policy_generic_consent_is_not_sufficient(self):
+        args, report, stack = self.execute_fixture()
+        args.captain_action, args.after_turn = 'surrender', 1
+        with stack, mock.patch.object(C, 'login') as login, mock.patch.object(C, 'run_native') as native:
+            with self.assertRaisesRegex(C.CompanionError, 'cancelled_before_login'): C.execute(args, report)
+        login.assert_not_called(); native.assert_not_called()
+
+    def test_changed_captain_before_launch_logs_out_without_engine_start(self):
+        args, report, stack = self.execute_fixture()
+        args.captain_action, args.after_turn = 'surrender', 2
+        changed = battle(); changed['battle']['teams'][0]['captain_id'] = RUN
+        with stack, mock.patch('builtins.input', return_value='CONTROL UniRecruit surrender TURN 2'), mock.patch.object(C, 'account_request', side_effect=[battle(), changed, {'status': 'logged_out'}]) as requests, mock.patch.object(C, 'run_native') as native:
+            with self.assertRaisesRegex(C.CompanionError, 'account_not_selected_captain'): C.execute(args, report)
+        native.assert_not_called()
+        self.assertEqual(requests.call_args.args, (self.profile, 'logout', {}, TOKEN))
+
+    def test_invalid_policy_fails_before_payload_or_password_access(self):
+        args, report, stack = self.execute_fixture(retry=True)
+        args.captain_action, args.after_turn = 'surrender', 2
+        with stack, mock.patch.object(C, 'verify_build') as verify, mock.patch.object(C.getpass, 'getpass') as password:
+            with self.assertRaisesRegex(C.CompanionError, 'invalid_captain_policy'): C.execute(args, report)
+        verify.assert_not_called(); password.assert_not_called()
+
     def test_powershell_wrapper_preserves_arguments_and_child_exit(self):
         pwsh = ROOT / 'build/host-tools/powershell-7.4.6/pwsh'
         with tempfile.TemporaryDirectory(prefix='companion PS & ') as tmp:
@@ -382,6 +456,18 @@ print(''' + repr(C.FINISHED + 'acknowledged') + ''',flush=True)
             self.assertEqual(args[args.index('--battle-id') + 1], RUN)
             self.assertEqual(args[-1], '--retry-result')
             self.assertNotIn(TOKEN, json.dumps(args))
+            for action, wire in (('Surrender', 'surrender'), ('OfferDraw', 'offer_draw'), ('WithdrawDraw', 'withdraw_draw')):
+                policy_command = command.replace('-RetryResult;', '-CaptainAction ' + action + ' -AfterTurn 3;')
+                result = subprocess.run([str(pwsh), '-NoProfile', '-Command', policy_command], capture_output=True, env=env, timeout=20)
+                self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+                args = json.loads((base / 'calls.json').read_text())
+                self.assertEqual(args[-4:], ['--captain-action', wire, '--after-turn', '3'])
+            for invalid in ('-CaptainAction Surrender', '-AfterTurn 3', '-CaptainAction Surrender -AfterTurn 3 -RetryResult', '-CaptainAction Surrender -AfterTurn 101'):
+                (base / 'calls.json').unlink()
+                result = subprocess.run([str(pwsh), '-NoProfile', '-Command', command.replace('-RetryResult;', invalid + ';')], capture_output=True, env=env, timeout=20)
+                self.assertNotEqual(result.returncode, 2)
+                self.assertFalse((base / 'calls.json').exists())
+                (base / 'calls.json').write_text('[]')
 
     def test_powershell_wrapper_has_no_credential_parameters_or_transcript(self):
         source = (ROOT / 'tools/Run-AndroidAllianceCompanion.ps1').read_text()

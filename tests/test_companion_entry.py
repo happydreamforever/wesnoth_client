@@ -15,6 +15,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 START = 'ALLIANCE COMPANION STARTING: authenticated computer-controlled fixed seat'
+CAPTAIN_START = 'ALLIANCE COMPANION STARTING: authenticated turn-passing captain policy'
 FINISH = 'ALLIANCE COMPANION FINISHED: replay verified; status='
 STOP = 'ALLIANCE COMPANION STOPPED: battle did not finish with a verified acknowledged result.'
 ACCOUNT = '11111111-1111-4111-8111-111111111111'
@@ -70,7 +71,7 @@ class CompanionEntryTests(unittest.TestCase):
                                 env=environment, capture_output=True, text=True, timeout=15)
         self.assertEqual(result.returncode, expected, result.stdout+result.stderr)
         lines = (result.stdout+result.stderr).splitlines()
-        self.assertTrue(all(line in (START, FINISH+'acknowledged', FINISH+'pending', STOP) for line in lines), lines)
+        self.assertTrue(all(line in (START, CAPTAIN_START, FINISH+'acknowledged', FINISH+'pending', STOP) for line in lines), lines)
         self.assertNotIn(TOKEN, result.stdout+result.stderr)
         self.assertNotIn(str(self.profile), result.stdout+result.stderr)
         self.assertNotIn('PRIVATE_', result.stdout+result.stderr)
@@ -82,6 +83,20 @@ class CompanionEntryTests(unittest.TestCase):
 
     def test_explicit_result_retry_is_separate_admission(self):
         self.assertEqual(self.run_case('retry', expected=0), [START, FINISH+'acknowledged'])
+
+    def test_captain_policies_use_human_controlled_exact_action_and_turn(self):
+        for action in ('surrender', 'offer_draw', 'withdraw_draw'):
+            value = {'run_id': RUN, 'account_id': ACCOUNT, 'token': TOKEN, 'intent': 'play', 'captain_action': action, 'after_turn': 3}
+            with self.subTest(action=action):
+                self.assertEqual(self.run_case('captain_'+action, value=value, expected=0), [CAPTAIN_START, FINISH+'acknowledged'])
+
+    def test_captain_policy_rejects_partial_extra_unknown_retry_and_invalid_turn(self):
+        valid = {'run_id': RUN, 'account_id': ACCOUNT, 'token': TOKEN, 'intent': 'play', 'captain_action': 'surrender', 'after_turn': 3}
+        cases = [dict(valid, captain_action='arbitrary_lua'), dict(valid, intent='result_retry'), dict(valid, extra='private')]
+        cases += [dict(valid, after_turn=turn) for turn in (0, 101, -1, True, '3', 3.5)]
+        cases += [{key: value for key, value in valid.items() if key != missing} for missing in ('captain_action', 'after_turn')]
+        for value in cases:
+            with self.subTest(keys=list(value)): self.assertEqual(self.run_case('captain_surrender', value=value), [STOP])
 
     def test_pending_preserved_result_returns_two(self):
         self.assertEqual(self.run_case('pending', expected=2), [START, FINISH+'pending'])

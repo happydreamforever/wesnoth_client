@@ -19,9 +19,15 @@ namespace video { bool headless() { return mode!="nonheadless"; } }
 namespace alliance_game {
 void queue_shared(SharedAdmission admission) {
     if(mode=="queue_failure")throw std::runtime_error("PRIVATE_QUEUE_ERROR");
-    if(admission.profile.port!=15002||!admission.computer_controlled||admission.download_only||
+    const bool policy=mode.rfind("captain_",0)==0;
+    if(admission.profile.port!=15002||admission.computer_controlled==policy||admission.download_only||
        admission.run_id!=run||admission.account_id!=account||admission.token!=std::string(43,'t')||
        admission.upload_only!=(mode=="retry"))throw std::runtime_error("Unexpected fixture admission");
+    if(policy) {
+        if(admission.captain_action!=mode.substr(8)||admission.after_turn!=3)
+            throw std::runtime_error("Unexpected captain policy");
+    } else if(!admission.captain_action.empty()||admission.after_turn!=0)
+        throw std::runtime_error("Unexpected default policy");
     queued=std::move(admission);
 }
 void run_pending_shared() {

@@ -35,9 +35,11 @@ UUID = re.compile(r'[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}')
 TOKEN = re.compile(r'[A-Za-z0-9_-]{43}')
 LIBRARIES = ('libmain.so', 'libSDL3.so', 'libSDL3_image.so', 'libSDL3_mixer.so', 'libc++_shared.so')
 START = 'ALLIANCE COMPANION STARTING: authenticated computer-controlled fixed seat'
+CAPTAIN_START = 'ALLIANCE COMPANION STARTING: authenticated turn-passing captain policy'
 FINISHED = 'ALLIANCE COMPANION FINISHED: replay verified; status='
 STOPPED = 'ALLIANCE COMPANION STOPPED: battle did not finish with a verified acknowledged result.'
-MARKERS = {START, FINISHED + 'acknowledged', FINISHED + 'pending', STOPPED}
+MARKERS = {START, CAPTAIN_START, FINISHED + 'acknowledged', FINISHED + 'pending', STOPPED}
+CAPTAIN_ACTIONS = {'surrender': 'Surrender', 'offer_draw': 'Offer draw', 'withdraw_draw': 'Withdraw draw'}
 
 
 class CompanionError(Exception):
@@ -164,7 +166,16 @@ def login(profile, username, password):
     return result['token'], account['id']
 
 
-def selected_side(data, battle_id, account_id):
+def captain_policy(args):
+    action, turn = getattr(args, 'captain_action', None), getattr(args, 'after_turn', None)
+    if action is None and turn is None:
+        return {}
+    if args.retry_result or action not in CAPTAIN_ACTIONS or type(turn) is not int or not 1 <= turn <= 100:
+        fail('invalid_captain_policy')
+    return {'captain_action': action, 'after_turn': turn}
+
+
+def selected_side(data, battle_id, account_id, require_captain=False):
     if set(data) != {'battle'} or not isinstance(data['battle'], dict):
         fail('invalid_battle_response')
     battle = data['battle']
@@ -183,6 +194,8 @@ def selected_side(data, battle_id, account_id):
                 fail('battle_not_ready')
             seats.add(player['id']); sides.add(player['side'])
             if player['id'] == account_id:
+                if require_captain and team.get('captain_id') != account_id:
+                    fail('account_not_selected_captain')
                 found.append(player['side'])
     if sides != set(range(1, size * 2 + 1)) or len(found) != 1:
         fail('account_not_selected')
@@ -401,9 +414,10 @@ def run_native(device, script, admission, session, emit=print):
                 try: process.wait(timeout=5)
                 except subprocess.TimeoutExpired: process.kill(); process.wait(timeout=5)
             raise
-    if code == 0 and seen == [START, FINISHED + 'acknowledged']:
+    expected_start = CAPTAIN_START if 'captain_action' in admission else START
+    if code == 0 and seen == [expected_start, FINISHED + 'acknowledged']:
         return 'acknowledged'
-    if code == 2 and seen == [START, FINISHED + 'pending']:
+    if code == 2 and seen == [expected_start, FINISHED + 'pending']:
         return 'pending'
     known = {71: 'companion_storage_redirected', 72: 'companion_account_already_running',
              73: 'companion_seven_process_limit', 74: 'companion_owned_storage_or_profile_differs',
@@ -414,6 +428,9 @@ def run_native(device, script, admission, session, emit=print):
 
 
 def execute(args, report):
+    policy = captain_policy(args)
+    if policy:
+        report['captain_policy'] = policy.copy()
     report['step'] = 'C01_verify_build'
     payload = verify_build(ROOT, args.sdk, args.java)
     print('C01 PASS: current account APK and companion payload verified.', flush=True)
@@ -424,12 +441,18 @@ def execute(args, report):
     private_root, _, profile, data, profile_hash = check_device(device, ROOT / 'build/android-account-game/app/build/outputs/apk/debug/app-debug.apk')
     print('C02 PASS: installed APK, selected LDPlayer and saved public profile verified.', flush=True)
     report['step'] = 'C03_account_consent'
+    print('Selected account: ' + args.username + '; battle: ' + args.battle_id)
     if args.retry_result:
         print('Send only this account\'s retained result and replay for the selected battle. This does not start gameplay or change readiness. The native engine verifies the retained evidence before upload.')
+    elif policy:
+        print('This captain seat will end its turns without moving or recruiting. On its own first turn at or after turn ' + str(policy['after_turn']) + ', it will request ' + CAPTAIN_ACTIONS[policy['captain_action']] + ' once. It will then continue ending its turns if the battle remains active.')
+        print('Surrender ends the team\'s battle. A draw needs both teams\' offers; withdrawing a draw only removes this team\'s offer. Results still require captain review. This is a shared battle, not local practice.')
     else:
         print('This computer will control only this account\'s assigned side in the selected shared battle. Other selected players must be Ready and both captains must approve. Results require captain review; this is not local practice.')
     print('Use an account you own and authorize. Keep the main LDPlayer game logged in as a DIFFERENT selected player. No password or token is saved.')
     consent = ('RETRY ' if args.retry_result else 'CONTROL ') + args.username
+    if policy:
+        consent += ' ' + policy['captain_action'] + ' TURN ' + str(policy['after_turn'])
     if input('Type ' + consent + ' to continue, or press Enter to cancel: ') != consent:
         fail('cancelled_before_login')
     with warnings.catch_warnings():
@@ -446,9 +469,9 @@ def execute(args, report):
         if args.retry_result:
             print('C04: authenticated result retry only; the native engine will verify this account\'s retained result and replay.', flush=True)
         else:
-            side = selected_side(account_request(profile, 'battle_detail', {'battle_id': args.battle_id}, token), args.battle_id, account_id)
+            side = selected_side(account_request(profile, 'battle_detail', {'battle_id': args.battle_id}, token), args.battle_id, account_id, bool(policy))
             report['side'] = side
-            print('C04 PASS: authenticated account is selected and the fixed lineups are Ready.', flush=True)
+            print('C04 PASS: authenticated account controls fixed side ' + str(side) + '; the fixed lineups are Ready.', flush=True)
         stage = '/data/local/tmp/wesnoth-alliance-companion-' + uuid.uuid4().hex
         device.call('shell', 'mkdir', '-m', '755', stage)
         report['step'] = 'C05_transfer'
@@ -461,9 +484,9 @@ def execute(args, report):
         session, script = launch_script(private_root, stage, account_id, args.battle_id, uuid.uuid4().hex, data, {name: item[1] for name, item in payload.items()}, profile_hash)
         # Recheck only; never silently ready a player or confirm a captain.
         if not args.retry_result:
-            selected_side(account_request(profile, 'battle_detail', {'battle_id': args.battle_id}, token), args.battle_id, account_id)
+            selected_side(account_request(profile, 'battle_detail', {'battle_id': args.battle_id}, token), args.battle_id, account_id, bool(policy))
         report['step'] = 'C06_run'
-        report['result'] = run_native(device, script, {'run_id': args.battle_id, 'account_id': account_id, 'token': token, 'intent': 'result_retry' if args.retry_result else 'play'}, session)
+        report['result'] = run_native(device, script, {'run_id': args.battle_id, 'account_id': account_id, 'token': token, 'intent': 'result_retry' if args.retry_result else 'play', **policy}, session)
         report['outcome'] = 'completed' if report['result'] == 'acknowledged' else 'result_pending'
         print('C06 COMPLETE: native result=' + report['result'] + '. This does not mean captain settlement has completed.', flush=True)
     finally:
@@ -489,6 +512,8 @@ def main(argv=None):
     parser.add_argument('--sdk', type=Path, required=True)
     parser.add_argument('--java', type=Path, required=True)
     parser.add_argument('--retry-result', action='store_true', help='Upload only this account\'s retained result; do not enter gameplay.')
+    parser.add_argument('--captain-action', choices=tuple(CAPTAIN_ACTIONS), help='Request one fixed captain action, then end this side\'s turns. Requires --after-turn.')
+    parser.add_argument('--after-turn', type=int, help='First own turn numbered at least this value (1-100); requires --captain-action.')
     args = parser.parse_args(argv)
     report = {'format': 'alliance-android-companion-v1', 'version': VERSION, 'outcome': 'failed', 'step': 'C00_inputs', 'wan_status': 'not_recorded'}
     destination = None
