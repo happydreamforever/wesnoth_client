@@ -54,6 +54,12 @@ import android.view.*; import android.text.InputType;
 public final class KeyboardHarness {
  static void yes(boolean condition){if(!condition)throw new AssertionError("Keyboard behavior mismatch");}
  static KeyEvent key(int code,int action,int meta){return new KeyEvent(11,22,action,code,0,meta,1,33,44,257);}
+ static KeyEvent dispatch(KeyEvent event){
+  event=WesnothKeyboard.event(event);
+  if(event.getAction()==0)SDLActivity.onNativeKeyDown(event.getKeyCode());
+  else if(event.getAction()==1)SDLActivity.onNativeKeyUp(event.getKeyCode());
+  WesnothKeyboard.delivered(event);return event;
+ }
  static void fresh(){WesnothKeyboard.focusLost();SDLActivity.calls.clear();}
  public static void main(String[] args){
   String test=args[0];
@@ -66,32 +72,32 @@ public final class KeyboardHarness {
    yes(WesnothKeyboard.inputType(2|flags)==(2|flags));
   }else if(test.equals("intentional_case_symbols")){
    fresh(); for(int[] item:new int[][]{{0,'a'},{1,'A'},{1048576,'A'},{1048577,'a'}})
-    yes(WesnothKeyboard.event(key(29,0,item[0])).getUnicodeChar()==item[1]);
-   yes(WesnothKeyboard.event(key(8,0,1)).getUnicodeChar()=='!');
-   yes(WesnothKeyboard.event(key(8,0,0)).getUnicodeChar()=='1');
-   yes(WesnothKeyboard.event(key(62,0,0)).getUnicodeChar()==' ');
+    yes(dispatch(key(29,0,item[0])).getUnicodeChar()==item[1]);
+   yes(dispatch(key(8,0,1)).getUnicodeChar()=='!');
+   yes(dispatch(key(8,0,0)).getUnicodeChar()=='1');
+   yes(dispatch(key(62,0,0)).getUnicodeChar()==' ');
   }else if(test.equals("missing_release")){
-   fresh(); WesnothKeyboard.event(key(59,0,65)); SDLActivity.calls.clear();
-   yes(WesnothKeyboard.event(key(29,0,0)).getUnicodeChar()=='a');
+   fresh(); dispatch(key(59,0,65)); SDLActivity.calls.clear();
+   yes(dispatch(key(29,0,0)).getUnicodeChar()=='a');
    yes(SDLActivity.calls.contains("up:59"));
   }else if(test.equals("stale_after_release")){
-   fresh(); WesnothKeyboard.event(key(59,0,65));WesnothKeyboard.event(key(59,1,65));
-   yes(WesnothKeyboard.event(key(29,0,65)).getUnicodeChar()=='a');
-   WesnothKeyboard.event(key(59,0,65));yes(WesnothKeyboard.event(key(29,0,65)).getUnicodeChar()=='A');
+   fresh(); dispatch(key(59,0,65));dispatch(key(59,1,65));
+   yes(dispatch(key(29,0,65)).getUnicodeChar()=='a');
+   dispatch(key(59,0,65));yes(dispatch(key(29,0,65)).getUnicodeChar()=='A');
   }else if(test.equals("explicit_reset")){
-   fresh();String before="MiXeD!";WesnothKeyboard.event(key(29,0,1048641));WesnothKeyboard.reset();
-   yes(WesnothKeyboard.event(key(29,0,1048641)).getUnicodeChar()=='a');yes(before.equals("MiXeD!"));
-   WesnothKeyboard.event(key(59,0,65));yes(WesnothKeyboard.event(key(8,0,65)).getUnicodeChar()=='!');
-   WesnothKeyboard.event(key(59,1,0));WesnothKeyboard.event(key(115,0,1048576));
-   yes(WesnothKeyboard.event(key(29,0,1048576)).getUnicodeChar()=='A');
+   fresh();String before="MiXeD!";dispatch(key(29,0,1048641));WesnothKeyboard.reset();
+   yes(dispatch(key(29,0,1048641)).getUnicodeChar()=='a');yes(before.equals("MiXeD!"));
+   dispatch(key(59,0,65));yes(dispatch(key(8,0,65)).getUnicodeChar()=='!');
+   dispatch(key(59,1,0));dispatch(key(115,0,1048576));
+   yes(dispatch(key(29,0,1048576)).getUnicodeChar()=='A');
   }else if(test.equals("reset_release_then_press")){
-   WesnothKeyboard.reset();yes(WesnothKeyboard.event(key(29,0,1048576)).getUnicodeChar()=='a');
-   yes(WesnothKeyboard.event(key(29,0,0)).getUnicodeChar()=='a');
-   yes(WesnothKeyboard.event(key(29,0,1048576)).getUnicodeChar()=='A');
+   WesnothKeyboard.reset();yes(dispatch(key(29,0,1048576)).getUnicodeChar()=='a');
+   yes(dispatch(key(29,0,0)).getUnicodeChar()=='a');
+   yes(dispatch(key(29,0,1048576)).getUnicodeChar()=='A');
   }else if(test.equals("focus_loss")){
-   fresh();WesnothKeyboard.event(key(59,0,65));WesnothKeyboard.focusLost();
+   fresh();dispatch(key(59,0,65));SDLActivity.calls.clear();WesnothKeyboard.focusLost();
    yes(SDLActivity.calls.size()==8);yes(SDLActivity.calls.contains("up:59"));
-   yes(WesnothKeyboard.event(key(29,0,1048576)).getUnicodeChar()=='A');
+   yes(dispatch(key(29,0,1048576)).getUnicodeChar()=='A');
   }else if(test.equals("other_inputs")){
    KeyEvent multi=new KeyEvent(1,2,2,0,0,1048576,1,0,0,257);
    KeyEvent pad=new KeyEvent(1,2,0,29,0,1048576,1,0,0,1025);
@@ -108,6 +114,13 @@ public final class KeyboardHarness {
    WesnothKeyboardState state=new WesnothKeyboardState();state.event(1,59,0,0,65);state.event(2,29,0,0,0);yes(state.held()==1);
    state.event(1,59,1,0,0);yes(state.held()==0);
    for(int i=0;i<100;i++)state.event(i,29,0,0,0);yes(state.deviceCount()==8);
+  }else if(test.equals("multiple_device_delivery")){
+   fresh();dispatch(new KeyEvent(1,2,0,59,0,65,1,0,0,257));
+   dispatch(new KeyEvent(1,2,0,59,0,65,2,0,0,257));SDLActivity.calls.clear();
+   dispatch(new KeyEvent(1,2,1,59,0,0,1,0,0,257));
+   yes(SDLActivity.calls.size()==2&&SDLActivity.calls.get(0).equals("up:59")&&SDLActivity.calls.get(1).equals("down:59"));
+   SDLActivity.calls.clear();dispatch(new KeyEvent(1,2,1,59,0,0,2,0,0,257));
+   yes(SDLActivity.calls.size()==1&&SDLActivity.calls.get(0).equals("up:59"));
   }else if(test.equals("both_shift_sides")){
    WesnothKeyboardState state=new WesnothKeyboardState();state.event(1,59,0,0,65);state.event(1,60,0,0,193);yes(state.held()==3);
    int meta=state.event(1,59,1,0,193);yes((meta&128)!=0&&(meta&64)==0&&state.held()==2);
@@ -177,7 +190,7 @@ class AndroidInputLifecycleTests(unittest.TestCase):
     def test_keyboard_cases(self):
         for case in ('input_type','intentional_case_symbols','missing_release','stale_after_release',
                      'explicit_reset','reset_release_then_press','focus_loss','other_inputs',
-                     'metadata_preserved','multiple_devices_bounded','both_shift_sides'):
+                     'metadata_preserved','multiple_devices_bounded','multiple_device_delivery','both_shift_sides'):
             with self.subTest(case=case):self.run_case('org.libsdl.app.KeyboardHarness',case)
     def test_task_cases(self):
         for case in ('native_thread','ui_thread','fallback','deadline','interrupted','failure'):

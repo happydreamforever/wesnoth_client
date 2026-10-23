@@ -17,14 +17,17 @@ public final class WesnothKeyboard {
                 InputType.TYPE_TEXT_FLAG_AUTO_CORRECT | InputType.TYPE_TEXT_FLAG_AUTO_COMPLETE)) |
                 InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS;
     }
-    public static KeyEvent event(KeyEvent event) {
+    private static boolean keyboard(KeyEvent event) {
         int source = event.getSource();
         if (source == InputDevice.SOURCE_UNKNOWN) {
             InputDevice device = InputDevice.getDevice(event.getDeviceId());
             if (device != null) source = device.getSources();
         }
-        if ((source & InputDevice.SOURCE_KEYBOARD) != InputDevice.SOURCE_KEYBOARD ||
-                (event.getAction() != KeyEvent.ACTION_DOWN && event.getAction() != KeyEvent.ACTION_UP)) return event;
+        return (source & InputDevice.SOURCE_KEYBOARD) == InputDevice.SOURCE_KEYBOARD;
+    }
+    public static KeyEvent event(KeyEvent event) {
+        if (!keyboard(event) || (event.getAction() != KeyEvent.ACTION_DOWN &&
+                event.getAction() != KeyEvent.ACTION_UP)) return event;
         int meta = STATE.event(event.getDeviceId(), event.getKeyCode(), event.getAction(),
                 event.getRepeatCount(), event.getMetaState());
         reconcile(event.getKeyCode());
@@ -34,6 +37,16 @@ public final class WesnothKeyboard {
         return new KeyEvent(event.getDownTime(), event.getEventTime(), event.getAction(), event.getKeyCode(),
                 event.getRepeatCount(), meta, event.getDeviceId(), event.getScanCode(), event.getFlags(), event.getSource());
     }
+    /** Called after SDL forwards the current key; another keyboard may still hold that modifier. */
+    public static void delivered(KeyEvent event) {
+        if (!keyboard(event)) return;
+        for (int i = 0; i < WesnothKeyboardState.KEYS.length; ++i) {
+            if (event.getKeyCode() != WesnothKeyboardState.KEYS[i]) continue;
+            if (event.getAction() == KeyEvent.ACTION_DOWN) nativeHeld |= 1 << i;
+            else if (event.getAction() == KeyEvent.ACTION_UP) nativeHeld &= ~(1 << i);
+        }
+        reconcile(-1);
+    }
     private static void reconcile(int currentKey) {
         int desired = STATE.held();
         for (int i = 0; i < WesnothKeyboardState.KEYS.length; ++i) {
@@ -41,9 +54,9 @@ public final class WesnothKeyboard {
             if (((nativeHeld ^ desired) & bit) != 0 && key != currentKey) {
                 if ((desired & bit) != 0) SDLActivity.onNativeKeyDown(key);
                 else SDLActivity.onNativeKeyUp(key);
+                nativeHeld = (nativeHeld & ~bit) | (desired & bit);
             }
         }
-        nativeHeld = desired;
     }
     public static void focusLost() {
         STATE.focusLost();
