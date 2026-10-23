@@ -364,6 +364,8 @@ echo $$ > "$session/launcher.pid"
     script += f'''chmod 700 "$session/wesnoth-engine-cli" || exit 75
 cd "$session" || exit 75
 export LD_LIBRARY_PATH="$session"
+export SDL_VIDEO_DRIVER=dummy
+export SDL_AUDIO_DRIVER=dummy
 export SDL_VIDEODRIVER=dummy
 export SDL_AUDIODRIVER=dummy
 export WESNOTH_ALLIANCE_PROFILE={shlex.quote(profile)}

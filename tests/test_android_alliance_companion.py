@@ -248,12 +248,15 @@ print(''' + repr(C.FINISHED + 'acknowledged') + ''',flush=True)
         # --nogui still initializes SDL video. A CLI launched with run-as has
         # no Android SDLActivity, so inherited Android drivers must not win.
         code = "import os,json,sys\njson.loads(sys.stdin.readline())\n" \
+            "assert os.environ['SDL_VIDEO_DRIVER']=='dummy'\n" \
+            "assert os.environ['SDL_AUDIO_DRIVER']=='dummy'\n" \
             "assert os.environ['SDL_VIDEODRIVER']=='dummy'\n" \
             "assert os.environ['SDL_AUDIODRIVER']=='dummy'\n" \
             "print(" + repr(C.START) + ",flush=True)\n" \
             "print(" + repr(C.FINISHED + 'acknowledged') + ",flush=True)\n"
         with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(os.environ,
-                {'SDL_VIDEODRIVER': 'android', 'SDL_AUDIODRIVER': 'openslES'}):
+                {'SDL_VIDEO_DRIVER': 'android', 'SDL_AUDIO_DRIVER': 'openslES',
+                 'SDL_VIDEODRIVER': 'android', 'SDL_AUDIODRIVER': 'openslES'}):
             stage, private, hashes = self.make_payload(Path(tmp), code)
             session, script = C.launch_script(str(private), str(stage), ACCOUNT, RUN, 'a' * 32,
                 '/data', hashes, hashlib.sha256(b'public-profile-fixture').hexdigest())
@@ -261,6 +264,8 @@ print(''' + repr(C.FINISHED + 'acknowledged') + ''',flush=True)
                 emit=lambda *a, **k: None), 'acknowledged')
             self.assertEqual(os.environ['SDL_VIDEODRIVER'], 'android')
             self.assertEqual(os.environ['SDL_AUDIODRIVER'], 'openslES')
+            self.assertEqual(os.environ['SDL_VIDEO_DRIVER'], 'android')
+            self.assertEqual(os.environ['SDL_AUDIO_DRIVER'], 'openslES')
 
     def test_real_shell_account_lock_prevents_duplicate_without_removing_owner(self):
         with tempfile.TemporaryDirectory() as tmp:
