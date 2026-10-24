@@ -3,11 +3,11 @@
 #include "alliance_game/individual_rooms.hpp"
 #include "alliance_game/casual_session.hpp"
 #include "alliance_game/account_ui.hpp"
+#include "alliance_game/battle_ui.hpp"
 #include "alliance_game/hero_catalog.hpp"
 #include "config.hpp"
 #include "game_initialization/multiplayer.hpp"
 #include "gui/dialogs/message.hpp"
-#include "gui/dialogs/simple_item_selector.hpp"
 #include "wesnothd_connection.hpp"
 #include <chrono>
 #include <cstdint>
@@ -78,17 +78,27 @@ bool choose_casual_side(int side) {
     const auto original_generation=session->account.database_generation;
     const auto found=selections.find(side);
     const bool selected=found!=selections.end()&&found->second.account_id==original_account;
-    std::vector<std::string> rows{"Back", resumed ? (selected && found->second.ready ? "Keep saved hero and set myself not ready" : "Keep saved hero and set myself ready") : "Choose hero and form"};
-    if(selected&&!resumed) rows.push_back(found->second.ready ? "Set myself not ready" : "Set myself ready");
-    const int details_index=individual_room_active()?static_cast<int>(rows.size()):-1;
-    if(details_index>=0) rows.push_back("View room settings");
-    gui2::dialogs::simple_item_selector dialog("My multiplayer side",
-        "Choose one of your heroes, then set yourself Ready. Casual multiplayer gives no permanent experience or rating.",rows,false,false);
-    dialog.set_allow_plugin_skip(false); dialog.set_selected_index(0);
-    dialog.set_ok_label("Choose"); dialog.set_cancel_label("Back");
-    if(!dialog.show()||dialog.selected_index()==0) return false;
-    if(details_index>=0&&dialog.selected_index()==details_index) {show_individual_settings();return false;}
-    const int action=resumed && dialog.selected_index()==1 ? 2 : dialog.selected_index();
+    BattleView view;view.title="My battle side";
+    view.subtitle=individual_room_active()?individual_room_status():"Choose a hero, then Ready";
+    std::string image,details;
+    if(selected) {
+        const auto* form=find_hero_form(found->second.hero_id,found->second.form_id);
+        if(form)image=battle_unit_image(form->unit_type);
+        details="Hero: "+hero_name(found->second.hero_id)+"\nForm: "+(form?form->name:found->second.form_id)
+            +"\nPermanent level: "+std::to_string(found->second.level);
+    } else details="Choose one of your unlocked campaign heroes before setting Ready.";
+    details+="\n\n";
+    details+=resumed?"This saved battle keeps its original hero and battle statistics."
+        :"Changing your hero clears your readiness. Multiplayer battles do not award permanent experience or rating.";
+    view.rows={{selected?hero_name(found->second.hero_id):"Choose your hero",selected?(found->second.ready?"Ready":"Not ready"):"No hero selected",details,image,{}}};
+    view.actions={{selected?"Change hero":"Choose hero",!resumed},
+        {selected&&found->second.ready?"Not Ready":"Ready",selected},
+        {"Room settings",individual_room_active()}};
+    const auto result=show_battle_view(view);
+    if(result.action<0)return false;
+    if(result.action==2) {if(individual_room_active())show_individual_settings();return false;}
+    const int action=result.action+1;
+    if((action==1&&resumed)||(action==2&&!selected))return false;
     if(action==1) {
         std::string hero,form;
         if(!choose_owned_hero(hero,form)) return false;
@@ -105,7 +115,7 @@ bool choose_casual_side(int side) {
         ClearTicketField command_guard{selection};
         mp::send_to_server(command);
         clear_casual_secret(*ticket); selection["ticket"]="";
-        message("Hero choice sent. After the server confirms it, open this side again and choose Set myself ready.");
+        message("Hero choice sent. After it appears in your side, choose Ready to review the battle settings.");
         return true;
     }
     auto current=player_session();

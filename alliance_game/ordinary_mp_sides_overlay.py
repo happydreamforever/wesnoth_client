@@ -57,7 +57,16 @@ bool side_engine::ready_for_start()''')
             return;
         }
     }''')
-        text = once(text, 'leader_select.set_active(!saved_game);', 'leader_select.set_active(network_connection_ || !saved_game);')
+        text = once(text, 'leader_select.set_active(!saved_game);', '''leader_select.set_active(network_connection_ || !saved_game);
+    if(network_connection_) {
+        const auto current=side->new_config();
+        const bool mine=current["player_id"].str()==prefs::get().login();
+        if(current["controller"].str()=="human") {
+            leader_select.set_label(mine?"Hero & Ready":"Player hero");
+            leader_select.set_tooltip(mine?"Choose your hero, review the room and set Ready.":"Only this player can choose their hero and readiness.");
+            leader_select.set_active(mine);
+        }
+    }''')
         text = once(text, '\t// Sprite\n\tstd::string new_image;',
                     '''    const auto owned_side=side->new_config();
     if(network_connection_ && owned_side["controller"].str()=="human") {
@@ -67,8 +76,11 @@ bool side_engine::ready_for_start()''')
     // Sprite
     std::string new_image;''')
         text = once(text, '\trow_grid.find_widget<label>("leader_type").set_label(',
-                    '''    if(network_connection_ && owned_side["controller"].str()=="human")
+                    '''    if(network_connection_ && owned_side["controller"].str()=="human") {
         current_leader=alliance_game::casual_side_label(side->index()+1,owned_side["player_id"].str());
+        if(owned_side["player_id"].str()==prefs::get().login())
+            current_leader += "\\n← Hero & Ready";
+    }
     row_grid.find_widget<label>("leader_type").set_label(''')
         text = text.replace('_("Waiting for players to choose factions...")', 'std::string("Waiting for each player to choose a hero and set Ready...")')
     elif name.endswith("mp_join_game.cpp"):
@@ -84,6 +96,8 @@ bool side_engine::ready_for_start()''')
         text = once(text, '\t\titem["label"] = description;\n\t\tdata.emplace("leader_type", item);',
                     '''        if(alliance_game::casual_game_active() && side["controller"].str()=="human")
             description += " — " + alliance_game::casual_side_label(side_num,side["player_id"].str());
+        if(alliance_game::casual_game_active() && side["player_id"].str()==prefs::get().login())
+            description += "\\nTap your hero to choose a form or set Ready";
         item["label"] = description;
         data.emplace("leader_type", item);''')
         # The normal scenario diff still supplies all map/side fields. A Ready
@@ -169,7 +183,7 @@ void connect_engine::start_game_commandline''')
     if(individual) {
         start.set_label("Automatic start");
         auto& status=find_widget<label>("status_label");
-        status.set_can_wrap(true); status.set_characters_per_line(24);
+        status.set_can_wrap(true); status.set_characters_per_line(38);
         status.set_label(alliance_game::individual_room_active()
             ? "Room #" + std::to_string(connect_engine_.params().game_id) + " — waiting for every seat and Ready"
             : "The server is preparing this individual battle room...");
@@ -177,7 +191,7 @@ void connect_engine::start_game_commandline''')
     }''')
         # Read numeric room identity from the server snapshot, not mp settings.
         text = text.replace('"Room #" + std::to_string(connect_engine_.params().game_id) + " — waiting for every seat and Ready"',
-                            'std::string("Waiting for every seat and Ready. Open your hero to review room settings.")')
+                            'alliance_game::individual_room_status()')
         # Configured seats remain public human slots. Owner cannot assign a
         # second side, turn a slot into AI or silently change gold/team settings.
         text = text.replace('controller_selection.set_active(controller_names.size() > 1);',

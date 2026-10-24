@@ -2,6 +2,7 @@
 #include "alliance_native/account_client.hpp"
 #include "alliance_game/practice_plan.hpp"
 #include "alliance_game/hero_catalog.hpp"
+#include "alliance_game/team_views.hpp"
 #include "alliance_game/replay_launch.hpp"
 #include <algorithm>
 #include <deque>
@@ -19,6 +20,7 @@ struct Step { std::string title, action, concurrent_change; };
 struct Menu { std::string title, text; std::vector<std::string> rows; };
 std::deque<Step> steps;
 std::vector<Menu> menus;
+std::vector<alliance_game::BattleView> views;
 std::vector<std::string> messages, requests;
 account::Battle server_plan;
 int detail_reads = 0, fail_read = 0, empty_read = 0, practice_calls = 0, hero_mutations=0;
@@ -45,6 +47,18 @@ int select(const std::string& title, const std::string& text, const std::vector<
     const auto item = std::find(rows.begin(), rows.end(), step.action);
     require(item != rows.end(), "Missing action: " + step.action);
     return static_cast<int>(item - rows.begin());
+}
+std::string battle_unit_image(const std::string& type,bool){return "portrait/"+type;}
+std::string battle_map_preview(const std::string& scenario){return "map/"+scenario;}
+std::string view_text(const BattleView& view){std::string text=view.subtitle;for(const auto& row:view.rows)text+="\n"+row.title+"\n"+row.subtitle+"\n"+row.detail;return text;}
+BattleResult show_battle_view(const BattleView& view) {
+    views.push_back(view);
+    if(view.actions.empty()){message(view_text(view));return {};}
+    std::vector<std::string> actions;
+    for(const auto& action:view.actions)actions.push_back(action.label);
+    const int selected=select(view.title,view_text(view),actions);
+    if(selected>=0)require(view.actions[selected].enabled,"Disabled rich action accepted");
+    return {std::max(0,view.selected),selected};
 }
 bool team_request(const alliance::TrustedProfile&, account::Request input,
                   const std::string&, account::Reply& output)
@@ -110,7 +124,7 @@ bool choose_hero(const alliance::TrustedProfile&, std::string& hero,std::string&
 
 void reset()
 {
-    steps.clear(); menus.clear(); messages.clear(); requests.clear();
+    steps.clear(); menus.clear(); views.clear(); messages.clear(); requests.clear();
     detail_reads = fail_read = empty_read = practice_calls = hero_mutations = 0;
     hero_cancel=hero_actor_change=bad_hero_ack=false;
     server_plan = {};
@@ -157,48 +171,37 @@ void check(const std::string& name, void (*run)())
 int main()
 {
     try {
-        check("concurrent member leave is fetched when fixed lineups opens", [] {
-            steps = {{"Battle plan", "View fixed lineups", "leave"}, {"Battle plan", "<close>", ""}};
-            alliance_game::battle_detail({}, server_plan.id);
-            require(detail_reads == 3 && messages.size() == 1, "The view needs its own fresh read");
-            contains(messages[0], "Team membership changed after this plan was saved.");
-            contains(messages[0], hero_label("UniRival") + " — Saved readiness (inactive): Not ready");
-            contains(messages[0], hero_label("UniPlayer") + " — Saved readiness (inactive): Ready");
-            absent(messages[0], "The saved lineups match the current teams and leaders.");
+        check("refresh replaces both visible lineups after a member leaves", [] {
+            steps={{"Battle plan","Refresh plan","leave"},{"Battle plan","<close>",""}};
+            alliance_game::battle_detail({},server_plan.id);
+            require(detail_reads==2&&views.size()==2&&messages.empty(),"Rich refresh did not read once per screen");
+            contains(menus.back().text,"Team membership changed after this plan was saved.");
+            contains(menus.back().text,"UniRival");contains(menus.back().text,"Inactive readiness: Not ready");
+            absent(menus.back().text,"The saved lineups match the current teams and leaders.");
         });
-        check("concurrent cancellation is visible in the first opened detail", [] {
-            steps = {{"Battle plan", "View fixed lineups", "cancel"}, {"Battle plan", "<close>", ""}};
-            alliance_game::battle_detail({}, server_plan.id);
-            require(detail_reads == 3 && messages.size() == 1, "Cancellation was not refreshed");
-            contains(messages[0], "State: cancelled");
-            contains(messages[0], "cancelled and inactive. It cannot start a shared battle.");
-            contains(messages[0], "Saved readiness (history): Not ready");
-            absent(messages[0], "Saved readiness (history): Ready");
-            require(!offered(menus.back(), "Cancel this battle plan") &&
-                    !offered(menus.back(), "Set myself not ready"), "Cancelled plan offers mutations");
+        check("refresh shows cancellation and history without active actions", [] {
+            steps={{"Battle plan","Refresh plan","cancel"},{"Battle plan","<close>",""}};
+            alliance_game::battle_detail({},server_plan.id);
+            require(detail_reads==2&&views.size()==2,"Cancellation was not refreshed");
+            contains(menus.back().text,"cancelled and inactive");
+            contains(menus.back().text,"Saved readiness: Not ready");
+            require(!offered(menus.back(),"Cancel this battle plan")&&!offered(menus.back(),"Set myself not ready"),"Historical mutations available");
         });
-        check("failed detail refresh never displays the cached ready plan or retries", [] {
-            fail_read = 2;
-            steps = {{"Battle plan", "View fixed lineups", "leave"}};
-            alliance_game::battle_detail({}, server_plan.id);
-            require(detail_reads == 2 && messages.empty() && menus.size() == 1, "Failure used stale detail or retried");
-            require(practice_calls == 0, "Refresh failure launched practice");
+        check("failed rich refresh never displays cached lineups or retries", [] {
+            fail_read=2;steps={{"Battle plan","Refresh plan","leave"}};
+            alliance_game::battle_detail({},server_plan.id);
+            require(detail_reads==2&&views.size()==1&&messages.empty()&&practice_calls==0,"Failed refresh fell back to cached state");
         });
-        check("missing detail response gives fixed failure without cached fallback", [] {
-            empty_read = 2;
-            steps = {{"Battle plan", "View fixed lineups", "cancel"}};
-            alliance_game::battle_detail({}, server_plan.id);
-            require(detail_reads == 2 && messages.size() == 1, "Missing response was not bounded");
-            contains(messages[0], "The latest fixed lineups could not be loaded.");
-            absent(messages[0], "UniRival");
-            absent(messages[0], "State: draft");
+        check("missing refresh response never reuses cached rich view", [] {
+            empty_read=2;steps={{"Battle plan","Refresh plan","cancel"}};
+            alliance_game::battle_detail({},server_plan.id);
+            require(detail_reads==2&&views.size()==1,"Missing response reused old lineups");
         });
-        check("manual refresh still refreshes again when a later view opens", [] {
-            steps = {{"Battle plan", "Refresh plan", ""},
-                     {"Battle plan", "View fixed lineups", "leave"}, {"Battle plan", "<close>", ""}};
-            alliance_game::battle_detail({}, server_plan.id);
-            require(detail_reads == 4 && messages.size() == 1, "Manual refresh incorrectly replaced view-time refresh");
-            contains(messages[0], "Team membership changed after this plan was saved.");
+        check("each explicit refresh reads the newest plan again", [] {
+            steps={{"Battle plan","Refresh plan",""},{"Battle plan","Refresh plan","leave"},{"Battle plan","<close>",""}};
+            alliance_game::battle_detail({},server_plan.id);
+            require(detail_reads==3&&views.size()==3,"Repeated refresh used cache");
+            contains(menus.back().text,"Team membership changed after this plan was saved.");
         });
         check("cancelled valid old readiness is retained and explicitly historical", [] {
             server_plan.state = "cancelled";
@@ -277,9 +280,9 @@ int main()
         check("identical names and timestamps remain distinguishable by plan IDs", [] {
             steps = {{"My battle plans", "<close>", ""}};
             alliance_game::my_battles({});
-            require(menus[0].rows.size() == 2 && menus[0].rows[0] != menus[0].rows[1], "Identical plans ambiguous");
-            contains(menus[0].rows[0], server_plan.id);
-            contains(menus[0].rows[1], "200599c9-610f-4d81-b8bb-1cb1b79e5f27");
+            require(views[0].rows.size()==2&&views[0].rows[0].detail!=views[0].rows[1].detail,"Identical plans ambiguous");
+            contains(views[0].rows[0].detail,server_plan.id);
+            contains(views[0].rows[1].detail,"200599c9-610f-4d81-b8bb-1cb1b79e5f27");
         });
         check("empty side requires owned hero before ready or approval", [] {
             server_plan.teams[0].players[0].selection_present=false;server_plan.teams[0].players[0].ready=false;

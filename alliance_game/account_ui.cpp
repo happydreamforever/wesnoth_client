@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "alliance_game/account_ui.hpp"
+#include "alliance_game/battle_ui.hpp"
+#include "alliance_game/team_views.hpp"
 #include "alliance_game/android_lifecycle.hpp"
 #include "alliance_game/session_watch.hpp"
 #include "alliance_game/hero_catalog.hpp"
@@ -565,24 +567,74 @@ bool reload_player(const alliance::TrustedProfile& trusted)
     return true;
 }
 
+BattleRow hero_form_card(const account::Hero& hero, const HeroForm& form)
+{
+    const long double needed=5.L*hero.hero_level*hero.hero_level+15.L;
+    BattleRow card;
+    card.title=form.name;
+    card.subtitle=hero.name+"  •  Level "+std::to_string(hero.hero_level)+"  •  Unit tier "+std::to_string(form.native_level);
+    card.image=battle_unit_image(form.unit_type);
+    card.progress_percent=static_cast<int>(std::clamp(100.L*hero.experience/needed,0.L,100.L));
+    card.progress_label="Experience: "+std::to_string(hero.experience)+"  •  Total earned: "+std::to_string(hero.total_experience);
+    card.detail="BATTLE STRENGTH\nHit points: "+std::to_string(scaled_hero_stat(form.base_hitpoints,hero.hero_level,2))+"\n";
+    for(const auto& attack:form.attacks)
+        card.detail+="\n"+attack.name+"  "+std::to_string(scaled_hero_stat(attack.damage,hero.hero_level,1))+" × "+std::to_string(attack.number)+"  •  "+attack.type+" / "+attack.range;
+    card.detail+="\n\nGROWTH\nEach level adds 2% of base HP and 1% of base attack damage. Movement, strikes, resistances and abilities keep their original values.\n\nStory campaigns use authored strength. These permanent bonuses apply when you choose this hero for a battle.";
+    return card;
+}
+
+BattleView hero_collection_view(const std::vector<account::Hero>& heroes, const std::string& title)
+{
+    BattleView view;view.title=title;view.subtitle="Your campaign heroes • Each hero has its own level and earned forms";
+    view.selected_action=true;
+    for(const auto& hero:heroes) {
+        if(hero.forms.empty())throw std::runtime_error("Collected hero has no earned form.");
+        const auto* form=find_hero_form(hero.hero_id,hero.forms.front());
+        if(!form)throw std::runtime_error("Unsupported collected form.");
+        auto card=hero_form_card(hero,*form);
+        card.title=hero.name;
+        card.subtitle="Level "+std::to_string(hero.hero_level)+"  •  "+std::to_string(hero.forms.size())+" earned forms";
+        card.detail="EARNED FORMS\n";
+        for(const auto& id:hero.forms) {
+            const auto* earned=find_hero_form(hero.hero_id,id);
+            if(!earned)throw std::runtime_error("Unsupported collected form.");
+            card.detail+=earned->name+"  •  unit tier "+std::to_string(earned->native_level)+"\n";
+        }
+        card.detail+="\nChoose a form to inspect its hit points and attacks before you enter battle.\n\nWin campaign scenarios with this hero to gain permanent experience and unlock more forms.";
+        view.rows.push_back(std::move(card));
+    }
+    return view;
+}
+
 bool choose_hero(const alliance::TrustedProfile& trusted, std::string& hero_id, std::string& form_id)
 {
     if(!reload_player(trusted)) return false;
     const auto actor=current_session().profile.account_id;
+    const auto generation=current_session().profile.database_generation;
+    const auto selection_session=current_session().token;
+    const auto same_player=[&] {
+        if(!selection_session.empty()&&current_session().token==selection_session&&current_session().profile.account_id==actor&&
+           current_session().profile.database_generation==generation)return true;
+        message("The signed-in player or game database changed. Open the hero selection again.");
+        return false;
+    };
     const auto heroes=current_session().profile.heroes;
-    if(heroes.empty()) {message("No heroes unlocked yet. Win a story campaign scenario with a named hero before joining a multiplayer side.");return false;}
-    std::vector<std::string> rows;
-    for(const auto& hero:heroes) rows.push_back(hero.name+" — level "+std::to_string(hero.hero_level)+" — XP "+std::to_string(hero.experience));
-    gui2::dialogs::simple_item_selector choice("Choose your hero","Each hero keeps its own experience. Choose an earned form next.",rows);
-    choice.set_allow_plugin_skip(false); if(!choice.show()) return false;
-    const int index=choice.selected_index();if(index<0||static_cast<std::size_t>(index)>=heroes.size())return false;
+    if(heroes.empty()) {
+        BattleView view;view.title="Your heroes";view.subtitle="Your collection starts with your first campaign victory";
+        view.rows.push_back({"Begin a campaign","Win a scenario with a named hero","Return to Campaigns and complete a scenario. Its eligible named heroes and earned forms will appear here. Then choose one before setting Ready for battle.","icons/icon-game.png",""});
+        show_battle_view(view);return false;
+    }
+    auto collection=hero_collection_view(heroes,"Choose your hero");collection.actions={{"Choose form"}};
+    const auto choice=show_battle_view(collection);
+    const int index=choice.row;
+    if(choice.action!=0||index<0||static_cast<std::size_t>(index)>=heroes.size()||!same_player())return false;
     const auto& hero=heroes[index];
-    std::vector<std::string> form_labels;
-    for(const auto& id:hero.forms){const auto* spec=find_hero_form(hero.hero_id,id);if(!spec)throw std::runtime_error("Unsupported collected form.");form_labels.push_back(spec->name+" — original unit tier "+std::to_string(spec->native_level));}
-    gui2::dialogs::simple_item_selector forms("Choose hero form",hero.name+" — level "+std::to_string(hero.hero_level),form_labels);
-    forms.set_allow_plugin_skip(false);if(!forms.show())return false;
-    const int form=forms.selected_index();if(form<0||static_cast<std::size_t>(form)>=hero.forms.size())return false;
-    if(!reload_player(trusted)||current_session().profile.account_id!=actor)return false;
+    BattleView forms;forms.title="Choose hero form";forms.subtitle=hero.name+" • Review this form's battle strength";forms.selected_action=true;
+    forms.actions={{"Use this hero"}};
+    for(const auto& id:hero.forms){const auto* spec=find_hero_form(hero.hero_id,id);if(!spec)throw std::runtime_error("Unsupported collected form.");forms.rows.push_back(hero_form_card(hero,*spec));}
+    const auto selected=show_battle_view(forms);const int form=selected.row;
+    if(selected.action!=0||form<0||static_cast<std::size_t>(form)>=hero.forms.size()||!same_player())return false;
+    if(!reload_player(trusted)||!same_player())return false;
     const auto& latest=current_session().profile.heroes;
     const auto found=std::find_if(latest.begin(),latest.end(),[&](const auto& h){return h.hero_id==hero.hero_id;});
     if(found==latest.end()||found->revision!=hero.revision||std::find(found->forms.begin(),found->forms.end(),hero.forms[form])==found->forms.end()) {
@@ -593,21 +645,30 @@ bool choose_hero(const alliance::TrustedProfile& trusted, std::string& hero_id, 
 
 void heroes_dialog(const alliance::TrustedProfile& trusted)
 {
+    int previous=0;
     while(reload_player(trusted)) {
+        const auto actor=current_session().profile.account_id;
+        const auto generation=current_session().profile.database_generation;
+        const auto selection_session=current_session().token;
+        const auto same_player=[&] {
+            if(!selection_session.empty()&&current_session().token==selection_session&&current_session().profile.account_id==actor&&
+               current_session().profile.database_generation==generation)return true;
+            message("The signed-in player or game database changed. Open your heroes again.");
+            return false;
+        };
         const auto heroes=current_session().profile.heroes;
-        if(heroes.empty()){message(profile_text(current_session().profile));return;}
-        std::vector<std::string> rows;
-        for(const auto& h:heroes)rows.push_back(h.name+" — level "+std::to_string(h.hero_level));
-        gui2::dialogs::simple_item_selector choice("Heroes","Your campaign heroes and their earned forms.",rows);
-        choice.set_allow_plugin_skip(false);if(!choice.show())return;
-        const int index=choice.selected_index();if(index<0||static_cast<std::size_t>(index)>=heroes.size())return;
-        const auto& h=heroes[index];
-        std::string detail=h.name+"\nHero level: "+std::to_string(h.hero_level)+"\nExperience: "+std::to_string(h.experience)+
-            "\nTotal experience: "+std::to_string(h.total_experience)+"\n\nEarned forms:";
-        for(const auto& form:h.forms){const auto* spec=find_hero_form(h.hero_id,form);if(!spec)throw std::runtime_error("Unsupported collected form.");detail+="\n"+spec->name+" — original unit tier "+std::to_string(spec->native_level); }
-        detail+="\n\nEvery level adds 2% of original HP and 1% of original attack damage. Movement, number of strikes, resistances and innate abilities stay unchanged. "
-            "Next-level XP is 5 × current level² + 15. Story campaigns start at their original strength.";
-        message(detail);
+        auto collection=hero_collection_view(heroes,"Your heroes");collection.selected=previous;
+        if(heroes.empty()) {
+            collection.subtitle="Win a campaign scenario to unlock your first heroes";
+            collection.rows.push_back({"Begin your story","No heroes unlocked yet",profile_text(current_session().profile),"icons/icon-game.png",""});
+        } else collection.actions={{"View earned forms"}};
+        const auto choice=show_battle_view(collection);previous=choice.row;
+        if(choice.action!=0||choice.row<0||static_cast<std::size_t>(choice.row)>=heroes.size()||!same_player())return;
+        const auto& hero=heroes[choice.row];
+        BattleView forms;forms.title=hero.name;forms.subtitle="Earned forms • Battle strength at level "+std::to_string(hero.hero_level);
+        for(const auto& id:hero.forms){const auto* form=find_hero_form(hero.hero_id,id);if(!form)throw std::runtime_error("Unsupported collected form.");forms.rows.push_back(hero_form_card(hero,*form));}
+        show_battle_view(forms);
+        if(!same_player())return;
     }
 }
 
@@ -870,30 +931,23 @@ void application_decisions(const alliance::TrustedProfile& profile, bool unread_
 // server-provided display strings have already passed the strict text schema.
 bool choose_area(const alliance::TrustedProfile& profile, account::Area& selected)
 {
+    const auto actor=current_session().profile.account_id;
     std::vector<std::string> cursors{std::string{}};
     while(!current_session().token.empty()) {
-        account::Request input;
-        input.operation = "areas";
-        input.after = cursors.back();
-        account::Reply output;
-        if(!team_request(profile, input, "Loading areas…", output)) return false;
-        std::vector<std::string> rows;
-        for(const auto& area : output.areas) rows.push_back(area.name);
-        const int previous = cursors.size() > 1 ? static_cast<int>(rows.size()) : -1;
-        if(previous >= 0) rows.push_back("Previous page");
-        const int more = output.next.empty() ? -1 : static_cast<int>(rows.size());
-        if(more >= 0) rows.push_back("More areas");
-        if(rows.empty()) {
-            message("No enabled areas are available. Ask the Windows administrator to create an area.");
-            return false;
-        }
-        const int choice = select("Choose an area", "Teams are grouped by area.", rows);
-        if(choice < 0) return false;
-        if(choice == previous) { cursors.pop_back(); continue; }
-        if(choice == more) { cursors.push_back(output.next); continue; }
-        if(static_cast<std::size_t>(choice) < output.areas.size()) {
-            selected = output.areas[choice];
-            return true;
+        account::Request input;input.operation="areas";input.after=cursors.back();account::Reply output;
+        if(!team_request(profile,input,"Loading areas…",output))return false;
+        BattleView view;view.title="Choose an area";view.subtitle="Team directories and rankings are grouped by area.";
+        for(const auto& area:output.areas)view.rows.push_back({area.name,"Team region",
+            "Browse teams or create your team in "+area.name+". Team battles are planned between teams in the same area.\n\nArea ID: "+area.id,"icons/circlet_winged.png",{}});
+        if(view.rows.empty())view.rows.push_back({"No areas on this page","Try another page or contact your administrator",
+            "The Windows administrator manages enabled team areas.","icons/circlet_winged.png",{}});
+        view.actions={{"Choose area",!output.areas.empty(),true},{"Previous page",cursors.size()>1},{"More areas",!output.next.empty()}};
+        const auto picked=show_battle_view(view);
+        if(picked.action<0||current_session().token.empty()||current_session().profile.account_id!=actor)return false;
+        if(picked.action==1&&cursors.size()>1){cursors.pop_back();continue;}
+        if(picked.action==2&&!output.next.empty()){cursors.push_back(output.next);continue;}
+        if(picked.action==0&&picked.row>=0&&static_cast<std::size_t>(picked.row)<output.areas.size()) {
+            selected=output.areas[picked.row];return true;
         }
     }
     return false;
@@ -925,9 +979,10 @@ bool my_team(const alliance::TrustedProfile& profile)
     input.operation = "my_team";
     account::Reply output;
     if(!team_request(profile, input, "Loading your team…", output)) return false;
-    message(output.team ? team_text(*output.team) :
-        "You do not belong to a team yet. Choose Create team to become its captain.\n"
-        "Or browse areas and teams to apply to join an existing team.");
+    if(output.team) {
+        auto view=team_roster_view(*output.team,current_session().profile.account_id);
+        show_battle_view(view);
+    } else message("You do not belong to a team yet. Find a team to apply, or create your own team.");
     return true;
 }
 
@@ -1072,6 +1127,7 @@ void leave_team(const alliance::TrustedProfile& profile)
 
 void team_actions(const alliance::TrustedProfile& profile, const std::string& team_id)
 {
+    const auto actor=current_session().profile.account_id;
     while(!current_session().token.empty()) {
         account::Request input;
         input.operation = "team_detail";
@@ -1083,17 +1139,15 @@ void team_actions(const alliance::TrustedProfile& profile, const std::string& te
         for(const auto& member : team.members) {
             if(member.id == current_session().profile.account_id) is_member = true;
         }
-        std::vector<std::string> actions{"View roster"};
-        if(!is_member) actions.push_back("Apply to join");
-        const int choice = select(team.name,
-            "Area: " + team.area_name + "\nMembers: " + std::to_string(team.members.size()) +
-            "/8\nThe captain decides which applications to approve.", actions);
-        if(choice < 0) return;
-        if(choice == 0) { message(team_text(team)); continue; }
-        if(choice != 1 || is_member) continue;
-        if(select("Confirm application", "Apply to join " + team.name + " in " + team.area_name +
-                  "?\nTeam ID: " + team.id + "\nThis sends an application; it does not immediately join the team.",
-                  {"Send application"}) != 0) return;
+        auto view=team_roster_view(team,actor);
+        view.actions={{"Apply to join",!is_member&&team.members.size()<static_cast<std::size_t>(team.capacity)},{"Refresh"}};
+        const auto picked=show_battle_view(view);
+        if(picked.action<0||current_session().token.empty()||current_session().profile.account_id!=actor)return;
+        if(picked.action!=0||is_member||team.members.size()>=static_cast<std::size_t>(team.capacity))continue;
+        auto confirmation=team_roster_view(team,actor);confirmation.title="Confirm application";
+        confirmation.subtitle="Send an application to "+team.name+"? Its captain must approve before you join.";
+        confirmation.actions={{"Send application"}};
+        if(show_battle_view(confirmation).action!=0||current_session().token.empty()||current_session().profile.account_id!=actor)return;
         account::Request apply;
         apply.operation = "apply_team";
         apply.team_id = team.id;
@@ -1215,34 +1269,23 @@ void review_applications(const alliance::TrustedProfile& profile)
 
 void browse_teams(const alliance::TrustedProfile& profile, const account::Area& area)
 {
-    std::vector<std::string> cursors{std::string{}};
+    const auto actor=current_session().profile.account_id;
+    std::vector<std::string> cursors{std::string{}};int focused=0;
     while(!current_session().token.empty()) {
-        account::Request input;
-        input.operation = "teams";
-        input.area_id = area.id;
-        input.after = cursors.back();
-        account::Reply output;
-        if(!team_request(profile, input, "Loading teams…", output)) return;
-        std::vector<std::string> rows;
-        for(const auto& team : output.teams) {
-            rows.push_back(team.name + " — team level " + std::to_string(team.level) +
-                           ", " + std::to_string(team.member_count) + "/8 members");
-        }
-        const int previous = cursors.size() > 1 ? static_cast<int>(rows.size()) : -1;
-        if(previous >= 0) rows.push_back("Previous page");
-        const int more = output.next.empty() ? -1 : static_cast<int>(rows.size());
-        if(more >= 0) rows.push_back("More teams");
-        if(rows.empty()) {
-            message("There are no active teams in " + area.name + " yet.");
-            return;
-        }
-        const int choice = select("Teams in " + area.name,
-            "Open a team to view its captain and leaders.", rows);
-        if(choice < 0) return;
-        if(choice == previous) { cursors.pop_back(); continue; }
-        if(choice == more) { cursors.push_back(output.next); continue; }
-        if(static_cast<std::size_t>(choice) >= output.teams.size()) continue;
-        team_actions(profile, output.teams[choice].id);
+        account::Request input;input.operation="teams";input.area_id=area.id;input.after=cursors.back();account::Reply output;
+        if(!team_request(profile,input,"Loading teams…",output))return;
+        BattleView view;view.title="Teams in "+area.name;view.subtitle="Preview a team, then open its current roster before applying.";
+        for(const auto& team:output.teams)view.rows.push_back(team_summary_row(team));
+        if(output.teams.empty())view.rows.push_back({"No teams on this page","Try another page or create a team",
+            "New teams appear here after their captain creates them in this area.","icons/circlet_winged.png",{}});
+        view.selected=focused;
+        view.actions={{"Open team",!output.teams.empty(),true},{"Previous page",cursors.size()>1},{"More teams",!output.next.empty()},{"Refresh"}};
+        const auto picked=show_battle_view(view);
+        if(picked.action<0||current_session().token.empty()||current_session().profile.account_id!=actor)return;
+        focused=std::max(0,picked.row);
+        if(picked.action==1&&cursors.size()>1){cursors.pop_back();focused=0;continue;}
+        if(picked.action==2&&!output.next.empty()){cursors.push_back(output.next);focused=0;continue;}
+        if(picked.action==0&&picked.row>=0&&static_cast<std::size_t>(picked.row)<output.teams.size())team_actions(profile,output.teams[picked.row].id);
     }
 }
 
@@ -1310,7 +1353,7 @@ void create_team(const alliance::TrustedProfile& profile)
     }
     if(select("Confirm new team", "Team: " + input.name + "\nArea: " + area.name +
               "\n\nYou will become captain. A team can have up to 8 members.\n"
-              "Other players can apply to join your team. Shared team battles will follow later.", {"Create this team"}) != 0) return;
+              "Other players can apply to join your team. Captains can plan shared battles with teams in the same area.", {"Create this team"}) != 0) return;
     input.token = current_session().token;
     account::Reply output;
     if(!request(profile, input, "Creating your team…", output)) {
@@ -1327,7 +1370,8 @@ void create_team(const alliance::TrustedProfile& profile)
         }
         return;
     }
-    if(output.team) message("Your team was created. You are its captain.\n\n" + team_text(*output.team));
+    if(output.team){auto view=team_roster_view(*output.team,current_session().profile.account_id);
+        view.subtitle="Your team was created. You are its captain.";show_battle_view(view);}
 }
 
 // Selection is local until the final proposal confirmation. The order of
@@ -1341,34 +1385,32 @@ bool choose_battle_lineup(const account::Team& team, const std::vector<int>& sid
         message(team.name + " does not have enough members for this map.");
         return false;
     }
+    const auto actor=current_session().profile.account_id;
+    int focused=0;
     for(;;) {
-        std::vector<std::string> rows;
-        for(const auto& member : team.members) {
-            std::string prefix;
-            for(std::size_t i = 0; i < selected.size(); ++i) {
-                if(selected[i] == member.id) prefix = "[Side " + std::to_string(sides[i]) + "] ";
+        BattleView view;view.title="Choose lineup — "+team.name;
+        view.subtitle="Selected "+std::to_string(selected.size())+"/"+std::to_string(sides.size())+
+            " players. Selection order assigns the map sides. Use the lineup when it is full.";
+        for(const auto& member:team.members) {
+            auto row=team_member_row(member,team.captain_id,actor);
+            for(std::size_t i=0;i<selected.size();++i)if(selected[i]==member.id) {
+                row.title="Side "+std::to_string(sides[i])+"  •  "+row.title;
+                row.subtitle="Selected  •  "+row.subtitle;
             }
-            rows.push_back(prefix + member.username + " — " + std::to_string(member.hero_count) + " heroes");
+            view.rows.push_back(std::move(row));
         }
-        const int use = selected.size() == sides.size() ? static_cast<int>(rows.size()) : -1;
-        if(use >= 0) rows.push_back("Use this lineup");
-        const int choice = select_change("Choose lineup — " + team.name,
-            "Selected " + std::to_string(selected.size()) + "/" + std::to_string(sides.size()) +
-            ". Open a player to select or remove them.\n"
-            "Selection order assigns the map sides shown beside each selected player.\n"
-            "The captain may select any current members, including themselves.", rows);
-        if(choice < 0) return false;
-        if(choice == use) return true;
-        if(static_cast<std::size_t>(choice) >= team.members.size()) continue;
-        const auto& id = team.members[choice].id;
-        bool removed = false;
-        for(auto it = selected.begin(); it != selected.end(); ++it) {
-            if(*it == id) { selected.erase(it); removed = true; break; }
-        }
-        if(removed) continue;
-        if(selected.size() >= sides.size()) {
-            message("This lineup is full. Remove a selected player before choosing another.");
-            continue;
+        view.selected=focused;
+        view.actions={{"Select / remove",true,true},{"Use this lineup",selected.size()==sides.size()}};
+        const auto picked=show_battle_view(view);
+        if(picked.action<0||current_session().token.empty()||current_session().profile.account_id!=actor)return false;
+        if(picked.action==1&&selected.size()==sides.size())return true;
+        if(picked.action!=0||picked.row<0||static_cast<std::size_t>(picked.row)>=team.members.size())continue;
+        focused=picked.row;
+        const auto& id=team.members[picked.row].id;
+        const auto found=std::find(selected.begin(),selected.end(),id);
+        if(found!=selected.end()){selected.erase(found);continue;}
+        if(selected.size()>=sides.size()) {
+            message("This lineup is full. Remove a selected player before choosing another.");continue;
         }
         selected.push_back(id);
     }
@@ -1651,6 +1693,7 @@ bool battle_mutation(const alliance::TrustedProfile& profile, account::Request i
 void battle_detail(const alliance::TrustedProfile& profile, const std::string& battle_id,
                    std::string confirmed_change = {})
 {
+    int selected_row=0;
     while(!current_session().token.empty()) {
         account::Request input;
         input.operation = "battle_detail";
@@ -1670,7 +1713,7 @@ void battle_detail(const alliance::TrustedProfile& profile, const std::string& b
             if(team.captain_id == actor) { captain = true; approved = team.approved; }
             for(const auto& player : team.players) {all_ready=all_ready&&player.ready; if(player.id == actor) { selected = true; hero_selected = player.selection_present; ready = player.ready; }}
         }
-        std::vector<std::string> actions{"View fixed lineups", "Refresh plan"};
+        std::vector<std::string> actions{"Refresh plan"};
         const int practice = can_practice_plan(battle, current_session().profile)
             ? static_cast<int>(actions.size()) : -1;
         if(practice >= 0) actions.push_back("Practice this plan");
@@ -1711,26 +1754,15 @@ void battle_detail(const alliance::TrustedProfile& profile, const std::string& b
             : draft && battle.validity != "valid"
             ? "This draft is not eligible for a shared battle. Captain approval and saved readiness are inactive."
             : "Both captains must approve the saved lineups before selected players can become ready.";
-        const int choice = select_change("Battle plan", battle.teams[0].name + " vs " + battle.teams[1].name +
-            "\nBattle plan ID: " + battle.id +
-            "\n" + battle.map.name + " — " + battle.state + "\n" + battle_validity_text(battle.validity) +
-            "\n" + consent + "\n" + practice_availability_text(battle, current_session().profile) + (practice >= 0
-                ? "\nPractice this plan lets you choose My side, Command my team or Local hotseat, plus local game settings. No account rewards are awarded." : ""), actions);
-        if(choice < 0) return;
-        if(choice == 0) {
-            // Another player may have changed membership, consent or state
-            // while the action selector was open. Never display its old copy
-            // as the newly opened detail, even if this read fails.
-            account::Reply latest;
-            if(!team_request(profile, input, "Refreshing the fixed lineups…", latest)) return;
-            if(!latest.battle) {
-                message("The latest fixed lineups could not be loaded. Open My battle plans to try viewing them again.");
-                return;
-            }
-            message(battle_text(*latest.battle));
-            continue;
-        }
-        if(choice == 1) continue;
+        auto view=team_plan_view(battle,actor,battle_validity_text(battle.validity),
+            consent+"\n\n"+practice_availability_text(battle,current_session().profile));
+        for(const auto& label:actions)view.actions.push_back({label});
+        view.selected=selected_row;
+        const auto picked=show_battle_view(view);
+        const int choice=picked.action;
+        if(choice<0||!same_extension_actor(actor))return;
+        selected_row=std::max(0,picked.row);
+        if(choice==0)continue; // Reload the server snapshot, including both visible lineups.
         if(choice==join||choice==upload) {join_shared_battle(profile,battle,choice==upload);if(shared_pending())return;continue;}
         if(choice==download) {download_shared_replay(profile,battle);if(shared_pending())return;continue;}
         if(choice==replay) {
@@ -1791,12 +1823,15 @@ void battle_detail(const alliance::TrustedProfile& profile, const std::string& b
             affirmative = "Cancel this draft plan";
             success = "The battle plan was cancelled. No battle was started.";
         } else continue;
-        if(select_change(title, battle_text(battle) + "\n\n" + explanation, {affirmative}) != 0) return;
+        auto confirmation=team_plan_view(battle,actor,battle_validity_text(battle.validity),explanation);
+        confirmation.title=title;confirmation.subtitle=explanation;confirmation.actions={{affirmative}};
+        if(show_battle_view(confirmation).action!=0||!same_extension_actor(actor))return;
         account::Battle confirmed;
         if(!battle_mutation(profile, mutation, "Saving the battle plan change…", confirmed)) return;
         // The acknowledgement contains the confirmed snapshot. Show it before
         // another read so a later read failure cannot erase the saved result.
-        message(success + "\n\n" + battle_text(confirmed));
+        auto saved_view=team_plan_view(confirmed,actor,battle_validity_text(confirmed.validity),success);
+        saved_view.subtitle=success;show_battle_view(saved_view);
         confirmed_change = success;
     }
 }
@@ -1804,71 +1839,67 @@ void battle_detail(const alliance::TrustedProfile& profile, const std::string& b
 void my_battles(const alliance::TrustedProfile& profile)
 {
     std::vector<std::string> cursors{std::string{}};
+    int selected=0;
     while(!current_session().token.empty()) {
-        account::Request input;
-        input.operation = "my_battles";
-        input.after = cursors.back();
+        const auto actor=current_session().profile.account_id;
+        account::Request input;input.operation="my_battles";input.after=cursors.back();
         account::Reply output;
-        if(!team_request(profile, input, "Loading your battle plans…", output)) return;
-        std::vector<std::string> rows;
-        for(const auto& battle : output.battles) rows.push_back(battle.teams[0].name + " vs " +
-            battle.teams[1].name + " — " + battle.state + " — " + battle.created_at + " — " + battle.id);
-        const int previous = cursors.size() > 1 ? static_cast<int>(rows.size()) : -1;
-        if(previous >= 0) rows.push_back("Previous page");
-        const int more = output.next.empty() ? -1 : static_cast<int>(rows.size());
-        if(more >= 0) rows.push_back("More battle plans");
-        if(rows.empty()) { message("There are no battle plans available to your player yet."); return; }
-        const int choice = select("My battle plans", "Open a plan to inspect its saved map, fixed lineups and readiness.\n"
-            "Plans are listed by their ID, with up to 20 on each page.", rows);
-        if(choice < 0) return;
-        if(choice == previous) { cursors.pop_back(); continue; }
-        if(choice == more) { cursors.push_back(output.next); continue; }
-        if(static_cast<std::size_t>(choice) < output.battles.size()) battle_detail(profile, output.battles[choice].id);
-        if(practice_pending() || progression_pending() || shared_pending() || replay_pending()) return;
+        if(!team_request(profile,input,"Loading your battle plans…",output))return;
+        BattleView view;view.title="My battle plans";
+        view.subtitle="Select a battle to review its map, both teams and readiness.";view.selected=selected;
+        for(const auto& battle:output.battles) {
+            view.rows.push_back({battle.teams[0].name+" vs "+battle.teams[1].name,
+                battle.state+"  •  "+battle.created_at,
+                "State: "+battle.state+"\nMap: "+battle.map_id+"\n\nOpen this plan for the map preview, fixed lineups and available actions.\n\nBattle plan ID: "+battle.id,
+                "icons/crossed_sword_and_hammer.png",{}});
+        }
+        view.actions={{"Open plan",!output.battles.empty(),true},{"Previous page",cursors.size()>1},
+            {"More battle plans",!output.next.empty()},{"Refresh"}};
+        if(view.rows.empty())view.rows.push_back({"No battle plans yet","Create a proposal as captain",
+            "Your team's battle plans will appear here. Return to Teams and choose New battle to propose a map and both lineups.","icons/crossed_sword_and_hammer.png",{}});
+        const auto picked=show_battle_view(view);
+        if(picked.action<0||!same_extension_actor(actor))return;
+        selected=std::max(0,picked.row);
+        if(picked.action==1&&cursors.size()>1){cursors.pop_back();selected=0;continue;}
+        if(picked.action==2&&!output.next.empty()){cursors.push_back(output.next);selected=0;continue;}
+        if(picked.action==0&&picked.row>=0&&static_cast<std::size_t>(picked.row)<output.battles.size())
+            battle_detail(profile,output.battles[picked.row].id);
+        if(practice_pending()||progression_pending()||shared_pending()||replay_pending())return;
     }
 }
 
 bool choose_battle_opponent(const alliance::TrustedProfile& profile, const account::Team& own,
                             const account::BattleMap& map, account::Team& opponent)
 {
+    const auto actor=current_session().profile.account_id;
     std::vector<std::string> cursors{std::string{}};
     while(!current_session().token.empty()) {
-        account::Request input;
-        input.operation = "teams";
-        input.area_id = own.area_id;
-        input.after = cursors.back();
+        account::Request input;input.operation="teams";input.area_id = own.area_id;input.after=cursors.back();
         account::Reply output;
-        if(!team_request(profile, input, "Loading teams in your area…", output)) return false;
+        if(!team_request(profile,input,"Loading possible opponents…",output))return false;
         std::vector<account::TeamSummary> entries;
-        std::vector<std::string> rows;
-        for(const auto& team : output.teams) {
-            if(team.id == own.id || team.member_count < map.size) continue;
-            entries.push_back(team);
-            rows.push_back(team.name + " — " + std::to_string(team.member_count) + "/8 members");
+        BattleView view;view.title="Choose opponent";
+        view.subtitle=own.area_name+"  •  "+map.name+"  •  At least "+std::to_string(map.size)+" members per team";
+        for(const auto& team:output.teams) {
+            if(team.id == own.id || team.member_count < map.size)continue;
+            entries.push_back(team);view.rows.push_back(team_summary_row(team));
         }
-        const int previous = cursors.size() > 1 ? static_cast<int>(rows.size()) : -1;
-        if(previous >= 0) rows.push_back("Previous page");
-        const int more = output.next.empty() ? -1 : static_cast<int>(rows.size());
-        if(more >= 0) rows.push_back("More teams");
-        if(rows.empty()) { message("There is no other team with enough members for this map in " + own.area_name + "."); return false; }
-        const int choice = select_change("Choose opponent", "Area: " + own.area_name + "\nMap: " + map.name +
-            "\nOnly other teams with at least " + std::to_string(map.size) + " members are shown.", rows);
-        if(choice < 0) return false;
-        if(choice == previous) { cursors.pop_back(); continue; }
-        if(choice == more) { cursors.push_back(output.next); continue; }
-        if(static_cast<std::size_t>(choice) >= entries.size()) continue;
-        account::Request detail;
-        detail.operation = "team_detail";
-        detail.team_id = entries[choice].id;
+        if(entries.empty())view.rows.push_back({"No eligible opponents on this page","Browse another page or return",
+            "An opponent must be another team in your area with enough current members for this map.","icons/circlet_winged.png",{}});
+        view.actions={{"Choose team",!entries.empty(),true},{"Previous page",cursors.size()>1},{"More teams",!output.next.empty()}};
+        const auto picked=show_battle_view(view);
+        if(picked.action<0||!same_extension_actor(actor))return false;
+        if(picked.action==1&&cursors.size()>1){cursors.pop_back();continue;}
+        if(picked.action==2&&!output.next.empty()){cursors.push_back(output.next);continue;}
+        if(picked.action!=0||picked.row<0||static_cast<std::size_t>(picked.row)>=entries.size())continue;
+        account::Request detail;detail.operation="team_detail";detail.team_id=entries[picked.row].id;
         account::Reply loaded;
-        if(!team_request(profile, detail, "Loading the opponent's current roster…", loaded) || !loaded.team) return false;
-        if(loaded.team->area_id != own.area_id || loaded.team->id == own.id ||
-           loaded.team->members.size() < static_cast<std::size_t>(map.size)) {
-            message("That team's area or roster changed. Open Propose battle again to load current teams.");
-            return false;
+        if(!team_request(profile,detail,"Loading the opponent's current roster…",loaded)||!loaded.team)return false;
+        if(loaded.team->area_id != own.area_id||loaded.team->id==own.id||
+           loaded.team->members.size()<static_cast<std::size_t>(map.size)) {
+            message("That team's area or roster changed. Open New battle again to load current teams.");return false;
         }
-        opponent = std::move(*loaded.team);
-        return true;
+        opponent=std::move(*loaded.team);return true;
     }
     return false;
 }
@@ -1886,13 +1917,15 @@ void propose_battle(const alliance::TrustedProfile& profile)
     maps.area_id = own.area_id;
     account::Reply available;
     if(!team_request(profile, maps, "Loading the area's approved battle maps…", available)) return;
-    std::vector<std::string> rows;
-    for(const auto& map : available.maps) rows.push_back(map.name + " — " + std::to_string(map.size) + "v" + std::to_string(map.size));
-    if(rows.empty()) { message("No battle maps are enabled in this team's area."); return; }
-    const int choice = select_change("Choose battle map", "Area: " + own.area_name +
-        "\nChoose a fixed lineup of 2, 3 or 4 players from each team. Saving a plan does not start a game.", rows);
-    if(choice < 0 || static_cast<std::size_t>(choice) >= available.maps.size()) return;
-    const auto& map = available.maps[choice];
+    const auto actor=current_session().profile.account_id;
+    BattleView map_view;map_view.title="Choose battle map";
+    map_view.subtitle=own.area_name+"  •  Choose a fixed 2v2, 3v3 or 4v4 lineup";
+    for(const auto& map:available.maps)map_view.rows.push_back(team_map_row(map));
+    if(map_view.rows.empty()){message("No battle maps are enabled in this team's area.");return;}
+    map_view.selected_action=true;map_view.actions={{"Choose map"}};
+    const auto picked=show_battle_view(map_view);
+    if(picked.action!=0||!same_extension_actor(actor)||picked.row<0||static_cast<std::size_t>(picked.row)>=available.maps.size())return;
+    const auto& map=available.maps[picked.row];
     if(own.members.size() < static_cast<std::size_t>(map.size)) {
         message("Your team needs at least " + std::to_string(map.size) + " members for this map.");
         return;
@@ -1907,66 +1940,94 @@ void propose_battle(const alliance::TrustedProfile& profile)
     proposal.lineups = {{own.id, {}}, {opponent.id, {}}};
     if(!choose_battle_lineup(own, map.sides[0], proposal.lineups[0].account_ids) ||
        !choose_battle_lineup(opponent, map.sides[1], proposal.lineups[1].account_ids)) return;
-    std::string preview = "Map: " + map.name + " (" + std::to_string(map.size) + "v" + std::to_string(map.size) + ")";
-    const std::vector<const account::Team*> teams{&own, &opponent};
-    for(std::size_t i = 0; i < teams.size(); ++i) {
-        preview += "\n\nTeam: " + teams[i]->name + "\nTeam ID: " + teams[i]->id;
-        for(std::size_t j = 0; j < proposal.lineups[i].account_ids.size(); ++j)
-            for(const auto& member : teams[i]->members) if(member.id == proposal.lineups[i].account_ids[j])
-                preview += "\nSide " + std::to_string(map.sides[i][j]) + ": " + member.username + " — " +
-                    std::to_string(member.hero_count) + " heroes";
+    BattleView proposal_view;proposal_view.title="Confirm battle proposal";
+    proposal_view.subtitle="Both captains must then review and explicitly approve this map and both fixed lineups.";
+    proposal_view.rows.push_back(team_map_row(map));
+    const std::vector<const account::Team*> chosen_teams{&own,&opponent};
+    for(std::size_t i=0;i<chosen_teams.size();++i) {
+        for(std::size_t j=0;j<proposal.lineups[i].account_ids.size();++j)
+            for(const auto& member:chosen_teams[i]->members)if(member.id==proposal.lineups[i].account_ids[j]) {
+                auto row=team_member_row(member,chosen_teams[i]->captain_id,actor);
+                row.title="Side "+std::to_string(map.sides[i][j])+"  •  "+member.username;
+                row.subtitle=chosen_teams[i]->name+"  •  "+row.subtitle;
+                proposal_view.rows.push_back(std::move(row));
+            }
     }
-    preview += "\n\nSave this fixed battle plan? Both captains must then review and explicitly approve the saved map and lineups. "
-        "This does not start combat or award experience or rating.";
-    if(select_change("Confirm battle proposal", preview, {"Send battle proposal"}) != 0) return;
+    proposal_view.actions={{"Send battle proposal"}};
+    if(show_battle_view(proposal_view).action!=0||!same_extension_actor(actor))return;
     account::Battle confirmed;
     if(!battle_mutation(profile, proposal, "Saving your battle proposal…", confirmed)) return;
     if(confirmed.area_id != own.area_id) {
         message("The saved proposal did not match the selected area. Open My battle plans to check it before making another change.");
         return;
     }
-    message("Battle plan saved. Both captains must review and explicitly approve its saved map and fixed lineups.\n\n" + battle_text(confirmed));
     battle_detail(profile, confirmed.id, "Battle plan saved.");
 }
 
 void battle_plans(const alliance::TrustedProfile& profile)
 {
-    while(!current_session().token.empty()) {
-        const int choice = select("Battle plans", "Prepare maps and fixed lineups with another team in your area.\n"
-            "Both captains approve, then selected players set their readiness.\n"
-            "For a shared battle, every selected player must be Ready and join their fixed seat. "
-            "For personal practice, a selected player needs a valid draft, both captain approvals and only their own Ready. "
-            "Choose Set myself ready first, then choose Practice this plan separately. "
-            "Control your side, command your whole team against the computer, or play all sides locally in hotseat. "
-            "Cancelled and completed plans cannot start practice. "
-            "Practice does not change the plan or award account experience or rating.", {"My battle plans", "Propose battle"});
-        if(choice < 0) return;
-        if(choice == 0) my_battles(profile);
-        if(choice == 1) propose_battle(profile);
-        if(practice_pending() || progression_pending() || shared_pending() || replay_pending()) return;
+    my_battles(profile);
+}
+
+void team_applications_hub(const alliance::TrustedProfile& profile,bool captain)
+{
+    const auto actor=current_session().profile.account_id;
+    for(;;) {
+        BattleView view;view.title="Team applications";view.subtitle="Membership requests and captain decisions";
+        view.rows={{"My applications","Pending requests to join teams","Track or withdraw your pending applications. A captain must approve before you join.","icons/letter_and_ale.png",{}},
+            {"Application decisions","Approved and rejected requests","Read and acknowledge retained captain decisions. Confirming a decision marks only that one as read.","icons/letter_and_ale.png",{}},
+            {"Captain inbox",captain?"Review requests for your team":"Only your current captain can review","Review each applicant, then explicitly approve or reject their request.","icons/circlet_winged.png",{}}};
+        view.actions={{"My applications"},{"Decisions"},{"Captain inbox",captain}};
+        const auto choice=show_battle_view(view).action;
+        if(choice<0||!same_extension_actor(actor))return;
+        if(choice==0)my_applications(profile);
+        else if(choice==1)application_decisions(profile,false);
+        else if(choice==2&&captain)review_applications(profile);
     }
+}
+
+void team_management_hub(const alliance::TrustedProfile& profile,const account::Team& team)
+{
+    const auto actor=current_session().profile.account_id;
+    auto view=team_roster_view(team,actor);view.title="Manage team — "+team.name;
+    view.subtitle="Changes require a separate confirmation and are checked against the current roster.";
+    view.actions={{"Transfer captain",team.captain_id==actor&&team.members.size()>1},{"Leave team"}};
+    const auto action=show_battle_view(view).action;
+    if(!same_extension_actor(actor))return;
+    if(action==0)transfer_captain(profile);
+    else if(action==1)leave_team(profile);
 }
 
 void teams(const alliance::TrustedProfile& profile)
 {
+    int selected=0;
     while(!current_session().token.empty()) {
-        const int action = select("Teams",
-            "Build your team in an area. Apply to join a team, or review applications as captain.",
-            {"Browse areas and teams", "Create team", "My team", "My applications", "Review applications", "Application decisions",
-             "Transfer captain", "Leave team", "Area rankings", "Battle plans", "Captain orders"});
-        if(action < 0) return;
-        if(action == 0) browse_areas(profile);
-        else if(action == 1) create_team(profile);
-        else if(action == 2) my_team(profile);
-        else if(action == 3) my_applications(profile);
-        else if(action == 4) review_applications(profile);
-        else if(action == 5) application_decisions(profile, false);
-        else if(action == 6) transfer_captain(profile);
-        else if(action == 7) leave_team(profile);
-        else if(action == 8) area_rankings(profile);
-        else if(action == 9) battle_plans(profile);
-        else if(action == 10) captain_orders(profile);
-        if(practice_pending() || progression_pending() || shared_pending() || replay_pending()) return;
+        const auto actor=current_session().profile.account_id;
+        account::Request input;input.operation="my_team";account::Reply own;
+        if(!team_request(profile,input,"Loading Teams…",own))return;
+        const bool captain=own.team&&own.team->captain_id==actor;
+        BattleView view;
+        if(own.team){view=team_roster_view(*own.team,actor);view.title="Teams — "+own.team->name;}
+        else {
+            view.title="Teams";view.subtitle="Find your team or become a captain";
+            view.rows={{"Find your team","Browse teams by area","Apply to a team and wait for its captain to approve. Each team can have up to 8 members.","icons/helmet_bascinet.png",{}},
+                {"Create a team","Choose an area and a name","Become captain. Invite players to apply, post orders, and propose 2v2, 3v3 or 4v4 battles with other teams in the same area.","icons/circlet_winged.png",{}},
+                {"Shared team battles","Fixed lineups and owned heroes","Captains agree on the map and players. Each player chooses a hero before Ready. Practice is local; a shared battle requires every fixed seat.","icons/crossed_sword_and_hammer.png",{}}};
+        }
+        view.selected=selected;
+        view.actions={{"Battle plans"},{"New battle",captain},{"Captain orders",bool(own.team)},
+            {"Applications"},{"Find teams"},{"Area rankings"},{own.team?"Manage team":"Create team"},{"Refresh"}};
+        const auto picked=show_battle_view(view);
+        if(picked.action<0||!same_extension_actor(actor))return;
+        selected=std::max(0,picked.row);
+        if(picked.action==0)battle_plans(profile);
+        else if(picked.action==1&&captain)propose_battle(profile);
+        else if(picked.action==2&&own.team)captain_orders(profile);
+        else if(picked.action==3)team_applications_hub(profile,captain);
+        else if(picked.action==4)browse_areas(profile);
+        else if(picked.action==5)area_rankings(profile);
+        else if(picked.action==6){if(own.team)team_management_hub(profile,*own.team);else create_team(profile);}
+        if(practice_pending()||progression_pending()||shared_pending()||replay_pending())return;
     }
 }
 

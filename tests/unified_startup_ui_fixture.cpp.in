@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "alliance_game/account_ui.hpp"
+#include "alliance_game/battle_ui.hpp"
+#include "alliance_game/hero_catalog.hpp"
 #include <algorithm>
 #include <array>
 #include <cstdlib>
@@ -87,8 +89,10 @@ int select(const std::string& title,const std::string&,const std::vector<std::st
 void heroes_dialog(const alliance::TrustedProfile&){}
 void refresh(const alliance::TrustedProfile&){}
 
-struct HeroForm {std::string name;int native_level;};
-const HeroForm* find_hero_form(const std::string& hero,const std::string& form){static HeroForm spec{"Fighter",1};return hero=="konrad"&&form=="konrad_fighter"?&spec:nullptr;}
+const HeroForm* find_hero_form(const std::string& hero,const std::string& form) noexcept {static HeroForm spec{"konrad_fighter","konrad","Fighter","Rebels","Fighter",1,32,{}};return hero=="konrad"&&form=="konrad_fighter"?&spec:nullptr;}
+int scaled_hero_stat(int base,std::int64_t,int){return base;} // Gallery/scaling has a separate real-controller fixture.
+std::string battle_unit_image(const std::string&,bool){return "portraits/konrad.png";}
+BattleResult show_battle_view(const BattleView& view){menu_titles.push_back(view.title);need(!choices.empty());const auto c=choices.front();choices.pop_front();return {c.selected,c.accepted?0:-1};}
 struct AccountNetworkActivity {AccountNetworkActivity(){++foreground_depth;}~AccountNetworkActivity(){--foreground_depth;}};
 void request_session_reauthentication(const std::string& actor,const std::string& generation){reauth_requests.emplace_back(actor,generation);reauth_latched=true;}
 void clear_session_reauthentication() noexcept {++reauth_clears;reauth_latched=false;}
@@ -121,7 +125,7 @@ int main(){try{
  std::cout<<"PASS cancelled foreground verification also returns to authentication instead of exiting\n";
  reset();ready();account::Reply expired;expired.error_code="invalid_session";replies.push_back(expired);choices.push_back({false,0});need(!alliance_game::ensure_player_session());need(session.token.empty());
  std::cout<<"PASS revoked session returns to startup authentication\n";
- reset();ready();replies.push_back(ok());std::string hero,form;need(!alliance_game::choose_hero(alliance::account::read_public_profile("x"),hero,form));need(hero.empty()&&form.empty());need(menu_titles.empty());
+ reset();ready();replies.push_back(ok());choices.push_back({false,0});std::string hero,form;need(!alliance_game::choose_hero(alliance::account::read_public_profile("x"),hero,form));need(hero.empty()&&form.empty());need(menu_titles==std::vector<std::string>{"Your heroes"});
  std::cout<<"PASS empty collection cannot choose or silently receive a starter hero\n";
  reset();ready();replies.push_back(owned());replies.push_back(owned());choices.push_back({true,0});choices.push_back({true,0});need(alliance_game::choose_hero(alliance::account::read_public_profile("x"),hero,form));need(hero=="konrad"&&form=="konrad_fighter");need(operations==std::vector<std::string>({"me","me"}));
  std::cout<<"PASS owned hero choice is bound to a fresh hero revision after both selectors\n";

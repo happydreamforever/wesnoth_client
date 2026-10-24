@@ -1,0 +1,109 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+#include "alliance_native/account_client.hpp"
+#include "alliance_game/hero_catalog.hpp"
+#include "alliance_game/battle_ui.hpp"
+#include <algorithm>
+#include <deque>
+#include <functional>
+#include <iostream>
+#include <limits>
+#include <stdexcept>
+#include <string>
+#include <vector>
+namespace account=alliance::account;
+namespace {
+void need(bool value,const char* why="assertion"){if(!value)throw std::runtime_error(why);}
+struct Session{std::string token;account::Profile profile;void clear(){token.clear();profile={};}};
+Session session;
+Session& current_session(){return session;}
+std::deque<account::Reply> replies;
+std::deque<alliance_game::BattleResult> choices;
+std::vector<alliance_game::BattleView> shown;
+std::vector<std::string> operations,messages,images;
+std::vector<std::pair<std::string,std::string>> reauth;
+std::function<void()> on_show;
+bool cancelled=false;
+void message(const std::string& text){messages.push_back(text);}
+void show_failure(const account::Reply&){message("request failed");}
+void request_session_reauthentication(const std::string& actor,const std::string& generation){reauth.emplace_back(actor,generation);}
+bool request(const alliance::TrustedProfile&,account::Request& input,const std::string&,account::Reply& output){
+ need(input.operation=="me","browsing attempted mutation");need(input.token==session.token);operations.push_back(input.operation);
+ if(cancelled){cancelled=false;return false;}
+ need(!replies.empty(),"missing reply");output=replies.front();replies.pop_front();return true;
+}
+std::vector<alliance_game::HeroForm> forms={
+ {"hero_fighter","hero","Fighter","Rebels","Fighter",1,50,{{"sword","blade","melee",15,2},{"bow","pierce","ranged",5,3}}},
+ {"hero_lord","hero","Lord","Rebels","Lord",3,80,{{"sword","blade","melee",20,4}}},
+ {"other_fighter","other","Other","Rebels","Other fighter",1,30,{{"staff","impact","melee",8,2}}}
+};
+account::Profile profile(){account::Profile p;p.account_id="player-1";p.username="Player";p.database_generation="generation-1";return p;}
+account::Hero owned(){account::Hero h;h.hero_id="hero";h.name="Hero <tag> & \"quoted\"";h.hero_level=11;h.experience=310;h.total_experience=2000;h.revision=7;h.forms={"hero_fighter","hero_lord"};return h;}
+account::Reply reply(bool with_hero=true){account::Reply r;r.ok=true;r.profile=profile();if(with_hero)r.profile.heroes={owned()};return r;}
+void reset(){session={"private-fixture-token",profile()};replies.clear();choices.clear();shown.clear();operations.clear();messages.clear();images.clear();reauth.clear();on_show={};cancelled=false;}
+void only_reads(std::size_t count){need(operations==std::vector<std::string>(count,"me"));}
+}
+namespace alliance_game {
+BattleResult show_battle_view(const BattleView& value){shown.push_back(value);if(on_show){auto callback=std::move(on_show);callback();}need(!choices.empty(),"missing UI reply");auto r=choices.front();choices.pop_front();return r;}
+std::string battle_unit_image(const std::string& unit,bool portrait){need(portrait);images.push_back(unit);return "portraits/"+unit+".png";}
+const HeroForm* find_hero_form(const std::string& hero,const std::string& id) noexcept {for(const auto& f:forms)if(f.hero_id==hero&&f.id==id)return &f;return nullptr;}
+// @FUNCTIONS@
+}
+int main(int argc,char**argv){try{
+ need(argc==2);reset();const std::string mode=argv[1];const alliance::TrustedProfile trusted{};std::string hero="unchanged-hero",form="unchanged-form";
+ using namespace alliance_game;
+ if(mode=="card"){
+  auto h=owned();auto spec=forms[0];spec.name="<b>Literal & form</b>";spec.attacks[0].name="<attack> & hit";
+  const auto card=hero_form_card(h,spec);need(card.title==spec.name);need(card.subtitle.find(h.name)!=std::string::npos);
+  need(card.detail.find("<attack> & hit  17 × 2")!=std::string::npos);need(card.detail.find("Hit points: 60")!=std::string::npos);
+  need(card.detail.find("bow  6 × 3")!=std::string::npos);need(card.progress_percent==50);need(card.progress_label.find("310")!=std::string::npos&&card.progress_label.find("2000")!=std::string::npos);
+  need(card.image=="portraits/Fighter.png");need(images==std::vector<std::string>{"Fighter"});only_reads(0);
+ }else if(mode=="progress"){
+  auto h=owned();h.experience=0;need(hero_form_card(h,forms[0]).progress_percent==0);h.experience=10000;need(hero_form_card(h,forms[0]).progress_percent==100);
+  h.hero_level=std::numeric_limits<std::int64_t>::max();h.experience=std::numeric_limits<std::int64_t>::max();auto zero=forms[0];zero.base_hitpoints=0;zero.attacks.clear();need(hero_form_card(h,zero).progress_percent==0);
+  bool rejected=false;try{hero_form_card(h,forms[0]);}catch(const std::overflow_error&){rejected=true;}need(rejected);only_reads(0);
+ }else if(mode=="collection"){
+  const auto h=owned();const auto view=hero_collection_view({h},"Hero gallery");need(view.selected_action&&view.title=="Hero gallery"&&view.rows.size()==1);need(view.rows[0].title==h.name);need(view.rows[0].detail.find("Fighter")!=std::string::npos&&view.rows[0].detail.find("Lord")!=std::string::npos);need(view.rows[0].progress_percent==50);only_reads(0);
+ }else if(mode=="empty_choose"){
+  replies={reply(false)};choices={{-1,-1}};need(!choose_hero(trusted,hero,form));need(shown.size()==1&&shown[0].actions.empty()&&shown[0].rows.size()==1);need(shown[0].rows[0].detail.find("Campaigns")!=std::string::npos);only_reads(1);
+ }else if(mode=="empty_browse"){
+  replies={reply(false)};choices={{-1,-1}};heroes_dialog(trusted);need(shown.size()==1&&shown[0].actions.empty());need(shown[0].rows[0].detail.find("Heroes unlocked: 0")!=std::string::npos);only_reads(1);
+ }else if(mode=="collection_back"){
+  replies={reply()};choices={{0,-1}};need(!choose_hero(trusted,hero,form));need(shown.size()==1);only_reads(1);
+ }else if(mode=="form_back"){
+  replies={reply()};choices={{0,0},{1,-1}};need(!choose_hero(trusted,hero,form));need(shown.size()==2&&shown[1].actions[0].label=="Use this hero");only_reads(1);
+ }else if(mode=="explicit"){
+  replies={reply(),reply()};choices={{0,0},{1,0}};need(choose_hero(trusted,hero,form));need(hero=="hero"&&form=="hero_lord");need(shown[0].actions[0].label=="Choose form");only_reads(2);
+ }else if(mode=="invalid_choice"){
+  for(const auto invalid:std::vector<BattleResult>{{-1,0},{9,0},{0,1},{0,-1}}){reset();replies={reply()};choices={invalid};need(!choose_hero(trusted,hero,form));only_reads(1);}
+  for(const auto invalid:std::vector<BattleResult>{{-1,0},{9,0},{0,1}}){reset();replies={reply()};choices={{0,0},invalid};need(!choose_hero(trusted,hero,form));only_reads(1);}
+ }else if(mode=="initial_failure"){
+  cancelled=true;need(!choose_hero(trusted,hero,form));need(shown.empty());only_reads(1);
+  reset();auto failed=reply();failed.ok=false;replies={failed};need(!choose_hero(trusted,hero,form));need(shown.empty()&&!messages.empty());only_reads(1);
+ }else if(mode=="final_failure"){
+  auto failed=reply();failed.ok=false;replies={reply(),failed};choices={{0,0},{0,0}};need(!choose_hero(trusted,hero,form));only_reads(2);
+ }else if(mode=="identity_race"){
+  for(bool generation:{false,true}){reset();auto latest=reply();if(generation)latest.profile.database_generation="changed";else latest.profile.account_id="changed";replies={reply(),latest};choices={{0,0},{0,0}};need(!choose_hero(trusted,hero,form));need(session.token.empty()&&reauth.size()==1);only_reads(2);}
+ }else if(mode=="collection_modal_race"||mode=="form_modal_race"||mode=="browse_collection_modal_race"||mode=="browse_form_modal_race"){
+  const bool browse=mode.find("browse_")==0;
+  const bool collection=mode.find("collection_modal_race")!=std::string::npos;
+  for(int change=0;change<4;++change){
+   reset();replies={reply()};choices={{0,0},{0,0}};
+   const auto mutate=[change]{if(change==0)session.profile.account_id="replacement-player";else if(change==1)session.profile.database_generation="replacement-database";else if(change==2)session.token="replacement-session";else session.clear();};
+   if(collection)on_show=mutate;else on_show=[mutate]{on_show=mutate;};
+   if(browse)heroes_dialog(trusted);else need(!choose_hero(trusted,hero,form));only_reads(1);
+   need(shown.size()==(collection?1u:2u),"stale modal opened another view");
+   need(reauth.empty(),"stale chooser changed replacement session");
+   if(change==0)need(session.profile.account_id=="replacement-player");else if(change==1)need(session.profile.database_generation=="replacement-database");else if(change==2)need(session.token=="replacement-session");else need(session.token.empty());
+  }
+ }else if(mode=="revision_race"||mode=="form_race"||mode=="hero_race"){
+  auto latest=reply();if(mode=="revision_race")latest.profile.heroes[0].revision++;else if(mode=="form_race")latest.profile.heroes[0].forms={"hero_lord"};else latest.profile.heroes.clear();
+  replies={reply(),latest};choices={{0,0},{0,0}};need(!choose_hero(trusted,hero,form));need(messages.back().find("changed while")!=std::string::npos);only_reads(2);
+ }else if(mode=="browse_refresh"){
+  auto first=reply();auto other=owned();other.hero_id="other";other.name="Other";other.forms={"other_fighter"};first.profile.heroes.push_back(other);replies={first,first};choices={{1,0},{0,-1},{1,-1}};
+  heroes_dialog(trusted);need(shown.size()==3&&shown[1].actions.empty()&&shown[2].selected==1);need(session.profile.heroes[1].revision==other.revision);only_reads(2);
+ }else if(mode=="invalid_catalog"){
+  for(int kind=0;kind<3;++kind){auto h=owned();if(kind==0)h.forms.clear();else if(kind==1)h.forms[0]="unknown";else h.forms[1]="unknown";bool refused=false;try{hero_collection_view({h},"test");}catch(const std::runtime_error&){refused=true;}need(refused);}only_reads(0);
+ }else throw std::runtime_error("unknown test");
+ if(mode!="explicit")need(hero=="unchanged-hero"&&form=="unchanged-form","selection changed without confirmation");
+ std::cout<<"PASS hero gallery "<<mode<<'\n';return 0;
+ }catch(const std::exception&error){std::cerr<<"FAIL hero gallery: "<<error.what()<<'\n';return 1;}}

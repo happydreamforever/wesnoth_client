@@ -73,7 +73,7 @@ class PracticeUiBehavior(unittest.TestCase):
             includes=catalogue_source(ROOT,catalogue)
             command = [compiler, "-std=c++17", "-Wall", "-Wextra", "-Werror", "-O0", "-g",
                        "-fsanitize=address,undefined", "-fno-omit-frame-pointer", "-I" + str(ROOT),
-                       str(cpp), str(policy), str(catalogue), *includes, "-o", str(binary)]
+                       str(cpp), str(policy), str(catalogue), str(ROOT / "alliance_game/team_views.cpp"), *includes, "-o", str(binary)]
             built = subprocess.run(command, capture_output=True, text=True, timeout=120)
             self.assertEqual(built.returncode, 0, built.stdout + built.stderr)
             ran = subprocess.run([str(binary)], capture_output=True, text=True, timeout=30)

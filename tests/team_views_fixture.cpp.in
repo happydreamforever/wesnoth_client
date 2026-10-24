@@ -1,0 +1,61 @@
+#include "alliance_game/team_views.hpp"
+#include "alliance_game/hero_catalog.hpp"
+#include <algorithm>
+#include <deque>
+#include <iostream>
+#include <stdexcept>
+#include <string>
+namespace account=alliance::account;
+void require(bool value,const std::string& why){if(!value)throw std::runtime_error(why);}
+bool has(const std::string& text,const std::string& term){return text.find(term)!=std::string::npos;}
+namespace alliance_game {
+std::string battle_unit_image(const std::string& type,bool){return "portrait/"+type;}
+std::string battle_map_preview(const std::string& id){return "map/"+id;}
+struct Session {std::string token="token";account::Profile profile;} session;
+Session& current_session(){return session;}
+struct Pick {int row,action;bool actor_change=false;};
+std::deque<Pick> picks;std::vector<BattleView> seen;std::vector<std::string> notices;
+void message(const std::string& text){notices.push_back(text);}
+BattleResult show_battle_view(const BattleView& view){
+    require(!picks.empty(),"Unexpected lineup modal");auto pick=picks.front();picks.pop_front();seen.push_back(view);
+    if(pick.actor_change)session.profile.account_id="different";
+    if(pick.action>=0)require(view.actions.at(pick.action).enabled,"Disabled action scripted");
+    return {pick.row,pick.action};
+}
+// @LINEUP@
+}
+int main(){try {
+    using namespace alliance_game;
+    account::Team team;team.name="Koichi <b>plain</b>";team.id="team-id";team.area_name="Yama";team.area_id="area-id";team.level=2;team.rating=1000;team.capacity=8;team.captain_id="p1";
+    for(int i=1;i<=8;++i)team.members.push_back({"p"+std::to_string(i),"Member "+std::to_string(i),i});
+    session.profile.account_id="p1";
+    auto roster=team_roster_view(team,"p1");
+    require(roster.rows.size()==9&&has(roster.subtitle,"8/8"),"Eight-member roster omitted");
+    require(roster.rows[1].title=="Member 1  •  You"&&has(roster.rows[1].subtitle,"Captain"),"Actor/captain identification lost");
+    require(roster.title==team.name&&has(roster.rows[0].detail,"team-id"),"Plain team name or ID lost");
+    std::cout<<"PASS eight-member roster and captain identity\n";
+    account::Battle battle;battle.id="plan-id";battle.state="draft";battle.validity="valid";battle.map={"map-id","Large map","scenario-id",4,{{1,3,5,7},{2,4,6,8}}};
+    battle.teams={{"team-a","Team A","p1",true,{}},{"team-b","Team B","p5",true,{}}};
+    const auto& form=hero_forms().front();
+    for(int i=1;i<=8;++i){account::BattlePlayer player;player.id="p"+std::to_string(i);player.username="Member "+std::to_string(i);player.side=i;player.ready=i!=8;player.selection_present=true;player.hero_id=form.hero_id;player.form_id=form.id;player.hero_level=9;battle.teams[(i-1)/4].players.push_back(player);}
+    auto plan=team_plan_view(battle,"p1","Current lineups","Practice available");
+    require(plan.rows.size()==11&&plan.rows[0].map_data=="map/scenario-id","Eight fixed seats or map preview omitted");
+    require(has(plan.rows[0].subtitle,"7/8 Ready")&&has(plan.rows[2].title,"You"),"Current status incomplete");
+    require(plan.rows[2].image=="portrait/"+form.unit_type&&has(plan.rows[2].detail,"Hero level: 9"),"Selected hero art or level wrong");
+    require(plan.rows[1].title=="Team A"&&plan.rows[6].title=="Team B","Team group order wrong");
+    std::cout<<"PASS eight-seat team groups map and selected portraits\n";
+    for(const auto state:{"cancelled","completed"}){battle.state=state;auto history=team_plan_view(battle,"p1","Current lineups","");require(has(history.rows[2].subtitle,"Saved readiness: Ready")&&has(history.rows[1].subtitle,"inactive"),"Historical consent appears active");require(battle.teams[0].players[0].ready,"History mutated");}
+    battle.state="draft";battle.validity="roster_changed";auto changed=team_plan_view(battle,"p1","Team membership changed after this plan was saved.","");require(has(changed.rows[0].detail,"Team membership changed")&&has(changed.rows[2].subtitle,"Inactive readiness"),"Membership warning omitted");
+    battle.teams[0].players[0].selection_present=false;auto missing=team_plan_view(battle,"p1","Changed","");require(missing.rows[2].image=="units/unknown-unit.png"&&has(missing.rows[2].detail,"Choose an owned hero"),"Missing hero invented");
+    std::cout<<"PASS cancelled completed changed and unselected states\n";
+    std::vector<std::string> selected;
+    picks={{0,0},{1,0},{2,0},{0,0},{2,0},{2,1}};
+    require(choose_battle_lineup(team,{1,4},selected)&&selected==std::vector<std::string>({"p2","p3"}),"Bounded selection/remove ordering changed");
+    require(picks.empty()&&notices.size()==1&&has(notices.front(),"full"),"Full lineup admitted extra player");
+    require(has(seen.back().rows[1].title,"Side 1")&&has(seen.back().rows[2].title,"Side 4"),"Reassigned side order not visible");
+    std::cout<<"PASS ordered unique lineup selection removal and capacity\n";
+    seen.clear();picks={{0,-1}};require(!choose_battle_lineup(team,{1,4},selected)&&selected.empty(),"Back accepted lineup");
+    picks={{0,0,true}};require(!choose_battle_lineup(team,{1,4},selected)&&selected.empty(),"Actor change accepted lineup");
+    std::cout<<"PASS lineup Back and changed actor preserve consent\n";
+    std::cout<<"PASS team view models and ordered lineup\n";return 0;
+}catch(const std::exception& error){std::cerr<<"FAIL "<<error.what()<<'\n';return 1;}}

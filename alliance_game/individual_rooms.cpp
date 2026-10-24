@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "alliance_game/individual_rooms.hpp"
 #include "alliance_game/account_ui.hpp"
+#include "alliance_game/battle_ui.hpp"
 #include "alliance_game/session_watch.hpp"
 #include "config.hpp"
 #include "gui/dialogs/message.hpp"
-#include "gui/dialogs/simple_item_selector.hpp"
 #include <algorithm>
 #include <cctype>
 #include <limits>
@@ -21,6 +21,7 @@ bool active = false;
 bool supported = false;
 bool room_changed = false;
 unsigned interactions = 0;
+int filter_gold = 0, filter_turns = 0;
 bool identifier(const std::string& value) {
     if(value.size()!=36) return false;
     for(std::size_t i=0;i<value.size();++i) {
@@ -31,13 +32,11 @@ bool identifier(const std::string& value) {
 }
 std::string bounded(const std::string& text) { return text.substr(0,512); }
 int choose(const std::string& title,const std::string& message,const std::vector<std::string>& rows,int selected=0) {
-    gui2::dialogs::simple_item_selector dialog(title,message,rows,false,false);
-    dialog.set_allow_plugin_skip(false); dialog.set_selected_index(selected);
-    dialog.set_ok_label("Choose"); dialog.set_cancel_label("Back");
-    return dialog.show()?dialog.selected_index():-1;
-}
-bool approve(const std::string& title,const std::string& message,const std::string& action) {
-    return choose(title,message,{"Back",action})==1;
+    BattleView view;view.title=title;view.subtitle=message;view.selected=selected;
+    for(const auto& row:rows)view.rows.push_back({row,{},message,{},{}});
+    view.actions={{"Choose",true}};
+    const auto result=show_battle_view(view);
+    return result.action==0?result.row:-1;
 }
 std::string field(const config& value,const char* name,const std::string& fallback="Not reported") {
     const auto result=value[name].str(); return result.empty()?fallback:bounded(result);
@@ -46,6 +45,41 @@ std::string turns(const config& room) {
     const auto value=room["room_turns"].str();
     return value=="-1"?"Unlimited":(value.empty()?"Not reported":bounded(value));
 }
+BattleView room_view(const config& room,const std::string& title) {
+    BattleView view;view.title=title;
+    view.subtitle=field(room,"name")+" · "+individual_listing_status(room);
+    const auto map=room["map_data"].str().empty()?battle_map_preview(room["mp_scenario"].str()):room["map_data"].str();
+    view.rows.push_back({field(room,"mp_scenario_name",field(room,"mp_scenario")),individual_listing_settings(room),
+        "Room #"+field(room,"room_id",field(room,"id"))+" · Settings revision "+field(room,"room_revision")
+        +"\nEra: "+field(room,"mp_era")+"\nObservers: "+(room["observer"].to_bool()?"Allowed":"Not allowed")
+        +"\n\nThe full room starts when every player has chosen a hero and is Ready."
+        +"\nChanging the rules, heroes or players clears readiness."
+        +"\nNo permanent experience or rating is awarded.",{},map});
+    std::string visibility="Fog: "+std::string(room["mp_fog"].to_bool()?"On":"Off")+" · Shroud: "+(room["mp_shroud"].to_bool()?"On":"Off");
+    std::string timer="Turn timer: "+std::string(room["mp_countdown"].to_bool()?"On":"Off");
+    if(room["mp_countdown"].to_bool())timer+="\nInitial time: "+field(room,"mp_countdown_init_time")+" seconds\nTurn bonus: "+field(room,"mp_countdown_turn_bonus")
+        +" seconds\nReserve: "+field(room,"mp_countdown_reservoir_time")+" seconds\nAction bonus: "+field(room,"mp_countdown_action_bonus")+" seconds";
+    view.rows.push_back({"Rules & time",visibility,"Turn limit: "+turns(room)+"\n"+visibility+"\n"+timer,{},{}});
+    for(const auto& side:room.child_range("room_side")) {
+        const bool occupied=!side["player_id"].str().empty();
+        std::string state=occupied?(side["ready"].to_bool()?"Ready":"Not ready"):"Open place";
+        if(occupied&&room["room_status"].str()=="playing"&&!side["connected"].to_bool())state="Disconnected";
+        const auto unit=side["unit_type"].str();
+        std::string hero=unit.empty()?"Hero not selected":field(side,"unit_type")+" · Level "+field(side,"hero_level");
+        view.rows.push_back({"Side "+field(side,"side")+" · "+field(side,"player_id","Open place"),
+            "Team "+field(side,"team_name")+" · "+state,
+            hero+"\nStarting gold: "+field(side,"gold")+"\nIncome: "+field(side,"income")
+            +"\nVillage gold: "+field(side,"village_gold")+" · Village support: "+field(side,"village_support")
+            +"\nFog: "+(side["fog"].to_bool()?"On":"Off")+" · Shroud: "+(side["shroud"].to_bool()?"On":"Off"),
+            unit.empty()?std::string():battle_unit_image(unit),{}});
+    }
+    return view;
+}
+bool review_room(const config& room,const std::string& title,const std::string& action) {
+    auto view=room_view(room,title);view.actions={{action,true}};
+    return show_battle_view(view).action==0;
+}
+
 }
 IndividualRoomInteraction::IndividualRoomInteraction() noexcept {++interactions;}
 IndividualRoomInteraction::~IndividualRoomInteraction() {--interactions;}
@@ -122,13 +156,17 @@ std::string individual_room_summary() {
     if(!active)return {};
     return (room_changed?"The room rules, heroes or players changed. Review the current settings before setting Ready again.\n\n":"")+individual_listing_review(current_room);
 }
+std::string individual_room_status() {
+    if(!active)return "Preparing room…";
+    return "Room #"+field(current_room,"room_id")+" · "+individual_listing_status(current_room);
+}
 bool review_individual_join(const config& room) {
-    return approve("Review battle room",individual_listing_review(room),"Agree and join");
+    return review_room(room,"Review and join","Agree and join");
 }
 bool show_individual_details(const config& room,bool can_observe) {
-    std::vector<std::string> rows{"Back"};
-    if(can_observe)rows.push_back("Observe battle");
-    return choose("Battle room details",individual_listing_review(room),rows)==1&&can_observe;
+    auto view=room_view(room,"Battle room");
+    if(can_observe)view.actions={{"Observe",true}};
+    return show_battle_view(view).action==0&&can_observe;
 }
 void show_individual_settings() {
     if(active)show_individual_details(current_room,false);
@@ -136,7 +174,10 @@ void show_individual_settings() {
 bool confirm_individual_ready() {
     if(!active) return true;
     const auto id=current_game;const auto before=revision;
-    if(!approve("Ready for individual battle",individual_room_summary(),"Agree to these settings and set Ready")) return false;
+    auto view=room_view(current_room,"Ready for battle");
+    if(room_changed)view.subtitle="Room updated · Review these settings before Ready";
+    view.actions={{"Set Ready",true}};
+    if(show_battle_view(view).action!=0)return false;
     if(!active||current_game!=id||revision!=before) {
         gui2::show_message("Individual battle","The room changed while you reviewed it. Review the current settings and choose Ready again.",gui2::dialogs::message::ok_button,false,false);
         return false;
@@ -148,7 +189,7 @@ bool configure_individual_creation(config& scenario,bool eligible) {
     if(!eligible) return true;
     const int mode=choose("Create battle room",
         "Individual battle: a public room without a password for 2–8 players. Every seat must be filled and Ready before automatic start.\nStandard multiplayer keeps manual start, computer sides and saved-game options.",
-        {"Individual battle room", "Standard multiplayer (manual start)", "Back"});
+        {"Individual battle room", "Standard multiplayer (manual start)"});
     if(mode==1)return true;
     if(mode!=0)return false;
     if(!supported) {
@@ -162,7 +203,7 @@ bool configure_individual_creation(config& scenario,bool eligible) {
         return false;
     }
     const int option=choose("Starting gold","Every player starts with the same gold. You can review each side in the room before Ready.",
-        {"100 gold","150 gold","200 gold","300 gold","500 gold","Back"});
+        {"100 gold","150 gold","200 gold","300 gold","500 gold"});
     if(option<0||option>4)return false;
     static constexpr int amounts[]{100,150,200,300,500};
     config prepared=scenario;
@@ -172,10 +213,21 @@ bool configure_individual_creation(config& scenario,bool eligible) {
         side["gold"]=amounts[option];side["gold_lock"]=true;side["income_lock"]=true;side["team_lock"]=true;
         side.remove_attribute("current_player");side.remove_attribute("player_id");
     }
-    const std::string limit=prepared["turns"].to_int(-1)<0?"Unlimited":prepared["turns"].str();
-    if(!approve("Publish individual battle room","Map: "+prepared["name"].str()+"\nPlayers: "+std::to_string(count)
-            +"\nStarting gold: "+std::to_string(amounts[option])+"\nTurn limit: "+limit
-            +"\n\nThe full room starts automatically after every player reviews the settings, chooses a hero and sets Ready. No permanent experience or rating is awarded.","Publish room")) return false;
+    config review;
+    review["name"]=prepared["name"];review["mp_scenario_name"]=prepared["name"];review["mp_scenario"]=prepared["id"];
+    review["map_data"]=prepared["map_data"];review["room_members"]=0;review["room_ready"]=0;review["room_capacity"]=static_cast<int>(count);
+    review["room_gold"]=amounts[option];review["room_turns"]=prepared["turns"];review["room_status"]="waiting";
+    for(const auto& side:prepared.child_range("side"))review.add_child("room_side",side);
+    auto view=room_view(review,"Publish battle room");
+    view.subtitle="Public room · "+std::to_string(count)+" players · "+std::to_string(amounts[option])+" gold";
+    // The native creation screen already reviews map fog/timer/era options;
+    // only confirmed public human seats and common gold are published here.
+    view.rows[0].detail="Every player starts with "+std::to_string(amounts[option])+" gold.\nTurn limit: "+turns(review)
+        +"\n\nChoose your hero, review the room and set Ready after publishing. The full room starts automatically when everyone is Ready."
+        +"\nNo permanent experience or rating is awarded.";
+    view.rows.erase(view.rows.begin()+1); // Global visibility/timer is owned by the native map-settings screen.
+    view.actions={{"Publish room",true}};
+    if(show_battle_view(view).action!=0)return false;
     scenario=std::move(prepared);return true;
 }
 const config* individual_lobby_room(const config& lobby,int id) {
@@ -205,4 +257,41 @@ int individual_filter_token(const config* room,const std::string& token) {
     if(query=="slots:open")return room&&(*room)["room_status"].str()=="waiting"&&(*room)["room_members"].to_int()<(*room)["room_capacity"].to_int();
     return -1;
 }
+void reset_individual_filters() noexcept {filter_gold=filter_turns=0;}
+std::string individual_filter_label() {
+    std::string label="Gold: "+(filter_gold?std::to_string(filter_gold):std::string("Any"));
+    label+=" · Turns: "+(filter_turns==-1?std::string("Unlimited"):filter_turns?std::to_string(filter_turns):std::string("Any"));
+    return label;
+}
+bool individual_filter_settings(const config* room) {
+    if(!filter_gold&&!filter_turns)return true;
+    return room&&(!filter_gold||(*room)["room_gold"].to_int()==filter_gold)
+        &&(!filter_turns||(*room)["room_turns"].to_int()==filter_turns);
+}
+bool edit_individual_filters() {
+    int gold=filter_gold,limit=filter_turns,selected=0;
+    for(;;) {
+        BattleView view;view.title="Room filters";view.subtitle="Room types and availability use the dashboard checkboxes. These limits apply to individual rooms.";
+        view.selected=selected;
+        view.rows={{"Starting gold",gold?std::to_string(gold):"Any","Choose the starting gold you want to play with.",{},{}},
+            {"Turn limit",limit==-1?"Unlimited":limit?std::to_string(limit):"Any","Find short battles or rooms with no turn limit.",{},{}}};
+        view.actions={{"Change",true},{"Apply filters",true},{"Clear limits",true}};
+        const auto result=show_battle_view(view);
+        if(result.action<0)return false;
+        if(result.action==1){filter_gold=gold;filter_turns=limit;return true;}
+        if(result.action==2){gold=limit=0;continue;}
+        selected=result.row;
+        if(result.action!=0||selected<0||selected>1)continue;
+        if(selected==0) {
+            const int answer=choose("Starting gold","Show rooms with this starting gold.",{"Any","100","150","200","300","500"});
+            static constexpr int amounts[]{0,100,150,200,300,500};
+            if(answer>=0&&answer<6)gold=amounts[answer];
+        } else {
+            const int answer=choose("Turn limit","Show rooms with this turn limit.",{"Any","Unlimited","20","30","40","50","100"});
+            static constexpr int limits[]{0,-1,20,30,40,50,100};
+            if(answer>=0&&answer<7)limit=limits[answer];
+        }
+    }
+}
+
 }

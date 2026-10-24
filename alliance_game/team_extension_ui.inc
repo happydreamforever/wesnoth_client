@@ -33,19 +33,21 @@ void captain_orders(const alliance::TrustedProfile& profile)
         if(!extension_request(profile,"coordination_orders",{{"team_id",team.id}},result)) return;
         if(pp::text(result,"team_id",36)!=team.id) throw std::runtime_error("Order team differs.");
         const auto& orders=result.at("orders").as_array();
-        std::vector<std::string> rows;
+        BattleView view;view.title="Captain orders — "+team.name;
+        view.subtitle="Current team members only  •  Latest 10 orders shown";
         for(const auto& item:orders) {
             const auto& order=item.as_object();
-            rows.push_back(pp::text(order,"author_name",24)+" — "+pp::text(order,"created_at",40)+"\n"+pp::order_text(order));
+            view.rows.push_back({pp::text(order,"author_name",24),pp::text(order,"created_at",40),
+                pp::order_text(order),"icons/letter_and_ale.png",{}});
         }
-        const int refresh=static_cast<int>(rows.size());rows.push_back("Refresh orders");
-        const int post=team.captain_id==current_session().profile.account_id?static_cast<int>(rows.size()):-1;
-        if(post>=0) rows.push_back("Write captain orders");
-        const int choice=select("Captain orders — "+team.name,
-            "Only current members can read these orders. The current captain can post. Latest 10 shown; 50 retained.",rows);
-        if(choice<0) return;
-        if(choice==refresh) continue;
-        if(choice==post) {
+        if(orders.empty())view.rows.push_back({"No captain orders yet","Instructions will appear here",
+            "Your captain can post a plan for current team members. The latest 10 are shown; 50 are retained.","icons/letter_and_ale.png",{}});
+        const bool captain=team.captain_id==actor;
+        view.actions={{"Refresh orders"},{"Write orders",captain}};
+        const int choice=show_battle_view(view).action;
+        if(choice<0||!same_extension_actor(actor))return;
+        if(choice==0)continue;
+        if(choice==1&&captain) {
             std::string text;CaptainOrderDialog dialog(text);dialog.show();
             if(dialog.get_retval()!=gui2::retval::OK) continue;
             pj::object body{{"team_id",team.id},{"text",text}};
@@ -60,9 +62,6 @@ void captain_orders(const alliance::TrustedProfile& profile)
             if(pp::text(order,"author_id",36)!=current_session().profile.account_id||pp::order_text(order)!=text)
                 throw std::runtime_error("Posted order differs.");
             message("Captain orders saved.");
-        } else if(static_cast<std::size_t>(choice)<orders.size()) {
-            const auto& order=orders[choice].as_object();
-            message(pp::text(order,"author_name",24)+"\n"+pp::text(order,"created_at",40)+"\n\n"+pp::order_text(order));
         }
     }
 }

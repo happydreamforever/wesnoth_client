@@ -64,16 +64,26 @@ def generate_lobby_overlay(source: bytes) -> bytes:
 def add_individual_dashboard(source):
     text=source.decode()
     text=once(text,'#include "wesnothd_connection.hpp"',
-              '#include "wesnothd_connection.hpp"\n#include "alliance_game/individual_rooms.hpp"\n#include "gui/dialogs/simple_item_selector.hpp"')
+              '#include "wesnothd_connection.hpp"\n#include "alliance_game/individual_rooms.hpp"\n#include "gui/widgets/toggle_button.hpp"')
     text=once(text, '\tfind_widget<button>("create").set_retval(CREATE);',
-              '\tfind_widget<button>("create").set_retval(CREATE);\n    find_widget<button>("create").set_label("Create room");\n    find_widget<button>("join_global").set_label("Review and join");\n    find_widget<button>("server_info").set_label("Room filters");')
+              '\tfind_widget<button>("create").set_retval(CREATE);\n    find_widget<button>("create").set_label("Create room");\n    find_widget<button>("join_global").set_label("Review and join");\n    find_widget<button>("server_info").set_label("Gold & turns");')
     text=once(text,'\tfilter_text_    = find_widget<text_box>("filter_text", false, true);',
               '''    filter_text_ = find_widget<text_box>("filter_text", false, true);
-    filter_text_->set_value("type:individual");
-    filter_text_->set_tooltip("Search room or map names. Filters: type:individual, type:standard, type:all, status:waiting, status:playing, slots:open, gold:100, turns:30, turns:unlimited. Room filters provides quick choices and help.");
-    filter_friends_->set_widget_value(false);
+    filter_text_->set_value("");
+    filter_text_->set_tooltip("Search by room or map name. Use the checkboxes and Filters for room type, availability, gold and turn limits.");
+    alliance_game::reset_individual_filters();
+    filter_friends_->set_widget_value(true);
+    filter_ignored_->set_widget_value(false);
     filter_slots_->set_widget_value(false);
     filter_invert_->set_widget_value(false);
+    find_widget<toggle_button>("filter_with_friends").set_label("Individual rooms");
+    find_widget<toggle_button>("filter_with_ignored").set_label("Standard rooms");
+    find_widget<toggle_button>("filter_vacant_slots").set_label("Open places");
+    find_widget<toggle_button>("filter_invert").set_label("Running only");
+    find_widget<toggle_button>("filter_with_friends").set_tooltip("Show public individual battle rooms.");
+    find_widget<toggle_button>("filter_with_ignored").set_tooltip("Show standard manual, computer-side and saved-game rooms.");
+    find_widget<toggle_button>("filter_vacant_slots").set_tooltip("Show waiting rooms with a place available to join.");
+    find_widget<toggle_button>("filter_invert").set_tooltip("Show battles that have already started. Open places and Running only together may show no rooms.");
     connect_signal_notify_modified(*filter_text_, std::bind(&mp_lobby::update_gamelist_filter,this));''')
     text=once(text,'VGETTEXT("Games: showing $num_shown out of $num_total",','VGETTEXT("Rooms: showing $num_shown out of $num_total",')
     text=once(text,'\tdata.emplace("status", item);\n\n\treturn data;',
@@ -122,33 +132,34 @@ def add_individual_dashboard(source):
         }
     }
     join_data["id"] = std::to_string(game.id);''')
-    text=once(text,'\t\t\tif(!info.match_string_filter(s)) {',
-              '''            const auto* room=alliance_game::individual_lobby_room(lobby_info_.gamelist(),info.id);
-            const int room_match=alliance_game::individual_filter_token(room,s);
-            if(room_match==0 || (room_match<0 && !info.match_string_filter(s))) {''')
-    text=once(text, '\tserver_info::display(server_information_, announcements_);',
-              '''    int action=-1;
-    {
-        gui2::dialogs::simple_item_selector filter("Battle room filters","Choose a view. You can also type a room or map name in the search field.",
-            {"All individual rooms","Rooms with open places","Waiting for players or Ready","Battles in progress","Standard multiplayer","Every room","Filter help"},false,false);
-        filter.set_allow_plugin_skip(false);filter.set_selected_index(0);filter.set_ok_label("Apply");filter.set_cancel_label("Back");
-        if(!filter.show())return;
-        action=filter.selected_index();
-    }
-    const std::vector<std::string> queries{"type:individual","type:individual slots:open","type:individual status:waiting","type:individual status:playing","type:standard","type:all"};
-    if(action>=0 && static_cast<std::size_t>(action)<queries.size()) {
-        filter_text_->set_value(queries[action]);update_gamelist_filter();return;
-    }
-    if(action!=6)return;
-    gui2::show_message("Individual battle dashboard",
-        "Every player on this Windows server can browse these rooms. No area or team membership is required.\\n\\n"
-        "Create room: choose a map and its turn/fog/timer settings, then Individual battle and starting gold. Every map seat is a separate player.\\n"
-        "Review and join: read current settings, then join an available seat. Choose your owned hero and set Ready. The full room starts automatically when everyone is Ready.\\n\\n"
-        "The dashboard updates while open. Search by room or map name, or combine filters:\\n"
-        "type:individual — individual rooms (default)\\ntype:standard — manual multiplayer\\ntype:all — all rooms\\n"
-        "status:waiting — rooms waiting for players or Ready\\nstatus:playing — running battles\\n"
-        "slots:open — waiting rooms with places\\ngold:100 — starting gold\\nturns:30 / turns:unlimited — turn limit\\n\\n"
-        "Clear the search to see every room. Standard multiplayer retains computer sides and manual start. No permanent experience or rating is awarded here.",
-        gui2::dialogs::message::ok_button,false,false);''')
+    # Reuse the native dashboard checkboxes without changing social-filter preferences.
+    for preference,default in (("friends_in_game","true"),("blocked_in_game","false"),("vacant_slots","false"),("invert","false")):
+        text=once(text,'[]() {return prefs::get().fi_'+preference+'();}', '[]() {return '+default+';}')
+        text=once(text,'[](bool v) {prefs::get().set_fi_'+preference+'(v);}', '[](bool) {}')
+    text=once(text,'return filter_friends_->get_widget_value() ? info.has_friends == true : true;',
+              'return alliance_game::individual_lobby_room(lobby_info_.gamelist(),info.id) ? filter_friends_->get_widget_value() : filter_ignored_->get_widget_value();')
+    text=once(text,'return filter_ignored_->get_widget_value() == false ? info.has_ignored == false : true;',
+              'return alliance_game::individual_filter_settings(alliance_game::individual_lobby_room(lobby_info_.gamelist(),info.id));')
+    text=once(text,'return filter_slots_->get_widget_value() ? info.vacant_slots > 0 : true;',
+              'return !filter_slots_->get_widget_value() || (info.vacant_slots > 0 && !info.started);')
+    text=once(text,'[this](bool val) { return filter_invert_->get_widget_value() ? !val : val; }',
+              '[](bool val) { return val; }')
+    text=once(text,'\tlobby_info_.set_game_filter_invert(',
+              '    lobby_info_.add_game_filter([this](const mp::game_info& info) { return !filter_invert_->get_widget_value() || info.started; });\n\tlobby_info_.set_game_filter_invert(')
+    text=once(text,'\tserver_info::display(server_information_, announcements_);',
+              '    if(alliance_game::edit_individual_filters())update_gamelist_filter();')
+    text=once(text,'\t// Set up Lua plugin context', '''    // These upstream services are not provided by the local room server.
+    // Keep the native room list, chat, Create and Back controls intact.
+    tab_bar.select_row(0);
+    tab_bar.set_visible(widget::visibility::invisible);
+    queue_join_button->set_visible(widget::visibility::invisible);
+    queue_leave_button->set_visible(widget::visibility::invisible);
+    for(const char* id : {"view_profile", "view_match_history"})
+        if(auto* control=find_widget<button>(id,false,false))
+            control->set_visible(widget::visibility::invisible);
+
+\t// Set up Lua plugin context''')
+    text=once(text,'void mp_lobby::update_gamelist_filter()\n{',
+              'void mp_lobby::update_gamelist_filter()\n{\n    auto& filters=find_widget<button>("server_info");\n    filters.set_label("Gold & turns");\n    filters.set_tooltip(alliance_game::individual_filter_label());')
     text=once(text, '#include "formatter.hpp"', '#include "formatter.hpp"\n#include "font/pango/escape.hpp"')
     return text.encode()

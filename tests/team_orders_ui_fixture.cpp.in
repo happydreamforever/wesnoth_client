@@ -1,0 +1,66 @@
+#include "alliance_native/account_client.hpp"
+#include "alliance_native/account_protocol.hpp"
+#include "alliance_native/progression_protocol.hpp"
+#include "alliance_game/battle_ui.hpp"
+#include <algorithm>
+#include <deque>
+#include <functional>
+#include <iostream>
+#include <stdexcept>
+namespace account=alliance::account;namespace pj=boost::json;namespace pp=alliance::progression_protocol;
+const std::string actor="00000000-0000-0000-0000-000000000001",other="00000000-0000-0000-0000-000000000002",team_id="00000000-0000-0000-0000-000000000010";
+void require(bool ok,const std::string& why){if(!ok)throw std::runtime_error(why);}
+struct Event{std::string title,action;std::function<void()> change={};};
+struct Network{std::string op;pj::object body;bool fail=false;std::function<void()> change={};};
+std::deque<Event> events;std::deque<Network> network;std::vector<std::string> messages,calls;std::vector<alliance_game::BattleView> views;
+account::Team own;int depth=0,posts=0;bool edit_ok=true;std::string edited="Hold the bridge.\nRecruit a healer.";
+namespace gui2{namespace retval{constexpr int OK=1;constexpr int CANCEL=0;}}
+namespace gui2::dialogs{
+class simple_item_selector{
+public:
+ simple_item_selector(const std::string& title,const std::string&,const std::vector<std::string>& rows,bool=false,bool=false):title_(title),rows_(rows){++depth;}
+ ~simple_item_selector(){--depth;}
+ void set_allow_plugin_skip(bool value){skip_=value;}void set_selected_index(int value){selected_=value;}void set_ok_label(const std::string&){}void set_cancel_label(const std::string&){}
+ bool show(){require(!skip_&&selected_==0,"Unsafe default");require(!events.empty(),"Unexpected selector");auto e=events.front();events.pop_front();require(e.title==title_,"Wrong selector");if(e.change)e.change();if(e.action=="Back")return false;if(e.action=="Default")return true;auto it=std::find(rows_.begin(),rows_.end(),e.action);require(it!=rows_.end(),"Missing action");selected_=it-rows_.begin();return true;}
+ int selected_index()const{return selected_;}
+private:std::string title_;std::vector<std::string> rows_;int selected_=-1;bool skip_=true;
+};}
+namespace alliance_game{
+struct Session{std::string token;account::Profile profile;}session;
+Session& current_session(){return session;}
+void message(const std::string& text){messages.push_back(text);}
+bool reload_player(const alliance::TrustedProfile&){throw std::runtime_error("Captain orders must not reload a hero profile");}
+bool team_request(const alliance::TrustedProfile&,account::Request request,const std::string&,account::Reply& reply){
+ require(!network.empty(),"Unexpected network request");auto next=network.front();network.pop_front();require(next.op==request.operation,"Wrong operation "+request.operation);calls.push_back(request.operation);
+ if(request.operation=="my_team")reply.team=own;
+ else{const auto body=account::parse_document(request.progression_json);pp::request(request.operation,body);require(pp::text(body,"team_id",36)==team_id,"Wrong selected team");if(request.operation=="coordination_post"){++posts;require(std::string(body.at("text").as_string())==edited,"Order text changed");}reply.progression_json=pj::serialize(next.body);}
+ if(next.change)next.change();
+ return !next.fail;
+}
+class CaptainOrderDialog{public:explicit CaptainOrderDialog(std::string& text):text_(text){}void show(){text_=edited;}int get_retval()const{return edit_ok?gui2::retval::OK:gui2::retval::CANCEL;}private:std::string& text_;};
+BattleResult show_battle_view(const BattleView& view){
+ views.push_back(view);require(!events.empty(),"Unexpected rich view");auto e=events.front();events.pop_front();require(e.title==view.title,"Wrong rich view");if(e.change)e.change();if(e.action=="Back")return {};
+ for(std::size_t i=0;i<view.actions.size();++i)if(view.actions[i].label==e.action){require(view.actions[i].enabled,"Disabled captain action");return {0,static_cast<int>(i)};}
+ throw std::runtime_error("Missing rich action");
+}
+// @FUNCTIONS@
+}
+pj::object order(){return {{"id","00000000-0000-0000-0000-000000000020"},{"author_id",actor},{"author_name","Captain"},{"text",edited},{"created_at","2026-10-24T10:00:00Z"}};}
+pj::object orders(){return {{"team_id",team_id},{"team_name","Koichi"},{"orders",pj::array{order()}},{"has_more",false}};}
+void reset(){events.clear();network.clear();messages.clear();calls.clear();views.clear();posts=0;edit_ok=true;edited="Hold the bridge.\nRecruit a healer.";alliance_game::session={};alliance_game::session.token="token";alliance_game::session.profile.account_id=actor;own={};own.id=team_id;own.name="Koichi";own.captain_id=actor;}
+void initial(){network.push_back({"my_team",{}});network.push_back({"coordination_orders",orders()});}
+void changed_actor(){alliance_game::session.profile.account_id=other;}
+void done(const std::string& label){require(events.empty()&&network.empty()&&depth==0,"Unfinished "+label);std::cout<<"PASS "<<label<<'\n';}
+int main(){try{
+ for(int mode=0;mode<6;++mode){reset();initial();events.push_back({"Captain orders — Koichi","Write orders"});events.push_back({"Post captain orders",mode==0?"Default":"Post to my team",mode==1?std::function<void()>(changed_actor):std::function<void()>{}});
+  if(mode>=2){auto saved=order();if(mode==3)saved["author_id"]=other;if(mode==4)saved["text"]="Changed text";network.push_back({"coordination_post",{{"order",saved}},mode==2});}
+  if(mode==0||mode==5){initial();events.push_back({"Captain orders — Koichi","Back"});}
+  bool rejected=false;try{alliance_game::captain_orders({});}catch(const std::runtime_error&){rejected=true;}
+  require(rejected==(mode==3||mode==4),"Incorrect acknowledgement rejection");require(posts==(mode>=2?1:0),"Order mutation retried or bypassed consent");
+  require(std::any_of(messages.begin(),messages.end(),[](const auto& text){return text=="Captain orders saved.";})==(mode==5),"Unconfirmed save claimed");done("orders Back actor failure author text exact-ack "+std::to_string(mode));
+ }
+ reset();own.captain_id=other;initial();events.push_back({"Captain orders — Koichi","Back"});alliance_game::captain_orders({});require(!views.front().actions[1].enabled&&views.front().rows.front().detail==edited,"Member orders or role changed");done("member reads full orders but cannot post");
+ reset();initial();events.push_back({"Captain orders — Koichi","Write orders",changed_actor});alliance_game::captain_orders({});require(posts==0,"Changed actor posted");done("actor change while rich hub open stops editing");
+ reset();initial();network.back().body["orders"]=pj::array{};events.push_back({"Captain orders — Koichi","Back"});alliance_game::captain_orders({});require(views.front().rows.front().title=="No captain orders yet","Empty order guidance omitted");done("empty captain orders retain useful actions");
+ std::cout<<"PASS all current captain order cases\n";return 0;
+}catch(const std::exception& e){std::cerr<<"FAIL "<<e.what()<<'\n';return 1;}}

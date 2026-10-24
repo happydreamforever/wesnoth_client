@@ -59,7 +59,7 @@ class BattlePlanningUiTests(unittest.TestCase):
             includes = catalogue_source(ROOT, catalogue)
             command = [compiler, "-std=c++17", "-Wall", "-Wextra", "-Werror", "-O0", "-g",
                        "-fsanitize=address,undefined", "-fno-omit-frame-pointer", "-I" + str(ROOT),
-                       str(cpp), str(policy), str(catalogue), *includes, "-o", str(binary)]
+                       str(cpp), str(policy), str(catalogue), str(ROOT / "alliance_game/team_views.cpp"), *includes, "-o", str(binary)]
             built = subprocess.run(command, capture_output=True, text=True, timeout=120)
             self.assertEqual(built.returncode, 0, built.stdout + built.stderr)
             ran = subprocess.run([str(binary)], capture_output=True, text=True, timeout=30)
@@ -80,11 +80,11 @@ class BattlePlanningUiTests(unittest.TestCase):
 
     def test_local_lineup_selection_is_bounded_unique_ordered_and_has_safe_back(self):
         body = function("bool choose_battle_lineup(", "std::string battle_validity_text(")
-        self.assertIn('select_change("Choose lineup — "', body)
-        self.assertIn('selected.size() == sides.size()', body)
-        self.assertIn('if(choice == use) return true', body)
-        self.assertIn('selected.erase(it)', body)
-        self.assertIn('if(selected.size() >= sides.size())', body)
+        self.assertIn('view.title="Choose lineup — "', body)
+        self.assertIn('selected.size()==sides.size()', body)
+        self.assertIn('if(picked.action==1&&selected.size()==sides.size())return true', body)
+        self.assertIn('selected.erase(found)', body)
+        self.assertIn('if(selected.size()>=sides.size())', body)
         self.assertIn('std::to_string(sides[i])', body)
         self.assertNotIn('request(', body)
 
@@ -97,7 +97,8 @@ class BattlePlanningUiTests(unittest.TestCase):
         self.assertIn('own.captain_id != current_session().profile.account_id', proposal)
         self.assertIn('choose_battle_lineup(own, map.sides[0]', proposal)
         self.assertIn('choose_battle_lineup(opponent, map.sides[1]', proposal)
-        self.assertIn('select_change("Confirm battle proposal", preview, {"Send battle proposal"})', proposal)
+        self.assertIn('proposal_view.actions={{"Send battle proposal"}}', proposal)
+        self.assertIn('show_battle_view(proposal_view).action!=0||!same_extension_actor(actor)', proposal)
         self.assertIn('Both captains must then review and explicitly approve', proposal)
         self.assertIn('confirmed.area_id != own.area_id', proposal)
 
@@ -116,8 +117,9 @@ class BattlePlanningUiTests(unittest.TestCase):
         self.assertIn('draft && captain && !approved && all_heroes && battle.validity == "valid"', detail)
         self.assertIn('draft && selected && hero_selected && (ready || (both_approved && battle.validity == "valid"))', detail)
         self.assertIn('draft && captain ? ', detail)
-        self.assertIn('select_change("Battle plan"', detail)
-        self.assertIn('select_change(title, battle_text(battle)', detail)
+        self.assertIn('show_battle_view(view)', detail)
+        self.assertIn('confirmation.actions={{affirmative}}', detail)
+        self.assertIn('show_battle_view(confirmation).action!=0||!same_extension_actor(actor)', detail)
         for label in ('Confirm battle approval', 'Approve saved map and lineups', 'Confirm ready',
                       'Confirm not ready', 'Confirm battle cancellation', 'Cancel this draft plan'):
             self.assertIn(label, detail)
@@ -128,7 +130,8 @@ class BattlePlanningUiTests(unittest.TestCase):
         for forbidden in ('"start_battle"', '"finish_battle"', '"start_campaign"', '"advance_leader"'):
             self.assertNotIn(forbidden, body)
         self.assertIn('Practice grants no account experience, team experience or rating', body)
-        self.assertIn('"My battle plans", "Propose battle"', body)
+        self.assertIn('view.title="My battle plans"', body)
+        self.assertIn('map_view.title="Choose battle map"', body)
 
 
 if __name__ == "__main__":

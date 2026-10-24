@@ -19,6 +19,7 @@ void observe_individual_room(const config& packet);
 bool individual_room_active() noexcept;
 std::int64_t individual_room_revision() noexcept;
 std::string individual_room_summary();
+std::string individual_room_status();
 bool individual_start_requested() noexcept;
 bool consume_individual_start() noexcept;
 bool individual_start_authorized() noexcept;
@@ -34,4 +35,8 @@ std::string individual_listing_settings(const config& room);
 std::string individual_listing_review(const config& room);
 // nullopt is represented by -1: not a room token, use the stock text filter.
 int individual_filter_token(const config* room, const std::string& token);
+void reset_individual_filters() noexcept;
+bool edit_individual_filters();
+std::string individual_filter_label();
+bool individual_filter_settings(const config* room);
 }
