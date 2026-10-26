@@ -110,6 +110,23 @@ bool consent(const std::string& action,std::int64_t expected) {
     protocol::keys(value,{"action","revision"});
     return protocol::text(value,"action",8)==action&&protocol::number(value,"revision",1,2147483647)==expected;
 }
+int select_room(const config& listing,const std::optional<int>& requested_id,const std::string& requested_name) {
+    require(requested_id.has_value()!=!requested_name.empty());
+    int selected=0;
+    for(const auto& room:listing.child_range("game")) {
+        const bool matches=requested_id ? room["id"].str()==std::to_string(*requested_id) :
+            room["name"].str()==requested_name;
+        if(!matches)continue;
+        // Count every exact-name publication, including full/running rooms.
+        // Never silently choose another room when the requested name is shared.
+        require(!selected);
+        const auto id=room["id"].to_long_long();
+        require(id>0&&id<=2147483647&&room["id"].str()==std::to_string(id));
+        selected=static_cast<int>(id);
+    }
+    require(selected>0);
+    return selected;
+}
 }
 bool individual_companion_requested() noexcept {
     return std::getenv("WESNOTH_INDIVIDUAL_COMPANION_PROFILE")!=nullptr;
@@ -121,11 +138,14 @@ int run_individual_companion() noexcept {
         auto input=line();Secret input_cleanup{input};
         auto message=alliance::account::parse_document(input);
         namespace protocol=alliance::progression_protocol;
-        protocol::keys(message,{"intent","account_id","token","room_id","hero_id","form_id"});
+        const bool by_id=message.contains("room_id");
+        if(by_id)protocol::keys(message,{"intent","account_id","token","room_id","hero_id","form_id"});
+        else protocol::keys(message,{"intent","account_id","token","room_name","hero_id","form_id"});
         require(protocol::text(message,"intent",32)=="individual_play");
         const auto account_id=protocol::text(message,"account_id",36);
         auto token=protocol::text(message,"token",43);Secret token_cleanup{token};
-        const int room_id=protocol::number(message,"room_id",1,2147483647);
+        const std::optional<int> requested_id=by_id?std::optional<int>(protocol::number(message,"room_id",1,2147483647)):std::nullopt;
+        const auto requested_name=by_id?std::string{}:protocol::text(message,"room_name",256);
         const auto hero=protocol::text(message,"hero_id",80),form=protocol::text(message,"form_id",80);
         require(alliance::account::token_valid(token));
         auto& json_token=message.at("token").as_string();
@@ -141,11 +161,12 @@ int run_individual_companion() noexcept {
         auto native_profile=profile;native_profile.port=15000;
         wesnothd_connection connection(native_profile);
         auto hello=until(connection,"version").mandatory_child("version");
-        require(hello["alliance_protocol"].to_int()==2&&hello["individual_rooms"].to_int()==1);
+        require(hello["alliance_protocol"].str()=="3"&&hello["implementation_release"].str()=="1192621"&&hello["individual_rooms"].str()=="1");
         connection.send_data(config{"version",config{"version","1.19.26"}});until(connection,"mustlogin");
         config login{"login",config{"username",me.username,"alliance_ticket",ticket.ticket}};
         connection.send_data(login);login.clear();wipe(ticket.ticket);until(connection,"join_lobby");
         auto listing=until(connection,"gamelist").mandatory_child("gamelist");
+        const int room_id=select_room(listing,requested_id,requested_name);
         auto selected=listing.find_child("game","id",std::to_string(room_id));require(bool(selected));
         config room=*selected;
         require(room["individual_room"].to_bool()&&room["room_status"].str()=="waiting"&&

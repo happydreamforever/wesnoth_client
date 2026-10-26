@@ -1,8 +1,9 @@
 # Windows PowerShell 5.1. Additional owned account in the existing LDPlayer.
-[CmdletBinding()]
+[CmdletBinding(DefaultParameterSetName='Name')]
 param(
     [Parameter(Mandatory=$true)][ValidatePattern('^[A-Za-z0-9_]{3,24}$')][string]$Username,
-    [Parameter(Mandatory=$true)][ValidateRange(1,2147483647)][int]$RoomId,
+    [Parameter(Mandatory=$true,ParameterSetName='Id')][ValidateRange(1,2147483647)][int]$RoomId,
+    [Parameter(Mandatory=$true,ParameterSetName='Name')][ValidateLength(1,256)][string]$RoomName,
     [ValidatePattern('^[A-Za-z0-9][A-Za-z0-9._:-]*$')][string]$Serial = '127.0.0.1:5555',
     [string]$SdkRoot = (Join-Path $env:LOCALAPPDATA 'Android\Sdk'),
     [string]$AdbPath = (Join-Path $env:LOCALAPPDATA 'Android\Sdk\platform-tools\adb.exe'),
@@ -23,11 +24,13 @@ try {
     }
     # No transcript or output pipeline: passwords are hidden and the helper
     # writes only its sanitized structured report.
-    $arguments = @('-I', '-B', '-u', $script, '--username', $Username, '--room-id', [string]$RoomId, '--serial', $Serial, '--adb', $AdbPath, '--sdk', $SdkRoot, '--java', $java, '--openssl', $OpenSslPath)
+    $arguments = @('-I', '-B', '-u', $script, '--username', $Username, '--serial', $Serial, '--adb', $AdbPath, '--sdk', $SdkRoot, '--java', $java, '--openssl', $OpenSslPath)
+    if ($PSCmdlet.ParameterSetName -eq 'Name') { $arguments += @('--room-name', $RoomName) }
+    else { $arguments += @('--room-id', [string]$RoomId) }
     if ($PublicConfigPath) { $arguments += @('--public-config', $PublicConfigPath) }
     & $PythonPath @arguments
     exit $LASTEXITCODE
 } catch {
-    Write-Host 'The individual companion could not start. Check the selected existing tools, username and public Room ID.'
+    Write-Host 'The individual companion could not start. Check the selected existing tools, username and exact unique room name or Room ID.'
     exit 1
 }

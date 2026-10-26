@@ -55,12 +55,14 @@ def choose_hero(account):
     return hero, form
 
 
-def reviewed_message(raw, room_id):
+def reviewed_message(raw, room_id, room_name=None):
     value = C.document(raw.encode('utf-8'), 8192)
     settings = {'era', 'fog', 'shroud', 'observers', 'timer', 'mp_countdown_init_time', 'mp_countdown_reservoir_time',
                 'mp_countdown_turn_bonus', 'mp_countdown_action_bonus', 'sides'}
     if (set(value) != {'action', 'room_id', 'room_revision', 'name', 'map', 'members', 'capacity', 'gold', 'turns', 'side'} | settings
-            or value['action'] not in ('join', 'ready') or type(value['room_id']) is not int or value['room_id'] != room_id
+            or value['action'] not in ('join', 'ready') or type(value['room_id']) is not int or not 1 <= value['room_id'] <= 2147483647
+            or (room_id is not None and value['room_id'] != room_id)
+            or (room_id is None and (value['action'] != 'join' or value['name'] != room_name))
             or type(value['room_revision']) is not int or not 1 <= value['room_revision'] <= 2147483647
             or type(value['capacity']) is not int or not 2 <= value['capacity'] <= 8
             or type(value['members']) is not int or not 1 <= value['members'] <= value['capacity']
@@ -82,7 +84,11 @@ def reviewed_message(raw, room_id):
 
 
 def launch_script(private_root, stage, account_id, room_id, launch_id, data, hashes, profile_hash):
-    session, script = C.launch_script(private_root, stage, account_id, 'room-' + str(room_id), launch_id, data, hashes, profile_hash)
+    # Name discovery happens inside the authenticated native lobby. Use a fresh
+    # private directory until its immutable ID is known; never use a room name
+    # as a filesystem path or reuse storage for a new room with the same name.
+    selection = 'room-' + str(room_id) if room_id is not None else 'room-discovery-' + launch_id
+    session, script = C.launch_script(private_root, stage, account_id, selection, launch_id, data, hashes, profile_hash)
     # Reuse the checked private app-directory/PID/payload scaffolding. The
     # individual mode has its own storage/locks and its own native entry point.
     old = 'export WESNOTH_ALLIANCE_COMPANION_PROFILE='
@@ -97,6 +103,7 @@ def run_native(device, script, admission, session, username, emit=print):
     seen = []
     reviews = 0
     joined = False
+    room_id = admission.get('room_id')
     with subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL) as process:
         try:
             process.stdin.write(json.dumps(admission, separators=(',', ':')).encode('ascii') + b'\n')
@@ -112,11 +119,12 @@ def run_native(device, script, admission, session, username, emit=print):
                     reviews += 1
                     if reviews > 1000:
                         C.fail('too_many_room_changes')
-                    value = reviewed_message(text[len(REVIEW):], admission['room_id'])
+                    value = reviewed_message(text[len(REVIEW):], room_id, admission.get('room_name'))
                     if value['action'] == 'join':
                         if joined or seen:
                             C.fail('unexpected_join_review')
                         joined = True
+                        room_id = value['room_id']
                     elif not joined or STARTED in seen:
                         C.fail('unexpected_ready_review')
                     emit(f"Room {value['room_id']}: {value['name']} — {value['map']}", flush=True)
@@ -149,7 +157,7 @@ def run_native(device, script, admission, session, username, emit=print):
             process.stdin.close()
     if code != 0 or seen != [JOINING, STARTED, FINISHED] or reviews < 2:
         C.fail('individual_companion_stopped')
-    return {'result': 'completed', 'room_reviews': reviews}
+    return {'result': 'completed', 'room_reviews': reviews, 'room_id': room_id}
 
 
 def execute(args, report):
@@ -187,8 +195,9 @@ def execute(args, report):
         session, script = launch_script(private_root, stage, account['id'], args.room_id, uuid.uuid4().hex, data,
             {name: item[1] for name, item in payload.items()}, profile_hash)
         report['step'] = 'I05_review_join_ready_play'
+        selector = {'room_id': args.room_id} if args.room_id is not None else {'room_name': args.room_name}
         report.update(run_native(device, script, {'intent': 'individual_play', 'account_id': account['id'], 'token': token,
-            'room_id': args.room_id, 'hero_id': hero, 'form_id': form}, session, account['username']))
+            **selector, 'hero_id': hero, 'form_id': form}, session, account['username']))
         report['outcome'] = 'completed'
         print('I05 COMPLETE: the real native individual battle ended. Permanent experience and rating are unchanged.', flush=True)
     finally:
@@ -208,7 +217,9 @@ def execute(args, report):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--username', required=True)
-    parser.add_argument('--room-id', required=True, type=int)
+    selector = parser.add_mutually_exclusive_group(required=True)
+    selector.add_argument('--room-id', type=int)
+    selector.add_argument('--room-name')
     parser.add_argument('--serial', default='127.0.0.1:5555')
     parser.add_argument('--adb', type=Path, required=True)
     parser.add_argument('--sdk', type=Path, required=True)
@@ -221,7 +232,10 @@ def main(argv=None):
     destination = None
     try:
         if os.name != 'nt': C.fail('windows_required')
-        if not re.fullmatch(r'[A-Za-z0-9_]{3,24}', args.username) or not 1 <= args.room_id <= 2147483647:
+        if (not re.fullmatch(r'[A-Za-z0-9_]{3,24}', args.username)
+                or (args.room_id is not None and not 1 <= args.room_id <= 2147483647)
+                or (args.room_name is not None and (not args.room_name.strip() or not safe_text(args.room_name)
+                    or len(args.room_name.encode('utf-8')) > 256))):
             C.fail('invalid_selection')
         diagnostics = ROOT / 'diagnostics'; diagnostics.mkdir(exist_ok=True)
         for path in (diagnostics, *diagnostics.parents):
