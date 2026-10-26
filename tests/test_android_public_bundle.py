@@ -95,16 +95,34 @@ class PublicBundleTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'No private material was printed') as result: B.public_profile(self.repo)
         self.assertNotIn('PRIVATE_SENTINEL', str(result.exception))
 
-    def test_literal_path_no_expansion_execution_or_unknown_secrets(self):
+    def test_literal_path_no_expansion_execution_or_duplicate_public_key(self):
         for value in ('', 'DB_PASSWORD=PRIVATE_SENTINEL', 'WESNOTH_PUBLIC_PROFILE_PATH=one\nWESNOTH_PUBLIC_PROFILE_PATH=two',
                       'WESNOTH_PUBLIC_PROFILE_PATH=$(touch marker)', 'WESNOTH_PUBLIC_PROFILE_PATH=`touch marker`',
                       'WESNOTH_PUBLIC_PROFILE_PATH=$HOME/profile', 'WESNOTH_PUBLIC_PROFILE_PATH="unclosed',
-                      'export WESNOTH_PUBLIC_PROFILE_PATH=profile', 'WESNOTH_PUBLIC_PROFILE_PATH=profile\nTOKEN=secret'):
+                      'export WESNOTH_PUBLIC_PROFILE_PATH=profile', 'WESNOTH_PUBLIC_PROFILE_PATH=profile\nINVALID KEY=secret'):
             with self.subTest(value=value):
                 self.config.write_text(value)
                 with self.assertRaises(ValueError) as result: B.configured_profile(self.repo)
                 self.assertNotIn('PRIVATE_SENTINEL', str(result.exception))
         self.assertFalse((self.repo / 'marker').exists())
+
+    def test_unrelated_environment_assignments_never_enter_assets_or_receipts(self):
+        baseline, identity = B.public_profile(self.repo)
+        decoys = ('mongodb://PRIVATE_USER:PRIVATE_PASSWORD@localhost/private',
+                  'PRIVATE_PASSWORD_1', '$(touch PRIVATE_EXECUTION_MARKER)')
+        self.config.write_text('\ufeffMONGODB_URI=' + decoys[0] + '\nPRIVATE_PASSWORD=' + decoys[1] +
+            '\nIGNORED_SHELL_TEXT=' + decoys[2] + '\n' + self.config.read_text())
+        before = self.config.read_bytes()
+        with patch.object(B, 'artwork', return_value={'startup/fixture': b'public artwork'}):
+            files, receipt = B.bundle(self.repo)
+        self.assertEqual(files[B.PROFILE_ASSET], baseline)
+        self.assertEqual(receipt['public_server'], identity)
+        self.assertEqual(self.config.read_bytes(), before)
+        self.assertNotIn('.env', files)
+        for secret in decoys:
+            self.assertNotIn(secret.encode(), b''.join(files.values()))
+            self.assertNotIn(secret, json.dumps(receipt))
+        self.assertFalse((self.repo / 'PRIVATE_EXECUTION_MARKER').exists())
 
     def test_missing_oversized_and_linked_config_fail_closed(self):
         self.config.unlink()

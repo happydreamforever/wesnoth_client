@@ -54,17 +54,22 @@ def regular_bytes(path, limit):
 
 
 def configured_profile(repo, config=None):
-    """One literal path; no expansion, executable syntax, generic dotenv or secrets."""
+    """Read one literal public path; ignore all other assignment values."""
     selected = Path(config or CONFIG_PATH or Path(repo) / '.env').absolute()
     try:
-        text = regular_bytes(selected, 8192).decode('utf-8')
+        text = regular_bytes(selected, 8192).decode('utf-8-sig')
         values = {}
         for line in text.splitlines():
             line = line.strip()
             if not line or line.startswith('#'):
                 continue
             key, separator, value = line.partition('=')
-            if separator != '=' or key.strip() != 'WESNOTH_PUBLIC_PROFILE_PATH' or values:
+            key = key.strip()
+            if separator != '=' or not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*', key):
+                raise ValueError()
+            if key != 'WESNOTH_PUBLIC_PROFILE_PATH':
+                continue
+            if values:
                 raise ValueError()
             value = value.strip()
             if value[:1] in ('"', "'"):
@@ -79,7 +84,7 @@ def configured_profile(repo, config=None):
         path = Path(values['WESNOTH_PUBLIC_PROFILE_PATH'])
         return path if path.is_absolute() else selected.parent / path
     except (OSError, UnicodeError, ValueError):
-        raise ValueError('Public client configuration must contain only WESNOTH_PUBLIC_PROFILE_PATH pointing to the existing public-profile.json. Configuration contents were not printed.') from None
+        raise ValueError('Client configuration must contain one literal WESNOTH_PUBLIC_PROFILE_PATH pointing to the existing public-profile.json. Configuration contents were not printed.') from None
 
 
 def public_profile(repo, config=None, openssl=None):
