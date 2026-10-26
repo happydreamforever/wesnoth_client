@@ -12,7 +12,7 @@ commands=json.loads((previous/'engine-build-commands.json').read_text())
 built=[];record=[]
 for name,source in [('engine_probe','/client/tests/individual_engine_probe.cpp'),
         *((name,'/client/alliance_game/'+name+'.cpp') for name in
-          ('companion','casual_sides','casual_session','individual_rooms')),
+          ('companion','casual_sides','casual_session','individual_rooms','battle_ui','team_views')),
         ('account_client','/client/alliance_native/account_client.cpp')]:
     command=list(commands[0]);command[command.index('-I/out/overlay')]='-I/previous/overlay'
     command[command.index('-c')+1]=source;target=str(out/(name+'.o'));command[command.index('-o')+1]=target
