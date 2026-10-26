@@ -143,6 +143,25 @@ class AccountBuildTests(unittest.TestCase):
         cmake = (ROOT / 'tools/native-account-game/CMakeLists.txt').read_text()
         self.assertIn('"${ACCOUNT_STAGE}/campaign_selection.cpp"', cmake)
 
+    def test_native_touch_header_change_invalidates_owned_stage_without_rewriting_it(self):
+        with tempfile.TemporaryDirectory(prefix='native-touch-binding-') as temporary:
+            repo = Path(temporary)
+            for name in A.NEW_INPUTS:
+                path = repo / name; path.parent.mkdir(parents=True, exist_ok=True); path.write_bytes(b'fixture source')
+            header = repo / 'alliance_game/native_touch_layout.hpp'
+            self.assertTrue(header.is_file())
+            with patch.object(A.G, 'selected_inputs', return_value=({}, {'project_files': {}}, {})), \
+                    patch.object(A.PUBLIC, 'bundle', return_value=({}, {'public_server': {}, 'bundled_assets': {}})):
+                first = A.selected_inputs(repo)[1]
+                stage = repo / 'owned-stage'
+                A.prepare_owned(stage, 'fixture', 'owner.json', first, {'source.cpp': b'preserved'})
+                header.write_bytes(b'changed touch target definitions')
+                changed = A.selected_inputs(repo)[1]
+                self.assertNotEqual(first['project_files']['alliance_game/native_touch_layout.hpp'], changed['project_files']['alliance_game/native_touch_layout.hpp'])
+                with self.assertRaises(A.BuildError):
+                    A.prepare_owned(stage, 'fixture', 'owner.json', changed, {'source.cpp': b'new'})
+                self.assertEqual((stage / 'source.cpp').read_bytes(), b'preserved')
+
     def test_templates_keep_package_data_and_no_plaintext(self):
         manifest = (ROOT / 'tools/native-account-game/AndroidManifest.xml').read_text()
         self.assertNotIn('.AccountSetupActivity', manifest); self.assertIn('.OfflineInitActivity', manifest); self.assertIn('android:allowBackup="false"', manifest)
