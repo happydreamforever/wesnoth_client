@@ -51,7 +51,7 @@ TEMPLATES.update({name + '.java': 'app/src/main/java/org/libsdl/app/' + name + '
 NEW_INPUTS = ('tools/build_android_account_game.py', 'tools/android_public_bundle.py',
               'tools/validate_android_account_profile.py', 'tools/native-account-game/ui-assets.json',
               'tools/native-account-game/CMakeLists.txt',
-              'alliance_game/account_ui.cpp', 'alliance_game/account_ui.hpp', 'alliance_game/product_ui_layout.hpp', 'alliance_game/team_workspace.inc', 'alliance_game/individual_creation.inc',
+              'alliance_game/account_ui.cpp', 'alliance_game/account_ui.hpp', 'alliance_game/product_ui_layout.hpp', 'alliance_game/native_touch_layout.hpp', 'alliance_game/team_workspace.inc', 'alliance_game/individual_creation.inc',
               'alliance_game/hero_presentation.hpp', 'alliance_game/hero_presentation_data.inc', 'alliance_game/hero_presentation.json', 'alliance_game/hero_gallery.inc',
               'alliance_game/campaign_rewards.hpp', 'alliance_game/campaign_selection_overlay.py',
               'alliance_native/flexible_protocol.hpp', 'alliance_game/title_overlay.py',
