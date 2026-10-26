@@ -75,11 +75,10 @@ void shared_result_review(const alliance::TrustedProfile& profile,const account:
     const auto winner=pp::text(result,"winner_team_id",36,true);
     std::string outcome=result.at("draw").as_bool()?"Draw":"Not determined";
     for(const auto& team:battle.teams) if(team.id==winner) outcome="Winner: "+team.name;
-    const auto text="Battle: "+battle.id+"\nResult: "+status+"\n"+outcome+
+    const auto text="Result: "+status+"\n"+outcome+
         "\nPlayer reports: "+std::to_string(pp::number(result,"reports_received"))+"/"+std::to_string(pp::number(result,"required_reports"))+
         "\nCaptain confirmations: "+std::to_string(pp::number(result,"captains_approved"))+"/2"+
-        "\nExperience and rating are awarded once after all players' recorded outcomes agree and both captains confirm. "
-        "A disputed result requires administrator review. Practice never grants rewards.";
+        std::string(battle.format==2&&!battle.ranked?"\nUnranked · Experience only":"\nRanked · Experience and rating")+"\nBoth captains confirm after player reports agree.";
     bool captain=false;
     for(const auto& team:battle.teams) if(team.captain_id==current_session().profile.account_id) captain=true;
     if(status!="awaiting_captains"||!captain) {message(text);return;}
@@ -90,7 +89,7 @@ void shared_result_review(const alliance::TrustedProfile& profile,const account:
     if(extension_request(profile,"shared_confirm",{{"run_id",battle.id},{"candidate_digest",digest}},confirmed)) {
         if(pp::text(confirmed,"run_id",36)!=battle.id||pp::text(confirmed,"candidate_digest",64)!=digest)
             throw std::runtime_error("Result confirmation differs.");
-        message("Captain result confirmation saved. Refresh the result to see settlement, then View personal leader and My team for rewards.");
+        message("Result confirmed. Refresh to see settlement.");
     } else message("Confirmation was not established. Refresh this result before trying again.");
 }
 
@@ -101,7 +100,7 @@ void join_shared_battle(const alliance::TrustedProfile& profile,const account::B
         ? "Send the completed result and exact saved replay for this player. An identical retry cannot grant rewards twice."
         : viewed.state=="running" ? "Reconnect to your existing side. The server replays the recorded battle; no new leader or army is created."
         : "Join your fixed side. The shared battle starts only after every selected, Ready player connects and loads the same scenario.";
-    if(select_change(upload_only?"Send saved battle result":"Join shared battle",explanation+"\nBattle: "+viewed.id,
+    if(select_change(upload_only?"Send saved battle result":"Join shared battle",explanation,
         {upload_only?"Send saved result":"Join my side"})!=0) return;
     if(!same_extension_actor(actor)) return;
     account::Request request;request.operation="battle_detail";request.battle_id=viewed.id;
@@ -126,24 +125,18 @@ void join_shared_battle(const alliance::TrustedProfile& profile,const account::B
 
 void download_shared_replay(const alliance::TrustedProfile& profile,const account::Battle& viewed)
 {
-    const auto actor=current_session().profile.account_id;
-    if(select_change("Download completed battle replay",
-        "Retrieve the retained recording from your Windows server. This does not change the battle or grant experience.\nBattle: "+viewed.id,
-        {"Download my permitted recording"})!=0) return;
-    if(!same_extension_actor(actor)) return;
+    const auto actor=current_session().profile.account_id,token=current_session().token,generation=current_session().profile.database_generation;
+    const auto same_player=[&]{return !token.empty()&&current_session().token==token&&current_session().profile.account_id==actor&&current_session().profile.database_generation==generation;};
+    if(select_change("Completed replay","Retrieve this battle's retained recording.",{"Download replay"})!=0||!same_player())return;
     account::Request request;request.operation="battle_detail";request.battle_id=viewed.id;
     account::Reply latest;
-    if(!team_request(profile,request,"Checking the completed battle…",latest)||!latest.battle) return;
-    if(!same_extension_actor(actor)) return;
-    bool permitted=false;
-    for(const auto& team:latest.battle->teams) {
-        permitted=permitted||team.captain_id==actor;
-        for(const auto& player:team.players) permitted=permitted||player.id==actor;
+    if(!team_request(profile,request,"Checking the completed battle…",latest)||!latest.battle||!same_player())return;
+    // The fresh descriptor and download service authorize current teammates.
+    // Historical participation alone is neither required nor sufficient.
+    if(latest.battle->id!=viewed.id||latest.battle->state!="completed") {
+        message("This battle has no completed replay. Refresh its history.");return;
     }
-    if(latest.battle->id!=viewed.id||latest.battle->state!="completed"||!permitted) {
-        message("A completed recording is available only to this battle's recorded participants and captains.");return;
-    }
-    SharedAdmission admission{profile,viewed.id,actor,current_session().token};
+    SharedAdmission admission{profile,viewed.id,actor,token};
     admission.profile.port=15002;admission.download_only=true;
     queue_shared(std::move(admission));
 }

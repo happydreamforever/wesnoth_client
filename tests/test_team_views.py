@@ -18,8 +18,12 @@ class TeamViewTests(unittest.TestCase):
             source=directory/'team_views_fixture.cpp';binary=directory/'team_views_fixture'
             body=(ROOT/'tests/team_views_fixture.cpp.in').read_text().replace('// @LINEUP@',extract((ROOT/'alliance_game/account_ui.cpp').read_text(),'bool choose_battle_lineup('))
             source.write_text(body)
+            models=directory/'team_models.cpp'
+            model_source=(ROOT/'alliance_game/team_views.cpp').read_text()
+            model_source='\n'.join(line for line in model_source.splitlines() if not any(x in line for x in ('#include "gui/', '#include "alliance_game/product_ui_layout.hpp"', '#include "events.hpp"', '#include "alliance_game/team_workspace.inc"')))
+            models.write_text(model_source)
             catalogue=directory/'catalogue.cpp';includes=catalogue_source(ROOT,catalogue)
-            command=[compiler,'-std=c++17','-Wall','-Wextra','-Werror','-O0','-g','-fsanitize=address,undefined','-fno-omit-frame-pointer','-I'+str(ROOT),str(source),str(ROOT/'alliance_game/team_views.cpp'),str(catalogue),*includes,'-o',str(binary)]
+            command=[compiler,'-std=c++17','-Wall','-Wextra','-Werror','-O0','-g','-fsanitize=address,undefined','-fno-omit-frame-pointer','-I'+str(ROOT),str(source),str(models),str(catalogue),*includes,'-o',str(binary)]
             built=subprocess.run(command,capture_output=True,text=True,timeout=180)
             self.assertEqual(built.returncode,0,built.stdout+built.stderr)
             ran=subprocess.run([str(binary)],capture_output=True,text=True,timeout=30)

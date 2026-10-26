@@ -17,7 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def extract(source, signature):
     start = source.index(signature)
-    opening = source.index('{', start)
+    opening = source.index('\n{', start) + 1 if '\n{' in source[start:] else source.index('{', start)
     end, depth = opening + 1, 1
     while depth:
         depth += (source[end] == '{') - (source[end] == '}')
@@ -25,12 +25,8 @@ def extract(source, signature):
     return source[start:end]
 
 
-CASES = ('card', 'progress', 'collection', 'empty_choose', 'empty_browse',
-         'collection_back', 'form_back', 'explicit', 'invalid_choice',
-         'initial_failure', 'final_failure', 'identity_race', 'revision_race',
-         'form_race', 'hero_race', 'collection_modal_race', 'form_modal_race',
-         'browse_collection_modal_race', 'browse_form_modal_race',
-         'browse_refresh', 'invalid_catalog')
+CASES = ('catalogue','campaign','stats','empty','back','explicit','locked','invalid',
+         'initial_failure','final_failure','modal_race','identity_race','revision_race','form_race','hero_race')
 
 
 class HeroGallery(unittest.TestCase):
@@ -41,8 +37,8 @@ class HeroGallery(unittest.TestCase):
         cls.audit = Path(os.environ.get('HERO_GALLERY_AUDIT', cls.temp.name))
         cls.audit.mkdir(parents=True, exist_ok=True)
         source = (ROOT / 'alliance_game/account_ui.cpp').read_text()
-        names = ('std::string profile_text(', 'bool reload_player(', 'BattleRow hero_form_card(',
-                 'BattleView hero_collection_view(', 'bool choose_hero(', 'void heroes_dialog(')
+        names = ('bool reload_player(', 'BattleRow hero_form_card(',
+                 'std::vector<HeroGalleryEntry> gallery_entries(', 'bool choose_hero(', 'void heroes_dialog(')
         actual = '\n\n'.join(extract(source, name) for name in names)
         actual += '\n' + extract((ROOT / 'alliance_game/hero_catalog.cpp').read_text(), 'int scaled_hero_stat(')
         fixture = (ROOT / 'tests/hero_gallery_ui_fixture.cpp.in').read_text().replace('// @FUNCTIONS@', actual)

@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <string>
 class config;
+class saved_game;
 namespace alliance_game {
 class IndividualRoomInteraction {
 public:
@@ -28,6 +29,7 @@ bool confirm_individual_ready();
 bool review_individual_join(const config& room);
 bool show_individual_details(const config& room, bool can_observe);
 void show_individual_settings();
+bool create_individual_room(saved_game& state);
 bool configure_individual_creation(config& scenario, bool eligible);
 const config* individual_lobby_room(const config& lobby, int id);
 std::string individual_listing_status(const config& room);

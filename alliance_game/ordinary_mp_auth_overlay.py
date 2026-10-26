@@ -22,15 +22,25 @@ def generate_multiplayer_auth_overlay(source: bytes) -> bytes:
     prefs::get().set_login(admission->username);
     gui2::dialogs::loading_screen::progress(loading_stage::connect_to_server);
     auto conn = std::make_unique<wesnothd_connection>(admission->trusted);
+    bool alliance_greeting_checked=false;
 ''' + text[end:]
     start = text.index('\t\t// Check for "redirect" messages')
     end = text.index('\n\t\tif(data.has_child("version"))', start)
     text = text[:start] + '''        if(data.has_child("redirect"))
             throw wesnothd_error("This game connects only to the trusted Windows server. Server redirects are refused.");
 ''' + text[end:]
+    text = once(text, '\t\tif(data.has_child("version")) {', '''\t\tif(data.has_child("version")) {
+            const auto& advertised=data.mandatory_child("version");
+            if(advertised["alliance_protocol"].str()!="3" ||
+               advertised["implementation_release"].str()!="1192621" ||
+               advertised["individual_rooms"].str()!="1")
+                throw wesnothd_error("The trusted server needs the matching game update before Multiplayer can connect.");
+            alliance_greeting_checked=true;''')
     start = text.index('\t\t// Enter login loop')
     end = text.index('\n\t\tif(const auto join_lobby', start)
-    text = text[:start] + '''        if(admission->ticket.empty())
+    text = text[:start] + '''        if(!alliance_greeting_checked)
+            throw wesnothd_error("The trusted server did not advertise the required game capabilities.");
+        if(admission->ticket.empty())
             throw wesnothd_error("The server requested repeated account admission. Return to Multiplayer and try again.");
         config login;
         auto& credentials=login.add_child("login");
@@ -63,25 +73,26 @@ def generate_lobby_overlay(source: bytes) -> bytes:
 
 def add_individual_dashboard(source):
     text=source.decode()
+    text=once(text, ": modal_dialog(window_id())", ": modal_dialog(alliance_game::prepare_native_touch_window(window_id()))")
     text=once(text,'#include "wesnothd_connection.hpp"',
-              '#include "wesnothd_connection.hpp"\n#include "alliance_game/individual_rooms.hpp"\n#include "gui/widgets/toggle_button.hpp"')
+              '#include "wesnothd_connection.hpp"\n#include "alliance_game/individual_rooms.hpp"\n#include "gui/widgets/toggle_button.hpp"\n#include "alliance_game/native_touch_layout.hpp"')
     text=once(text, '\tfind_widget<button>("create").set_retval(CREATE);',
-              '\tfind_widget<button>("create").set_retval(CREATE);\n    find_widget<button>("create").set_label("Create room");\n    find_widget<button>("join_global").set_label("Review and join");\n    find_widget<button>("server_info").set_label("Gold & turns");')
+              '\tfind_widget<button>("create").set_retval(CREATE);\n    find_widget<button>("create").set_label("Create room");\n    find_widget<button>("join_global").set_label("Review and join");\n    find_widget<button>("server_info").set_label("Filters");')
     text=once(text,'\tfilter_text_    = find_widget<text_box>("filter_text", false, true);',
               '''    filter_text_ = find_widget<text_box>("filter_text", false, true);
     filter_text_->set_value("");
-    filter_text_->set_tooltip("Search by room or map name. Use the checkboxes and Filters for room type, availability, gold and turn limits.");
+    filter_text_->set_tooltip("Find a room or map.");
     alliance_game::reset_individual_filters();
     filter_friends_->set_widget_value(true);
     filter_ignored_->set_widget_value(false);
     filter_slots_->set_widget_value(false);
     filter_invert_->set_widget_value(false);
-    find_widget<toggle_button>("filter_with_friends").set_label("Individual rooms");
-    find_widget<toggle_button>("filter_with_ignored").set_label("Standard rooms");
+    find_widget<toggle_button>("filter_with_friends").set_visible(widget::visibility::invisible);
+    find_widget<toggle_button>("filter_with_ignored").set_visible(widget::visibility::invisible);
     find_widget<toggle_button>("filter_vacant_slots").set_label("Open places");
     find_widget<toggle_button>("filter_invert").set_label("Running only");
     find_widget<toggle_button>("filter_with_friends").set_tooltip("Show public individual battle rooms.");
-    find_widget<toggle_button>("filter_with_ignored").set_tooltip("Show standard manual, computer-side and saved-game rooms.");
+    find_widget<toggle_button>("filter_with_ignored").set_tooltip("");
     find_widget<toggle_button>("filter_vacant_slots").set_tooltip("Show waiting rooms with a place available to join.");
     find_widget<toggle_button>("filter_invert").set_tooltip("Show battles that have already started. Open places and Running only together may show no rooms.");
     connect_signal_notify_modified(*filter_text_, std::bind(&mp_lobby::update_gamelist_filter,this));''')
@@ -91,7 +102,7 @@ def add_individual_dashboard(source):
     if(const auto* room=alliance_game::individual_lobby_room(lobby_info_.gamelist(),game.id)) {
         data["status"]["label"]=alliance_game::individual_listing_status(*room);
         data["status"]["use_markup"]="false";
-        data["name"]["label"]=font::escape_text("#"+(*room)["id"].str()+" "+(*room)["name"].str());
+        data["name"]["label"]=font::escape_text((*room)["name"].str());
         data["scenario"]["label"]=font::escape_text((*room)["mp_scenario_name"].str())+"\\n"+alliance_game::individual_listing_settings(*room);
     }
     return data;''')
@@ -137,7 +148,7 @@ def add_individual_dashboard(source):
         text=once(text,'[]() {return prefs::get().fi_'+preference+'();}', '[]() {return '+default+';}')
         text=once(text,'[](bool v) {prefs::get().set_fi_'+preference+'(v);}', '[](bool) {}')
     text=once(text,'return filter_friends_->get_widget_value() ? info.has_friends == true : true;',
-              'return alliance_game::individual_lobby_room(lobby_info_.gamelist(),info.id) ? filter_friends_->get_widget_value() : filter_ignored_->get_widget_value();')
+              'return alliance_game::individual_lobby_room(lobby_info_.gamelist(),info.id) != nullptr;')
     text=once(text,'return filter_ignored_->get_widget_value() == false ? info.has_ignored == false : true;',
               'return alliance_game::individual_filter_settings(alliance_game::individual_lobby_room(lobby_info_.gamelist(),info.id));')
     text=once(text,'return filter_slots_->get_widget_value() ? info.vacant_slots > 0 : true;',
@@ -160,6 +171,6 @@ def add_individual_dashboard(source):
 
 \t// Set up Lua plugin context''')
     text=once(text,'void mp_lobby::update_gamelist_filter()\n{',
-              'void mp_lobby::update_gamelist_filter()\n{\n    auto& filters=find_widget<button>("server_info");\n    filters.set_label("Gold & turns");\n    filters.set_tooltip(alliance_game::individual_filter_label());')
+              'void mp_lobby::update_gamelist_filter()\n{\n    auto& filters=find_widget<button>("server_info");\n    filters.set_label("Filters");\n    filters.set_tooltip(alliance_game::individual_filter_label());')
     text=once(text, '#include "formatter.hpp"', '#include "formatter.hpp"\n#include "font/pango/escape.hpp"')
     return text.encode()

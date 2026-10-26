@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "alliance_game/battle_ui.hpp"
+#include "alliance_game/product_ui_layout.hpp"
 #include "config.hpp"
 #include "filesystem.hpp"
 #include "game_config_manager.hpp"
@@ -9,6 +10,7 @@
 #include "gui/widgets/image.hpp"
 #include "gui/widgets/label.hpp"
 #include "gui/widgets/listbox.hpp"
+#include "gui/widgets/menu_button.hpp"
 #include "gui/widgets/minimap.hpp"
 #include "gui/widgets/progress_bar.hpp"
 #include "gui/widgets/scroll_label.hpp"
@@ -16,9 +18,43 @@
 #include "units/types.hpp"
 #include <algorithm>
 #include <cctype>
+#include <cstdlib>
 #include <stdexcept>
 
 namespace alliance_game {
+std::string prepare_home_window()
+{
+    const std::string id="alliance_home";
+    auto& windows=gui2::current_gui->second.window_types;if(windows.count(id))return id;
+    config definition;auto& grid=product_ui::window(definition,id);
+    product_ui::text(grid,"home_title","THE BATTLE FOR WESNOTH","alliance_title");
+    product_ui::text(grid,"home_player","","alliance_caption");
+    const std::array<const char*,9> ids{{"campaign","multiplayer","community","load","addons","achievements","editor","preferences","quit"}};
+    const std::array<const char*,9> names{{"Campaign","Room","Team","Load","My Heroes","Achievements","Map Editor","Preferences","Quit"}};
+    const std::array<const char*,9> art{{"icons/book2.png","icons/crossed_sword_and_hammer.png","icons/shield_tower.png","icons/scroll_red.png","icons/helmet_crested.png","icons/circlet_winged.png","icons/icon-editor.png","icons/action/settings.png~GS()~CS(110,80,30)","icons/action/close_25.png~GS()~CS(110,80,30)"}};
+    auto& menu=product_ui::cell(product_ui::row(grid,1),"grid");
+    for(int y=0;y<3;++y){auto& r=product_ui::row(menu,1);for(int x=0;x<3;++x){const int i=y*3+x;const std::string style="alliance_home_"+std::to_string(i);
+        product_ui::button_style(style,art[i]);auto& b=product_ui::cell(r,"button",ids[i]);b["label"]=names[i];b["definition"]=style;}}
+    windows.emplace(id,gui2::builder_window(definition));return id;
+}
+std::string prepare_login_window()
+{
+    const std::string id="alliance_login";
+    auto& windows=gui2::current_gui->second.window_types;if(windows.count(id))return id;
+    config definition;auto& grid=product_ui::window(definition,id,true);
+    auto& heading_grid=product_ui::cell(product_ui::row(grid),"grid");
+    auto& heading=product_ui::row(heading_grid);
+    auto& title=product_ui::cell(heading,"label","auth_title");title["definition"]="alliance_title";title["label"]="Wesnoth";
+    auto& close=product_ui::cell(heading,"button","cancel",0);close["label"]="×";close["definition"]="alliance_close";close["tooltip"]="Quit";close["return_value"]=13;
+    product_ui::text(grid,"login_label","","alliance_caption");
+    product_ui::text(grid,"username_label","Username");product_ui::cell(product_ui::row(grid),"text_box","user_name");
+    product_ui::text(grid,"password_label","Password");auto& password_grid=product_ui::cell(product_ui::row(grid),"grid");auto& password_row=product_ui::row(password_grid);product_ui::cell(password_row,"text_box","password");auto& eye=product_ui::cell(password_row,"toggle_button","remember_password",0);eye["definition"]="alliance_eye";eye["tooltip"]="Show password";
+    product_ui::text(grid,"confirmation_label","Confirm password");product_ui::cell(product_ui::row(grid),"text_box","confirmation");
+    auto& actions_grid=product_ui::cell(product_ui::row(grid),"grid");
+    auto& actions=product_ui::row(actions_grid);product_ui::cell(actions,"button","ok")["label"]="Log in";
+    auto& signup=product_ui::cell(actions,"button","signup");signup["label"]="Sign up";signup["return_value"]=11;
+    windows.emplace(id,gui2::builder_window(definition));return id;
+}
 namespace {
 config& row(config& grid, int grow = 0)
 {
@@ -31,7 +67,7 @@ config& cell(config& row, const std::string& type, const std::string& id = "", i
     column["horizontal_grow"] = true; column["vertical_grow"] = true;
     column["border"] = "all"; column["border_size"] = 6;
     auto& result = column.add_child(type);
-    if(type != "grid") { result["id"] = id; result["definition"] = "default"; }
+    if(type != "grid") { result["id"] = id; result["definition"] = type=="button"?"alliance_button":type=="text_box"?"alliance_input":type=="progress_bar"?"alliance_progress":"default"; }
     return result;
 }
 config& label(config& grid, const std::string& id, const char* definition = "default")
@@ -56,22 +92,23 @@ std::string prepare_window()
     map_style["description"] = "Battle map preview";
     auto& map_resolution = map_style.add_child("resolution");
     map_resolution["min_width"] = 160; map_resolution["default_width"] = 160;
-    map_resolution["min_height"] = 160; map_resolution["default_height"] = 160;
+    map_resolution["min_height"] = 120; map_resolution["default_height"] = 120;
     map_resolution.add_child("state_enabled").add_child("draw");
     gui2::add_single_widget_definition("minimap", "alliance_preview", map_style);
+    product_ui::prepare_theme();
     config definition; definition["id"] = id; definition["description"] = "Battle and hero browser";
     auto& resolution = definition.add_child("resolution");
-    resolution["definition"] = "default";
+    resolution["definition"] = "alliance_dark";
     resolution["automatic_placement"] = false;
-    resolution["width"] = "(min(screen_width - 40, 1440))";
-    resolution["height"] = "(screen_height - 48)";
-    resolution["x"] = "((screen_width - min(screen_width - 40, 1440)) / 2)";
-    resolution["y"] = 24;
+    resolution["width"] = "(min(screen_width - 32, 1440))";
+    resolution["height"] = "(screen_height - 32)";
+    resolution["x"] = "((screen_width - min(screen_width - 32, 1440)) / 2)";
+    resolution["y"] = 16;
     resolution.add_child("tooltip")["id"] = "tooltip";
     resolution.add_child("helptip")["id"] = "tooltip";
     auto& grid = resolution.add_child("grid");
-    label(grid,"battle_title","title");
-    label(grid,"battle_subtitle","gold_small");
+    label(grid,"battle_title","alliance_title");
+    label(grid,"battle_subtitle","alliance_caption");
     auto& body = cell(row(grid,1),"grid");
     auto& columns = row(body,1);
     auto& left = cell(columns,"grid", "", 2);
@@ -99,9 +136,9 @@ std::string prepare_window()
     auto& detail = cell(row(right,1),"scroll_label","detail_text");
     detail["wrap"] = true; detail["use_markup"] = false;
     auto& actions = cell(row(grid),"grid","battle_actions");
-    for(int r=0;r<4;++r) {
+    for(int r=0;r<3;++r) {
         auto& buttons = row(actions);
-        for(int c=0;c<3;++c) cell(buttons,"button","battle_action_"+std::to_string(r*3+c));
+        for(int c=0;c<4;++c) cell(buttons,"button","battle_action_"+std::to_string(r*4+c));
     }
     auto& footer = cell(row(grid),"grid");
     auto& footer_row = row(footer);
@@ -134,7 +171,7 @@ private:
         auto& map=find_widget<gui2::minimap>("detail_map");
         const bool has_map=value&&!value->map_data.empty();
         art.set_visible(has_map?gui2::widget::visibility::invisible:gui2::widget::visibility::visible);
-        art.set_label((value&&!value->image.empty()?value->image:"icons/icon-multiplayer.png")+"~SCALE_INTO(220,140)");
+        art.set_label((value&&!value->image.empty()?value->image:"icons/icon-multiplayer.png")+"~SCALE_INTO(180,96)");
         map.set_visible(has_map?gui2::widget::visibility::visible:gui2::widget::visibility::invisible);
         if(has_map) map.set_map_data(value->map_data);
         auto& progress=find_widget<gui2::progress_bar>("detail_progress");
@@ -163,7 +200,7 @@ private:
     {
         find_widget<gui2::label>("battle_title").set_label(view_.title);
         find_widget<gui2::label>("battle_subtitle").set_label(view_.subtitle);
-        find_widget<gui2::label>("battle_hint").set_label("Select a card to see details. Back leaves this screen without an action.");
+        find_widget<gui2::label>("battle_hint").set_label("");
         auto& list=find_widget<gui2::listbox>("battle_list");
         for(const auto& value:view_.rows) {
             list.add_row(gui2::widget_data{
@@ -232,4 +269,6 @@ std::string battle_map_preview(const std::string& id)
         }
     return {};
 }
+
+#include "alliance_game/hero_gallery.inc"
 }

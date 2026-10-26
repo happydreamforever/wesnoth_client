@@ -20,6 +20,7 @@ bool has_player_session() noexcept;
 std::optional<PlayerSession> player_session();
 bool player_request(alliance::account::Request&, alliance::account::Reply&);
 void show_account_dialog();
+void show_campaign_heroes(const std::string& campaign);
 // Main-menu action; always clears this device session even if revocation fails.
 void logout_player();
 void show_teams_dialog();

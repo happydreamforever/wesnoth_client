@@ -1,6 +1,20 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "alliance_game/team_views.hpp"
 #include "alliance_game/hero_catalog.hpp"
+#include "alliance_game/product_ui_layout.hpp"
+#include "gui/dialogs/modal_dialog.hpp"
+#include "gui/widgets/button.hpp"
+#include "gui/widgets/image.hpp"
+#include "gui/widgets/label.hpp"
+#include "gui/widgets/menu_button.hpp"
+#include "gui/widgets/minimap.hpp"
+#include "gui/widgets/text_box.hpp"
+#include "gui/widgets/toggle_button.hpp"
+#include "events.hpp"
+#include <chrono>
+#include <algorithm>
+#include <array>
+#include <stdexcept>
 #include <utility>
 
 namespace alliance_game {
@@ -21,7 +35,7 @@ BattleRow team_member_row(const alliance::account::Member& member,const std::str
         std::string(leads?"Captain":"Member")+"  •  "+std::to_string(member.hero_count)+" heroes",
         member.username+"\n"+(leads?"Team captain":"Team member")+
         "\nHeroes unlocked: "+std::to_string(member.hero_count)+
-        "\n\nEach player chooses their own hero before Ready. Team experience and hero experience are separate.\n\nPlayer ID: "+member.id,
+        "",
         leads?"icons/circlet_winged.png":"icons/helmet_bascinet.png",{}};
 }
 BattleRow team_summary_row(const alliance::account::TeamSummary& team)
@@ -30,14 +44,14 @@ BattleRow team_summary_row(const alliance::account::TeamSummary& team)
         "  •  "+std::to_string(team.member_count)+"/8 members",
         "Team level: "+std::to_string(team.level)+"\nTeam experience: "+std::to_string(team.experience)+
         "\nRating: "+std::to_string(team.rating)+"\nMembers: "+std::to_string(team.member_count)+
-        "/8\n\nOpen the roster before applying. Your captain must approve an application before you join.\n\nTeam ID: "+team.id,
+        "/8",
         "icons/circlet_winged.png",{}};
 }
 BattleRow team_map_row(const alliance::account::BattleMap& map)
 {
-    return {map.name,size_label(map.size)+"  •  "+std::to_string(map.size*2)+" fixed seats",
+    return {map.name,size_label(map.size)+"  •  "+std::to_string(map.size*2)+" seats",
         "Map: "+map.name+"\nFormat: "+size_label(map.size)+
-        "\n\nChoose current members for both lineups. Each player selects a hero; both captains approve the saved plan before Ready.",
+        "\nOpen, reserved, AI or closed seats. Both captains approve before Ready.",
         {},battle_map_preview(map.scenario_id)};
 }
 BattleView team_roster_view(const alliance::account::Team& team,const std::string& actor)
@@ -47,9 +61,7 @@ BattleView team_roster_view(const alliance::account::Team& team,const std::strin
         "  •  "+std::to_string(team.members.size())+"/"+std::to_string(team.capacity)+" members";
     view.rows.push_back({"Team overview",team.area_name+"  •  "+std::to_string(team.experience)+" team XP",
         "Team level: "+std::to_string(team.level)+"\nTeam experience: "+std::to_string(team.experience)+
-        "\nRating: "+std::to_string(team.rating)+"\n\nPlan a shared battle with another team in your area. "
-        "Captains choose the map and lineups. Players choose their hero and set Ready.\n\nTeam ID: "+team.id+
-        "\nArea ID: "+team.area_id,"icons/circlet_winged.png",{}});
+        "\nRating: "+std::to_string(team.rating),"icons/circlet_winged.png",{}});
     for(const auto& member:team.members)view.rows.push_back(team_member_row(member,team.captain_id,actor));
     return view;
 }
@@ -69,14 +81,14 @@ BattleView team_plan_view(const alliance::account::Battle& battle,const std::str
         (history?"This plan is inactive. Readiness is saved history and captain approval is inactive.\n\n":
          inactive?"This draft is inactive until its changed teams, heroes or map are resolved.\n\n":"")+
         availability+"\n\nA shared battle needs both captain approvals, every selected player Ready and every fixed seat connected."
-        "\n\nBattle plan ID: "+battle.id+"\nCreated (UTC): "+battle.created_at;
+        "\nCreated (UTC): "+battle.created_at;
     view.rows.push_back(std::move(overview));
     for(const auto& team:battle.teams){
         std::string roster=team.name+"\nCaptain approval"+(inactive?std::string(" (inactive)"):std::string{})+
             ": "+(team.approved?"Approved":"Waiting")+"\n";
         for(const auto& player:team.players)roster+="\nSide "+std::to_string(player.side)+": "+player.username+
             (player.id==team.captain_id?" (captain)":"")+" — "+(inactive?std::string(history?"Saved readiness: ":"Inactive readiness: "):std::string{})+(player.ready?"Ready":"Not ready");
-        roster+="\n\nTeam ID: "+team.id;
+
         view.rows.push_back({team.name,"Captain: "+std::string(team.approved?"Approved":"Waiting")+
             (inactive?" (inactive)":""),roster,"icons/circlet_winged.png",{}});
         for(const auto& player:team.players){
@@ -88,11 +100,12 @@ BattleView team_plan_view(const alliance::account::Battle& battle,const std::str
                 team.name+"  •  "+status,
                 team.name+"\n"+player.username+(player.id==team.captain_id?"  •  Captain":"")+"\n\n"+hero+
                 (form?"\nHero level: "+std::to_string(player.hero_level):"\nChoose an owned hero before Ready.")+
-                "\n"+status+"\n\n"+(player.id==actor?"Use the actions below for your selected side.":"Only this player can choose their hero and change their readiness.")+
-                "\n\nPlayer ID: "+player.id,
+                "\n"+status+"\n\n"+(player.id==actor?"Use the actions below for your selected side.":"Only this player can choose their hero and change their readiness."),
                 form?battle_unit_image(form->unit_type):"units/unknown-unit.png",{}});
         }
     }
     return view;
 }
+
+#include "alliance_game/team_workspace.inc"
 }

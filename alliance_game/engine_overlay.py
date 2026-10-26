@@ -37,7 +37,7 @@ def generate_engine_overlay(source: bytes) -> bytes:
     result = b'#include "alliance_game/session_watch.hpp"\n#include "alliance_game/android_lifecycle.hpp"\n' + result
     exit_anchor = b'static void safe_exit(int res)\n{\n'
     if result.count(exit_anchor) != 1: raise ValueError('Pinned Android task exit differs.')
-    result = result.replace(exit_anchor, exit_anchor + b'\talliance_game::finish_game_task();\n')
+    result = result.replace(exit_anchor, exit_anchor + b'\talliance_game::logout_player();\n\talliance_game::finish_game_task();\n')
     loop = b'\twhile(true) {\n\t\tif(!game->has_load_data()) {'
     if result.count(loop) != 1: raise ValueError('Pinned session monitor lifetime differs.')
     return result.replace(loop, b'\tstd::unique_ptr<alliance_game::SessionWatch> account_connection_watch;\n\tif(!alliance_game::companion_requested()) account_connection_watch = std::make_unique<alliance_game::SessionWatch>();\n' + loop)

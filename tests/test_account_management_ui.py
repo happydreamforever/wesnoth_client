@@ -30,14 +30,15 @@ class AccountManagementUiTests(unittest.TestCase):
         self.assertIn('const bool approve = action == 0', review)
         self.assertIn('if(action < 0 || action > 1) continue', review)
 
-    def test_transfer_targets_current_other_members_and_displays_ids_before_confirmation(self):
+    def test_transfer_targets_current_other_members_by_name_and_binds_ids_privately(self):
         transfer = function("void transfer_captain(", "void leave_team(")
         self.assertIn("load_management_team(profile, team)", transfer)
         self.assertIn("team.captain_id != actor", transfer)
         self.assertIn("if(member.id == actor) continue", transfer)
         self.assertIn('select_change("Transfer captain"', transfer)
         self.assertIn('select_change("Confirm captain transfer"', transfer)
-        self.assertIn('"\\nPlayer ID: " + target.id', transfer)
+        self.assertIn('"\\n\\nNew captain: " + target.username', transfer)
+        self.assertNotIn('"\\nPlayer ID: "', transfer)
         self.assertIn("input.team_id = team.id", transfer)
         self.assertIn("input.account_id = target.id", transfer)
 

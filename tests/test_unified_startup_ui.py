@@ -10,8 +10,8 @@ def extract(source,signature):
 class UnifiedStartup(unittest.TestCase):
     def test_actual_gate_signup_session_and_generation(self):
         source=(ROOT/'alliance_game/account_ui.cpp').read_text()
-        names=['int welcome_action(', 'bool collect_credentials(', 'std::string profile_text(', 'bool reload_player(', 'BattleRow hero_form_card(', 'BattleView hero_collection_view(', 'bool choose_hero(', 'void register_player(', 'void login(', 'std::optional<PlayerSession> player_session(', 'void logout(', 'bool ensure_player_session(', 'void show_account_dialog(', 'void invalidate_player_session(', 'bool has_player_session(', 'void logout_player(']
-        backdrop=source[source.index('class AuthenticationBackdrop final'):source.index('int welcome_action(')].strip()
+        names=['int credential_action(', 'bool reload_player(', 'int register_player(', 'int login(', 'std::optional<PlayerSession> player_session(', 'void logout(', 'bool ensure_player_session(', 'void show_account_dialog(', 'void invalidate_player_session(', 'bool has_player_session(', 'void logout_player(']
+        backdrop=source[source.index('class AuthenticationBackdrop final'):source.index('int credential_action(')].strip()
         fixture=(ROOT/'tests/unified_startup_ui_fixture.cpp.in').read_text().replace('// @FUNCTIONS@',backdrop+'\n\n'+'\n\n'.join(extract(source,n) for n in names))
         compiler=shutil.which(os.environ.get('CXX','c++'));self.assertIsNotNone(compiler)
         with tempfile.TemporaryDirectory(prefix='unified-startup-') as folder:
