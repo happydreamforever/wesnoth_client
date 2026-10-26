@@ -7,6 +7,8 @@ param(
     [string]$SdkRoot = (Join-Path $env:LOCALAPPDATA 'Android\Sdk'),
     [string]$AdbPath = (Join-Path $env:LOCALAPPDATA 'Android\Sdk\platform-tools\adb.exe'),
     [string]$JavaHome = 'C:\Program Files\Android\Android Studio\jbr',
+    [string]$PublicConfigPath = '',
+    [string]$OpenSslPath = 'D:\Test\wesnoth-setup\msys64\mingw64\bin\openssl.exe',
     [string]$PythonPath = (Join-Path $env:LOCALAPPDATA 'Programs\Python\Python314\python.exe')
 )
 $ErrorActionPreference = 'Stop'
@@ -21,7 +23,9 @@ try {
     }
     # No transcript or output pipeline: passwords are hidden and the helper
     # writes only its sanitized structured report.
-    & $PythonPath -I -B -u $script --username $Username --room-id $RoomId --serial $Serial --adb $AdbPath --sdk $SdkRoot --java $java
+    $arguments = @('-I', '-B', '-u', $script, '--username', $Username, '--room-id', [string]$RoomId, '--serial', $Serial, '--adb', $AdbPath, '--sdk', $SdkRoot, '--java', $java, '--openssl', $OpenSslPath)
+    if ($PublicConfigPath) { $arguments += @('--public-config', $PublicConfigPath) }
+    & $PythonPath @arguments
     exit $LASTEXITCODE
 } catch {
     Write-Host 'The individual companion could not start. Check the selected existing tools, username and public Room ID.'

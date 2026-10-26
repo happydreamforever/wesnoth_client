@@ -26,11 +26,12 @@ import threading
 import time
 import uuid
 import warnings
+import zipfile
 import zlib
 
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGE = 'org.wesnoth.offline'
-VERSION = 1192620
+VERSION = 1192621
 WIRE_VERSION = 2
 PLAIN_LIMIT = 256 * 1024
 INT64_MAX = (1 << 63) - 1
@@ -312,9 +313,12 @@ class Device:
         return self.call('shell', '-T', 'run-as ' + PACKAGE + ' sh -c ' + shlex.quote(script), **kwargs)
 
 
-def verify_build(repo, sdk, java):
+def verify_build(repo, sdk, java, public_config=None, openssl=None):
     verifier = regular(repo / 'tools/build_android_account_game.py')
-    output = capture([sys.executable, '-I', '-B', str(verifier), '--verify-only', '--sdk', str(sdk), '--java', str(java)], timeout=900)
+    command = [sys.executable, '-I', '-B', str(verifier), '--verify-only', '--sdk', str(sdk), '--java', str(java)]
+    if public_config: command += ['--public-config', str(public_config)]
+    if openssl: command += ['--openssl', str(openssl)]
+    output = capture(command, timeout=900)
     if b'ANDROID ACCOUNT GAME ARTIFACTS VERIFIED' not in output.splitlines():
         fail('build_not_verified')
     paths = {'wesnoth-engine-cli': repo / 'build/android-engine/prefix/bin/wesnoth-engine-cli'}
@@ -349,9 +353,14 @@ def check_device(device, apk):
     private_root = device.private('pwd').strip().decode('ascii')
     if not re.fullmatch(r'/data/(?:user/0|data)/org\.wesnoth\.offline', private_root):
         fail('private_app_path_invalid')
-    profile_path = private_root + '/files/alliance-public-profile.json'
+    profile_path = private_root + '/files/alliance-bundled-profile.json'
     raw = device.private('test -f ' + shlex.quote(profile_path) + ' && test ! -L ' + shlex.quote(profile_path) + ' && head -c 32769 ' + shlex.quote(profile_path), limit=32768)
     profile = public_profile(raw)
+    try:
+        with zipfile.ZipFile(apk) as archive:
+            info = archive.getinfo('assets/alliance-public-profile.json')
+            if info.file_size > 32768 or archive.read(info) != raw: fail('bundled_profile_differs')
+    except (OSError, KeyError, zipfile.BadZipFile): fail('bundled_profile_unavailable')
     data = '/sdcard/Android/data/' + PACKAGE + '/files/gamedata'
     device.private('test -f ' + shlex.quote(data + '/data/_main.cfg') + ' && test -d ' + shlex.quote(data + '/images'))
     return private_root, profile_path, profile, data, hashlib.sha256(raw).hexdigest()
@@ -362,7 +371,7 @@ def launch_script(private_root, stage, account_id, battle_id, launch_id, data, h
     owner = private_root + '/files/alliance-companions/' + account_id
     saved = owner + '/' + battle_id
     session = saved + '/' + launch_id
-    original_profile = private_root + '/files/alliance-public-profile.json'
+    original_profile = private_root + '/files/alliance-bundled-profile.json'
     profile = saved + '/alliance-public-profile.json'
     base = private_root + '/files/alliance-companions'
     command = ' '.join(shlex.quote(value) for value in (
@@ -487,7 +496,7 @@ def execute(args, report):
     if policy:
         report['captain_policy'] = policy.copy()
     report['step'] = 'C01_verify_build'
-    payload = verify_build(ROOT, args.sdk, args.java)
+    payload = verify_build(ROOT, args.sdk, args.java, getattr(args, 'public_config', None), getattr(args, 'openssl', None))
     print('C01 PASS: current account APK and companion payload verified.', flush=True)
     device = Device(args.adb, args.serial)
     if re.fullmatch(r'127\.0\.0\.1:[0-9]+', args.serial):
@@ -568,6 +577,8 @@ def main(argv=None):
     parser.add_argument('--adb', type=Path, required=True)
     parser.add_argument('--sdk', type=Path, required=True)
     parser.add_argument('--java', type=Path, required=True)
+    parser.add_argument('--public-config', type=Path)
+    parser.add_argument('--openssl', type=Path)
     parser.add_argument('--retry-result', action='store_true', help='Upload only this account\'s retained result; do not enter gameplay.')
     parser.add_argument('--captain-action', choices=tuple(CAPTAIN_ACTIONS), help='Request one fixed captain action, then end this side\'s turns. Requires --after-turn.')
     parser.add_argument('--after-turn', type=int, help='First own turn numbered at least this value (1-100); requires --captain-action.')

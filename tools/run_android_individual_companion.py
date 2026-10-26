@@ -154,7 +154,7 @@ def run_native(device, script, admission, session, username, emit=print):
 
 def execute(args, report):
     report['step'] = 'I01_verify_build'
-    payload = C.verify_build(ROOT, args.sdk, args.java)
+    payload = C.verify_build(ROOT, args.sdk, args.java, getattr(args, 'public_config', None), getattr(args, 'openssl', None))
     device = C.Device(args.adb, args.serial)
     if re.fullmatch(r'127\.0\.0\.1:[0-9]+', args.serial):
         C.capture([str(C.regular(args.adb)), '-H', 'localhost', '-P', '5037', 'connect', args.serial])
@@ -213,6 +213,8 @@ def main(argv=None):
     parser.add_argument('--adb', type=Path, required=True)
     parser.add_argument('--sdk', type=Path, required=True)
     parser.add_argument('--java', type=Path, required=True)
+    parser.add_argument('--public-config', type=Path)
+    parser.add_argument('--openssl', type=Path)
     args = parser.parse_args(argv)
     report = {'format': 'individual-android-companion-v1', 'version': C.VERSION, 'room_id': args.room_id,
               'outcome': 'failed', 'step': 'I00_inputs', 'wan_status': 'not_recorded'}

@@ -32,21 +32,27 @@ ENGINE_KIND = 'wesnoth-android-account-engine'
 LOCK = '.wesnoth-account-game-operation.json'
 MARKER = '.wesnoth-account-game.json'
 ENGINE_MARKER = '.wesnoth-account-engine.json'
-VERSION_CODE = 1192620
-PREVIOUS_VERSION_CODES = frozenset((1192608, 1192609, 1192610, 1192611, 1192612, 1192613, 1192614, 1192615, 1192616, 1192617, 1192618, 1192619))
-UPDATE_JOURNAL = '.wesnoth-account-game-update-1192620.json'
+VERSION_CODE = 1192621
+PREVIOUS_VERSION_CODES = frozenset(range(1192608, 1192621))
+UPDATE_JOURNAL = '.wesnoth-account-game-update-1192621.json'
 UPDATE_KIND = 'wesnoth-android-account-game-update'
 UPDATE_STAGES = ('android-account-engine', 'android-account-game')
 PACKAGE = G.PACKAGE
-ACTIVITY = PACKAGE + '.AccountSetupActivity'
+ACTIVITY = PACKAGE + '.OfflineInitActivity'
+spec = importlib.util.spec_from_file_location('android_public_bundle', REPO / 'tools/android_public_bundle.py')
+PUBLIC = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(PUBLIC)
 APK, JNI_ROOT, LIBRARIES, ARTIFACTS = G.APK, G.JNI_ROOT, G.LIBRARIES, G.ARTIFACTS
 TEMPLATES = dict(G.TEMPLATES)
 TEMPLATES.update({name + '.java': 'app/src/main/java/org/wesnoth/offline/' + name + '.java'
-                  for name in ('AccountSetupActivity', 'AlliancePublicProfile', 'WesnothGameTask')})
+                  for name in ('AlliancePublicProfile', 'BundledStartup', 'StartupProgress', 'WesnothGameTask')})
 TEMPLATES.update({name + '.java': 'app/src/main/java/org/libsdl/app/' + name + '.java'
                   for name in ('WesnothKeyboard', 'WesnothKeyboardState')})
-NEW_INPUTS = ('tools/build_android_account_game.py', 'tools/native-account-game/CMakeLists.txt',
-              'alliance_game/account_ui.cpp', 'alliance_game/account_ui.hpp', 'alliance_game/title_overlay.py',
+NEW_INPUTS = ('tools/build_android_account_game.py', 'tools/android_public_bundle.py',
+              'tools/validate_android_account_profile.py', 'tools/native-account-game/ui-assets.json',
+              'tools/native-account-game/CMakeLists.txt',
+              'alliance_game/account_ui.cpp', 'alliance_game/account_ui.hpp', 'alliance_game/product_ui_layout.hpp', 'alliance_game/team_workspace.inc', 'alliance_game/individual_creation.inc',
+              'alliance_game/hero_presentation.hpp', 'alliance_game/hero_presentation_data.inc', 'alliance_game/hero_presentation.json', 'alliance_native/flexible_protocol.hpp', 'alliance_game/title_overlay.py',
               'alliance_game/engine_overlay.py',
               *(f'alliance_game/{name}.{suffix}' for name in ('session_watch', 'android_lifecycle') for suffix in ('cpp', 'hpp')), 'alliance_game/battle_launch.cpp', 'alliance_game/battle_launch.hpp',
               'alliance_game/practice_plan.cpp', 'alliance_game/practice_plan.hpp',
@@ -146,6 +152,11 @@ def selected_inputs(repo):
     files = dict(base['project_files'])
     files.update({name: fingerprint(repo / name) for name in NEW_INPUTS})
     base['project_files'] = files
+    try:
+        _, binding = PUBLIC.bundle(repo)
+    except ValueError as error:
+        raise BuildError(str(error)) from None
+    base.update(binding)
     return profile, base, wrapper
 
 
@@ -391,13 +402,17 @@ def engine_verify(repo, inputs):
 
 def game_generated(repo, profile, wrapper, source_files):
     files = call(G.generated_files, repo, profile, wrapper, source_files)
+    bundled, binding = PUBLIC.bundle(repo)
+    substitutions = dict(profile, public_profile_sha256=binding['public_server']['sha256'],
+                         ui_manifest_sha256=binding['bundled_assets'][PUBLIC.UI_MANIFEST]['sha256'])
     for template, output in TEMPLATES.items():
         content = regular(repo / 'tools/native-account-game' / template, 'Account APK template').read_text(encoding='utf-8')
-        for key, value in profile.items():
+        for key, value in substitutions.items():
             content = content.replace('@' + key.upper() + '@', str(value))
         if re.search(r'@[A-Z_]+@', content):
             raise BuildError('Unresolved account APK template setting.')
         files[output] = content.encode('utf-8')
+    files.update({'app/src/main/assets/' + name: data for name, data in bundled.items()})
     sdl_name = 'app/src/main/java/org/libsdl/app/SDLActivity.java'
     sdl = files[sdl_name].decode('utf-8')
     edits = {
@@ -428,10 +443,51 @@ def native_validation(repo, root):
 
 
 def inspect_apk(apk, root, version_code=VERSION_CODE):
-    # The shared inspector verifies ZIP paths, exactly five identical ELF payloads
-    # and the unchanged trusted OBB file index. Override only this stage's metadata.
-    detail = G.inspect_apk(apk, root)
-    detail.update(activity=ACTIVITY, version_code=version_code)
+    # Frozen base inspector remains unchanged. Historical APKs retain their exact
+    # original single-asset schema and launcher, including during preservation.
+    if version_code < 1192621:
+        detail = G.inspect_apk(apk, root)
+        detail.update(activity=PACKAGE + '.AccountSetupActivity', version_code=version_code)
+        return detail
+    regular(apk, 'Account APK')
+    marker = B.read_json(regular(root / MARKER, 'Account APK ownership'))
+    expected_assets = {name.removeprefix('app/src/main/'): value for name, value in marker['files'].items()
+                       if name.startswith('app/src/main/assets/')}
+    binding = marker['inputs']['bundled_assets']
+    if expected_assets != {'assets/' + G.MANIFEST: fingerprint(root / 'app/src/main/assets' / G.MANIFEST),
+                           **{'assets/' + name: value for name, value in binding.items()}}:
+        raise BuildError('Account APK asset ownership differs from its input binding.')
+    with zipfile.ZipFile(apk) as archive:
+        names = archive.namelist()
+        if len(names) != len(set(names)) or any(name.startswith('/') or '\\' in name or
+                any(part in ('', '.', '..') for part in name.rstrip('/').split('/')) for name in names):
+            raise BuildError('Account APK contains duplicate or unsafe ZIP entries.')
+        for name in ('AndroidManifest.xml', 'classes.dex'):
+            if name not in names or not archive.getinfo(name).file_size:
+                raise BuildError('Account APK lacks required Android content.')
+        libraries = {name for name in names if name.startswith('lib/') and not name.endswith('/')}
+        if libraries != {'lib/x86_64/' + name for name in LIBRARIES}:
+            raise BuildError('Account APK native library set differs.')
+        for name in LIBRARIES:
+            with archive.open('lib/x86_64/' + name) as stream:
+                digest, size = hashlib.sha256(), 0
+                while data := stream.read(1024 * 1024):
+                    digest.update(data); size += len(data)
+            if {'bytes': size, 'sha256': digest.hexdigest()} != fingerprint(root / JNI_ROOT / name):
+                raise BuildError('Account APK native payload differs from its owned copy.')
+        assets = {name for name in names if name.startswith('assets/') and not name.endswith('/')}
+        if assets != set(expected_assets):
+            raise BuildError('Account APK contains missing or unexpected assets.')
+        for name, expected in expected_assets.items():
+            if archive.getinfo(name).file_size != expected['bytes'] or PUBLIC.record(archive.read(name)) != expected:
+                raise BuildError('Account APK public asset differs from its pinned input.')
+        if expected_assets['assets/' + G.MANIFEST]['sha256'] != G.MANIFEST_HASH:
+            raise BuildError('Account APK changed the trusted OBB manifest.')
+    detail = {'package_name': PACKAGE, 'activity': ACTIVITY, 'game_activity': G.GAME_ACTIVITY,
+              'version_code': version_code, 'version_name': '1.19.26', 'abi': 'x86_64',
+              'min_sdk': 23, 'target_sdk': 35, 'native_payload_matches': True,
+              'manifest_sha256': G.MANIFEST_HASH, 'signature_verified_at_build': True,
+              'bundled_assets': binding}
     return detail
 
 
@@ -531,7 +587,7 @@ def previous_version(root, marker, receipt):
     apk = validation.get('apk') if isinstance(validation, dict) else None
     version = apk.get('version_code') if isinstance(apk, dict) else None
     if type(version) is not int or version not in PREVIOUS_VERSION_CODES:
-        raise BuildError('Expected a completed account APK from versions 1192608 through 1192619; nothing was renamed.')
+        raise BuildError('Expected a completed account APK from versions 1192608 through 1192620; nothing was renamed.')
     if 'app/build.gradle' not in marker['files']:
         raise BuildError('The previous account version is not bound to its owned Gradle input.')
     data = call(N.ninja_read, root / 'app/build.gradle', 64 * 1024)
@@ -554,7 +610,7 @@ def completed_previous_stages(repo, profile, current_inputs):
     owner = update_json(engine_root / ENGINE_MARKER)
     previous_inputs = owner.get('inputs')
     if (not isinstance(previous_inputs, dict) or previous_inputs.get('prerequisites') != current_inputs['prerequisites']
-            or set(previous_inputs) != set(current_inputs)):
+            or set(previous_inputs) not in (set(current_inputs), set(current_inputs) - {'public_server', 'bundled_assets'})):
         raise BuildError('The previous account build does not bind the preserved original game and prerequisites.')
     # Both validators recalculate generated-source and output hashes/ELF facts.
     # Only the source-input comparison deliberately uses the saved binding.
@@ -594,7 +650,7 @@ def checked_update_journal(record, current_inputs):
         entry = record['stages'][name]
         if not isinstance(entry, dict) or set(entry) != {'backup', 'snapshot'}:
             raise BuildError('Invalid account update stage record.')
-        match = re.fullmatch(re.escape(name) + r'-before-battle-ui-(\d{8}T\d{6}Z-[0-9a-f]{32})', str(entry['backup']))
+        match = re.fullmatch(re.escape(name) + r'-before-product-ui-(\d{8}T\d{6}Z-[0-9a-f]{32})', str(entry['backup']))
         if not match:
             raise BuildError('Invalid account backup location; no paths were changed.')
         suffixes.add(match.group(1))
@@ -658,7 +714,7 @@ def prepare_update(repo):
             token = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ-') + uuid.uuid4().hex
             record = {'schema_version': 1, 'kind': UPDATE_KIND, 'target_version': VERSION_CODE,
                       'target_inputs': inputs, 'stages': {name: {
-                          'backup': name + '-before-battle-ui-' + token, 'snapshot': snapshots[name]}
+                          'backup': name + '-before-product-ui-' + token, 'snapshot': snapshots[name]}
                           for name in UPDATE_STAGES}}
             checked_update_journal(record, inputs)
             write_new(journal, B.json_bytes(record))
@@ -762,12 +818,15 @@ def main(argv=None):
         parser.add_argument('--' + name, type=Path)
     parser.add_argument('--gradle-user-home', type=Path, default=Path.home() / '.gradle')
     parser.add_argument('--jobs', type=int, default=2)
+    parser.add_argument('--public-config', type=Path, help='Public-only .env file; defaults to the repository .env.')
+    parser.add_argument('--openssl', type=Path, help='Existing OpenSSL 3 executable for offline public certificate verification.')
     parser.add_argument('--verify', '--verify-only', action='store_true')
-    parser.add_argument('--prepare-update', action='store_true', help='Preserve completed 1192608, 1192609, 1192610, 1192611, 1192612, 1192613, 1192614, 1192615, 1192616, 1192617, 1192618 or 1192619 stages before the 1192620 battle interface update.')
+    parser.add_argument('--prepare-update', action='store_true', help='Preserve completed 1192608 through 1192620 stages before the 1192621 product interface update.')
     args = parser.parse_args(argv)
     try:
         for name, value in vars(args).items():
             if isinstance(value, Path): setattr(args, name, safe(value))
+        PUBLIC.CONFIG_PATH, PUBLIC.OPENSSL_PATH = args.public_config, args.openssl
         if args.prepare_update:
             if args.verify:
                 raise BuildError('Choose update preparation or verification, not both.')

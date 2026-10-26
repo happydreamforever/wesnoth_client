@@ -7,6 +7,8 @@ param(
     [string]$SdkRoot = (Join-Path $env:LOCALAPPDATA 'Android\Sdk'),
     [string]$AdbPath = (Join-Path $env:LOCALAPPDATA 'Android\Sdk\platform-tools\adb.exe'),
     [string]$JavaHome = 'C:\Program Files\Android\Android Studio\jbr',
+    [string]$PublicConfigPath = '',
+    [string]$OpenSslPath = 'D:\Test\wesnoth-setup\msys64\mingw64\bin\openssl.exe',
     [string]$PythonPath = (Join-Path $env:LOCALAPPDATA 'Programs\Python\Python314\python.exe'),
     [switch]$RetryResult,
     [ValidateSet('Surrender', 'OfferDraw', 'WithdrawDraw')][string]$CaptainAction,
@@ -30,6 +32,8 @@ try {
     # Deliberately no transcript or pipeline: Python owns the hidden password
     # prompt, memory-only session and sanitized report. No credential arguments.
     $arguments = @('-I', '-B', '-u', $script, '--username', $Username, '--battle-id', $BattleId, '--serial', $Serial, '--adb', $AdbPath, '--sdk', $SdkRoot, '--java', $java)
+    $arguments += @('--openssl', $OpenSslPath)
+    if ($PublicConfigPath) { $arguments += @('--public-config', $PublicConfigPath) }
     if ($RetryResult) { $arguments += '--retry-result' }
     if ($hasAction) {
         $actions = @{ Surrender = 'surrender'; OfferDraw = 'offer_draw'; WithdrawDraw = 'withdraw_draw' }

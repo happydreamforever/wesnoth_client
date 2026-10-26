@@ -22,6 +22,7 @@ import struct
 import subprocess
 import tempfile
 import threading
+import zipfile
 import unittest
 from unittest import mock
 
@@ -275,7 +276,7 @@ print(''' + repr(C.FINISHED + 'acknowledged') + ''',flush=True)
         for name in C.LIBRARIES: (stage / name).write_bytes(b'fixture-elf')
         hashes = {p.name: C.digest(p) for p in stage.iterdir()}
         private = root / 'app'; (private / 'files').mkdir(parents=True)
-        (private / 'files/alliance-public-profile.json').write_text('public-profile-fixture')
+        (private / 'files/alliance-bundled-profile.json').write_text('public-profile-fixture')
         return stage, private, hashes
 
     def shell_device(self):
@@ -377,7 +378,7 @@ print(''' + repr(C.FINISHED + 'acknowledged') + ''',flush=True)
     def test_real_shell_public_profile_copy_is_bound_and_original_preserved(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp); stage, private, hashes = self.make_payload(root)
-            original = private / 'files/alliance-public-profile.json'
+            original = private / 'files/alliance-bundled-profile.json'
             original_bytes = original.read_bytes()
             session, script = C.launch_script(str(private), str(stage), ACCOUNT, RUN, 'a' * 32, '/data', hashes, '0' * 64)
             with self.assertRaises(C.CompanionError): C.run_native(self.shell_device(), script, {'token': TOKEN}, session)
@@ -408,21 +409,26 @@ print(''' + repr(C.FINISHED + 'acknowledged') + ''',flush=True)
             with self.assertRaisesRegex(C.CompanionError, 'installed_version_differs'): C.check_device(device, apk)
             device.private.assert_not_called()
             device.reset_mock()
-            device.call.side_effect = [b'device\n', b'1\n', b'x86_64\n', b'28\n', b'versionCode=1192620', b'package:/data/app/example/base.apk\n', b'wrong hash']
+            device.call.side_effect = [b'device\n', b'1\n', b'x86_64\n', b'28\n', b'versionCode=1192621', b'package:/data/app/example/base.apk\n', b'wrong hash']
             with self.assertRaisesRegex(C.CompanionError, 'installed_apk_differs'): C.check_device(device, apk)
             device.private.assert_not_called()
 
     def test_device_reads_only_existing_profile_data_after_apk_checks(self):
         with tempfile.TemporaryDirectory() as tmp:
-            apk = Path(tmp) / 'app.apk'; apk.write_bytes(b'installed-apk')
+            apk = Path(tmp) / 'app.apk'
+            with zipfile.ZipFile(apk, 'w') as archive: archive.writestr('assets/alliance-public-profile.json', json.dumps(self.profile).encode())
             device = mock.Mock()
-            device.call.side_effect = [b'device\n', b'1\n', b'x86_64\n', b'28\n', b'versionCode=1192620', b'package:/data/app/example/base.apk\n', C.digest(apk).encode() + b' path']
+            device.call.side_effect = [b'device\n', b'1\n', b'x86_64\n', b'28\n', b'versionCode=1192621', b'package:/data/app/example/base.apk\n', C.digest(apk).encode() + b' path']
             raw = json.dumps(self.profile).encode()
             device.private.side_effect = [b'/data/user/0/org.wesnoth.offline\n', raw, b'']
             checked = C.check_device(device, apk)
             self.assertEqual(checked[2], self.profile)
             self.assertEqual(checked[4], hashlib.sha256(raw).hexdigest())
             self.assertNotIn('cp ', ' '.join(call.args[0] for call in device.private.call_args_list))
+            device.call.side_effect = [b'device\n', b'1\n', b'x86_64\n', b'28\n', b'versionCode=1192621', b'package:/data/app/example/base.apk\n', C.digest(apk).encode() + b' path']
+            changed = json.dumps(dict(self.profile, server_address='127.0.0.2')).encode()
+            device.private.side_effect = [b'/data/user/0/org.wesnoth.offline\n', changed]
+            with self.assertRaisesRegex(C.CompanionError, 'bundled_profile_differs'): C.check_device(device, apk)
 
     def test_build_payload_binds_current_receipts_after_full_verifier(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -6,6 +6,8 @@ param(
     [string]$JavaHome = 'C:\Program Files\Android\Android Studio\jbr',
     [string]$GradleUserHome = (Join-Path $env:USERPROFILE '.gradle'),
     [string]$ArchiveDirectory = '',
+    [string]$PublicConfigPath = '',
+    [string]$OpenSslPath = 'D:\Test\wesnoth-setup\msys64\mingw64\bin\openssl.exe',
     [string]$CMakePath = 'C:\Program Files\CMake\bin\cmake.exe',
     [string]$NinjaPath = 'D:\Test\wesnoth-setup\msys64\ucrt64\bin\ninja.exe'
 )
@@ -76,6 +78,8 @@ try {
         '--cmake', $CMakePath, '--ninja', $NinjaPath, '--sdk', (Get-Item -LiteralPath $SdkRoot -Force).FullName,
         '--java', (Get-Item -LiteralPath $java -Force).FullName, '--gradle-user-home', $GradleUserHome)
     if ($ArchiveDirectory) { $arguments += @('--archive-directory', $ArchiveDirectory) }
+    if ($PublicConfigPath) { $arguments += @('--public-config', $PublicConfigPath) }
+    $arguments += @('--openssl', $OpenSslPath)
     Write-Host 'Building the unified game offline: reuse verified original engine objects, compile owned game changes, package APK x86_64/API23. Original APK, engine and OBB are preserved.'
     $process = New-Object System.Diagnostics.Process
     $process.StartInfo.FileName = (Get-Item -LiteralPath $PythonPath -Force).FullName
@@ -136,7 +140,7 @@ try {
         throw 'The builder returned without its game APK receipt. Do not run the device test.'
     }
     Write-Host "ANDROID ACCOUNT GAME BUILD COMPLETE: $receipt"
-    Write-Host 'Next: tools/Install-AndroidAccountGame.ps1 updates the existing app and opens server-profile setup; no OBB transfer or app-data deletion.'
+    Write-Host 'Next: tools/Install-AndroidAccountGame.ps1 updates the existing app and opens the branded startup screen with its bundled public server configuration; no OBB transfer or app-data deletion.'
     $buildExit = 0
 } catch {
     Write-Host ('ERROR: ' + $_.Exception.Message) -ForegroundColor Red

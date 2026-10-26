@@ -54,7 +54,7 @@ elif cmd[:2]==['shell','getprop']:
 elif cmd[:3]==['shell','pm','path']:print(cfg.get('installed','package:/data/app/base.apk'))
 elif cmd[:3]==['shell','dumpsys','package']:
  updated=pathlib.Path(cfg['installed_flag']).exists()
- default='  versionCode='+str(cfg.get('updated_version',1192620) if updated else cfg.get('installed_version',1192608))+' minSdk=23 targetSdk=35'
+ default='  versionCode='+str(cfg.get('updated_version',1192621) if updated else cfg.get('installed_version',1192608))+' minSdk=23 targetSdk=35'
  print(cfg.get('updated_package_details' if updated else 'installed_package_details',default))
 elif cmd[:2]==['install','-r']:
  pathlib.Path(cfg['installed_flag']).write_text('updated')
@@ -69,7 +69,8 @@ elif cmd[:3]==['shell','am','start']:
  pathlib.Path(cfg['runid']).write_text(cmd[-1]);print(cfg.get('launch','Status: ok'))
 elif cmd[:2]==['shell','pidof']:print('999')
 elif cmd[:1]==['logcat']:
- print('WESNOTH_ACCOUNT_SETUP_READY run_id='+pathlib.Path(cfg['runid']).read_text())
+ print('WESNOTH_STARTUP_READY run_id='+pathlib.Path(cfg['runid']).read_text())
+ if cfg.get('startup_failed'):print('WESNOTH_GAME FAIL run_id='+pathlib.Path(cfg['runid']).read_text()+' bundled_configuration_failed')
 else:raise AssertionError(cmd)
 '''
 def ps(value):return "'"+str(value).replace("'","''")+"'"
@@ -111,7 +112,7 @@ class InstallTests(unittest.TestCase):
  def invoke(self):
   self.configpath.write_text(json.dumps(self.config));Path(self.config['calls']).unlink(missing_ok=True)
   Path(self.config['installed_flag']).unlink(missing_ok=True)
-  profile_arguments=' -KeepSavedProfile' if self.keep_saved_profile else ' -ProfilePath '+ps(self.profile)
+  profile_arguments=' -KeepSavedProfile' if self.keep_saved_profile else ''
   launcher=self.base/'run.ps1';launcher.write_text('& '+ps(self.helper)+' -PythonPath '+ps(self.python)+' -AdbPath '+ps(self.adb)+' -JavaHome '+ps(self.java.parent.parent)+' -SdkRoot '+ps(self.base/'Android SDK')+profile_arguments+'\nexit $LASTEXITCODE\n')
   env=dict(os.environ,OS='Windows_NT',LOCALAPPDATA=str(self.base),SystemRoot=str(self.base/'Windows'),ACCOUNT_FIXTURE=str(self.configpath))
   proc=subprocess.run([str(PWSH),'-NoProfile','-File',str(launcher)],env=env,capture_output=True,text=True,timeout=30)
@@ -124,7 +125,7 @@ class InstallTests(unittest.TestCase):
  def test_update_and_public_snapshot_only(self):
   self.assertEqual(self.invoke(),0,self.output)
   cmd=self.commands();self.assertIn(['install','-r',str(self.apk)],cmd)
-  pushes=[x for x in cmd if x[0]=='push'];self.assertEqual(len(pushes),1);self.assertNotEqual(pushes[0][1],str(self.profile));self.assertIn('/sdcard/Download/wesnoth-alliance-public-profile-',pushes[0][2])
+  self.assertFalse(any(x[0]=='push' for x in cmd));self.assertTrue(any('/.OfflineInitActivity' in str(x) for x in cmd))
   self.assertFalse(any('uninstall' in x or 'clear' in x for x in cmd));self.assertFalse(any('.obb' in str(x) for x in cmd))
   self.assertIn('ANDROID ACCOUNT GAME INSTALL COMPLETE',self.output)
  def test_preserve_saved_profile_previous_version_1192608_has_no_profile_read_or_copy(self):
@@ -137,9 +138,9 @@ class InstallTests(unittest.TestCase):
   self.assertFalse(any(x[0] in ('push','uninstall') or 'clear' in x for x in cmd))
   self.assertFalse(any(any('validate_android_account_profile' in arg for arg in call['args']) for call in self.calls))
   self.assertFalse(list((self.repo/'diagnostics').glob('public-alliance-profile-*')))
-  self.assertIn('Confirm the existing Trusted server is displayed',self.output)
-  self.assertIn('Version 1192620 and setup activity startup are verified.',self.output)
-  self.assertIn('If setup says no saved profile',self.output)
+  self.assertIn('Confirm the game background, logo and data-check percentage',self.output)
+  self.assertIn('Version 1192621 and startup screen launch are verified.',self.output)
+  self.assertIn('prior imported profile remains untouched',self.output)
   self.assertNotIn('PUBLIC ALLIANCE PROFILE VERIFIED',self.output)
  def test_preserve_saved_profile_previous_version1192609_has_no_profile_read_or_copy(self):
   self.keep_saved_profile=True;self.config['installed_version']=1192609;self.profile.unlink()
@@ -147,86 +148,86 @@ class InstallTests(unittest.TestCase):
   cmd=self.commands();self.assertIn(['install','-r',str(self.apk)],cmd)
   self.assertFalse(any(x[0] in ('push','uninstall') or 'clear' in x for x in cmd))
   self.assertFalse(any(any('validate_android_account_profile' in arg for arg in call['args']) for call in self.calls))
-  self.assertIn('Version 1192620 and setup activity startup are verified.',self.output)
+  self.assertIn('Version 1192621 and startup screen launch are verified.',self.output)
  def test_preserve_saved_profile_previous_version1192610_has_no_profile_read_or_copy(self):
   self.keep_saved_profile=True;self.config['installed_version']=1192610;self.profile.unlink()
   self.assertEqual(self.invoke(),0,self.output)
   cmd=self.commands();self.assertIn(['install','-r',str(self.apk)],cmd)
   self.assertFalse(any(x[0] in ('push','uninstall') or 'clear' in x for x in cmd))
   self.assertFalse(any(any('validate_android_account_profile' in arg for arg in call['args']) for call in self.calls))
-  self.assertIn('Version 1192620 and setup activity startup are verified.',self.output)
+  self.assertIn('Version 1192621 and startup screen launch are verified.',self.output)
  def test_preserve_saved_profile_previous_version1192611_has_no_profile_read_or_copy(self):
   self.keep_saved_profile=True;self.config['installed_version']=1192611;self.profile.unlink()
   self.assertEqual(self.invoke(),0,self.output)
   cmd=self.commands();self.assertIn(['install','-r',str(self.apk)],cmd)
   self.assertFalse(any(x[0] in ('push','uninstall') or 'clear' in x for x in cmd))
   self.assertFalse(any(any('validate_android_account_profile' in arg for arg in call['args']) for call in self.calls))
-  self.assertIn('Version 1192620 and setup activity startup are verified.',self.output)
+  self.assertIn('Version 1192621 and startup screen launch are verified.',self.output)
  def test_preserve_saved_profile_previous_version1192612_has_no_profile_read_or_copy(self):
   self.keep_saved_profile=True;self.config['installed_version']=1192612;self.profile.unlink()
   self.assertEqual(self.invoke(),0,self.output)
   cmd=self.commands();self.assertIn(['install','-r',str(self.apk)],cmd)
   self.assertFalse(any(x[0] in ('push','uninstall') or 'clear' in x for x in cmd))
   self.assertFalse(any(any('validate_android_account_profile' in arg for arg in call['args']) for call in self.calls))
-  self.assertIn('Version 1192620 and setup activity startup are verified.',self.output)
+  self.assertIn('Version 1192621 and startup screen launch are verified.',self.output)
  def test_preserve_saved_profile_previous_version1192613_has_no_profile_read_or_copy(self):
   self.keep_saved_profile=True;self.config['installed_version']=1192613;self.profile.unlink()
   self.assertEqual(self.invoke(),0,self.output)
   cmd=self.commands();self.assertIn(['install','-r',str(self.apk)],cmd)
   self.assertFalse(any(x[0] in ('push','uninstall') or 'clear' in x for x in cmd))
   self.assertFalse(any(any('validate_android_account_profile' in arg for arg in call['args']) for call in self.calls))
-  self.assertIn('Version 1192620 and setup activity startup are verified.',self.output)
+  self.assertIn('Version 1192621 and startup screen launch are verified.',self.output)
  def test_preserve_saved_profile_previous_version1192614_has_no_profile_read_or_copy(self):
   self.keep_saved_profile=True;self.config['installed_version']=1192614;self.profile.unlink()
   self.assertEqual(self.invoke(),0,self.output)
   cmd=self.commands();self.assertIn(['install','-r',str(self.apk)],cmd)
   self.assertFalse(any(x[0] in ('push','uninstall') or 'clear' in x for x in cmd))
   self.assertFalse(any(any('validate_android_account_profile' in arg for arg in call['args']) for call in self.calls))
-  self.assertIn('Version 1192620 and setup activity startup are verified.',self.output)
+  self.assertIn('Version 1192621 and startup screen launch are verified.',self.output)
  def test_preserve_saved_profile_previous_version1192615_has_no_profile_read_or_copy(self):
   self.keep_saved_profile=True;self.config['installed_version']=1192615;self.profile.unlink()
   self.assertEqual(self.invoke(),0,self.output)
   cmd=self.commands();self.assertIn(['install','-r',str(self.apk)],cmd)
   self.assertFalse(any(x[0] in ('push','uninstall') or 'clear' in x for x in cmd))
   self.assertFalse(any(any('validate_android_account_profile' in arg for arg in call['args']) for call in self.calls))
-  self.assertIn('Version 1192620 and setup activity startup are verified.',self.output)
+  self.assertIn('Version 1192621 and startup screen launch are verified.',self.output)
  def test_preserve_saved_profile_previous_version1192616_has_no_profile_read_or_copy(self):
   self.keep_saved_profile=True;self.config['installed_version']=1192616;self.profile.unlink()
   self.assertEqual(self.invoke(),0,self.output)
   cmd=self.commands();self.assertIn(['install','-r',str(self.apk)],cmd)
   self.assertFalse(any(x[0] in ('push','uninstall') or 'clear' in x for x in cmd))
   self.assertFalse(any(any('validate_android_account_profile' in arg for arg in call['args']) for call in self.calls))
-  self.assertIn('Version 1192620 and setup activity startup are verified.',self.output)
+  self.assertIn('Version 1192621 and startup screen launch are verified.',self.output)
  def test_preserve_saved_profile_previous_version1192617_has_no_profile_read_or_copy(self):
   self.keep_saved_profile=True;self.config['installed_version']=1192617;self.profile.unlink()
   self.assertEqual(self.invoke(),0,self.output)
   cmd=self.commands();self.assertIn(['install','-r',str(self.apk)],cmd)
   self.assertFalse(any(x[0] in ('push','uninstall') or 'clear' in x for x in cmd))
   self.assertFalse(any(any('validate_android_account_profile' in arg for arg in call['args']) for call in self.calls))
-  self.assertIn('Version 1192620 and setup activity startup are verified.',self.output)
+  self.assertIn('Version 1192621 and startup screen launch are verified.',self.output)
  def test_preserve_saved_profile_previous_version1192618_has_no_profile_read_or_copy(self):
   self.keep_saved_profile=True;self.config['installed_version']=1192618;self.profile.unlink()
   self.assertEqual(self.invoke(),0,self.output)
   cmd=self.commands();self.assertIn(['install','-r',str(self.apk)],cmd)
   self.assertFalse(any(x[0] in ('push','uninstall') or 'clear' in x for x in cmd))
   self.assertFalse(any(any('validate_android_account_profile' in arg for arg in call['args']) for call in self.calls))
-  self.assertIn('Version 1192620 and setup activity startup are verified.',self.output)
+  self.assertIn('Version 1192621 and startup screen launch are verified.',self.output)
  def test_preserve_saved_profile_previous_version1192619_has_no_profile_read_or_copy(self):
   self.keep_saved_profile=True;self.config['installed_version']=1192619;self.profile.unlink()
   self.assertEqual(self.invoke(),0,self.output)
   cmd=self.commands();self.assertIn(['install','-r',str(self.apk)],cmd)
   self.assertFalse(any(x[0] in ('push','uninstall') or 'clear' in x for x in cmd))
   self.assertFalse(any(any('validate_android_account_profile' in arg for arg in call['args']) for call in self.calls))
-  self.assertIn('Version 1192620 and setup activity startup are verified.',self.output)
+  self.assertIn('Version 1192621 and startup screen launch are verified.',self.output)
  def test_keep_saved_profile_rejects_unexpected_old_version_before_install(self):
   self.keep_saved_profile=True
-  for version in (1192600,1192601,1192602,1192603,1192604,1192605,1192606,1192607,1192621,1192699,'not a version'):
+  for version in (1192600,1192601,1192602,1192603,1192604,1192605,1192606,1192607,1192622,1192699,'not a version'):
    with self.subTest(version=version):
     self.config['installed_version']=version
     self.assertEqual(self.invoke(),2,self.output)
     self.assertFalse(any(x[0]=='install' for x in self.commands()))
  def test_keep_saved_profile_allows_repeat_install_of_current_version(self):
-  self.keep_saved_profile=True;self.config['installed_version']=1192620
+  self.keep_saved_profile=True;self.config['installed_version']=1192621
   self.assertEqual(self.invoke(),0,self.output)
  def test_keep_saved_profile_checks_installed_new_version_before_launch(self):
   self.keep_saved_profile=True;self.config['updated_version']=1192608
@@ -237,7 +238,7 @@ class InstallTests(unittest.TestCase):
   self.keep_saved_profile=True
   for field,details in (
    ('installed_package_details','versionCode=1192608\nversionCode=1192609'),
-   ('updated_package_details','versionCode=1192620\nversionCode=1192620'),
+   ('updated_package_details','versionCode=1192621\nversionCode=1192621'),
    ('updated_package_details','versionCode=invalid')):
    with self.subTest(field=field,details=details):
     original=self.config.copy();self.config[field]=details
@@ -247,7 +248,7 @@ class InstallTests(unittest.TestCase):
     self.assertNotIn('ANDROID ACCOUNT GAME INSTALL COMPLETE',self.output)
     self.config=original
  def test_verification_failures_precede_adb(self):
-  for cfg in ({'verify_exit':2},{'verify_marker':'not complete'},{'profile_fail':True}):
+  for cfg in ({'verify_exit':2},{'verify_marker':'not complete'}):
    with self.subTest(cfg=cfg):
     original=self.config.copy();self.config.update(cfg);self.assertEqual(self.invoke(),2,self.output);self.assertFalse(any(x['tool']=='adb.exe' for x in self.calls));self.config=original
  def test_tampered_apk_precedes_adb(self):
@@ -258,18 +259,24 @@ class InstallTests(unittest.TestCase):
     old=self.config.copy();self.config.update(cfg);self.assertEqual(self.invoke(),2,self.output);self.assertFalse(any(x[0]=='install' for x in self.commands()));self.config=old
  def test_failed_install_does_not_uninstall_or_push_profile(self):
   self.config['install_exit']=1;self.assertEqual(self.invoke(),2,self.output);self.assertFalse(any(x[0] in ('push','uninstall') for x in self.commands()))
- def test_bad_public_transfer_prevents_launch(self):
-  for cfg in ({'push_exit':1},{'remote_hash':'0'*64}):
-   with self.subTest(cfg=cfg):
-    old=self.config.copy();self.config.update(cfg);self.assertEqual(self.invoke(),2,self.output);self.assertFalse(any(x[:3]==['shell','am','start'] for x in self.commands()));self.config=old
+ def test_no_public_transfer_or_profile_import_when_legacy_file_is_absent(self):
+  self.profile.unlink()
+  self.assertEqual(self.invoke(),0,self.output)
+  self.assertFalse(any(x[0]=='push' for x in self.commands()))
+  self.assertNotIn('Import server profile',self.output)
+ def test_startup_configuration_failure_preserves_installed_data_and_is_reported(self):
+  self.config['startup_failed']=True
+  self.assertEqual(self.invoke(),2,self.output)
+  self.assertNotIn('ANDROID ACCOUNT GAME INSTALL COMPLETE',self.output)
+  self.assertFalse(any(x[0] in ('push','uninstall') or 'clear' in x for x in self.commands()))
  def test_launch_error_does_not_claim_success(self):
   self.config['launch']='Error: activity missing';self.assertEqual(self.invoke(),2,self.output);self.assertNotIn('ANDROID ACCOUNT GAME INSTALL COMPLETE',self.output)
 
  def timeout_case(self, changes):
   # Shorten only this copied fixture's verification deadline. Production remains ten minutes.
   self.helper.write_text(self.helper.read_text().replace(
-   "$verifier, '--verify-only', '--sdk', $SdkRoot, '--java', $java) 600000",
-   "$verifier, '--verify-only', '--sdk', $SdkRoot, '--java', $java) 600"))
+   "$PythonPath $verifyArguments 600000",
+   "$PythonPath $verifyArguments 600"))
   self.config.update({'verify_hang':True,**changes})
   self.assertEqual(self.invoke(),2,self.output)
   killers=[x for x in self.calls if x['tool']=='taskkill.exe']
@@ -353,14 +360,14 @@ class RebuildTests(unittest.TestCase):
  def test_preparation_precedes_build_and_preserves_literal_arguments(self):
   self.assertEqual(self.invoke_rebuild(),0,self.output)
   self.assertEqual([x['tool'] for x in self.calls],['python.exe','powershell.exe'])
-  self.assertEqual(self.calls[0]['args'],['-I','-B','-u',str(self.repo/'tools/build_android_account_game.py'),'--prepare-update'])
+  self.assertEqual(self.calls[0]['args'],['-I','-B','-u',str(self.repo/'tools/build_android_account_game.py'),'--prepare-update','--openssl',r'D:\Test\wesnoth-setup\msys64\mingw64\bin\openssl.exe'])
   args=self.calls[1]['args']
   for name,value in (('-JavaHome',self.java.parent.parent),('-GradleUserHome',self.base/'Gradle cache'),
                      ('-ArchiveDirectory',self.base/'Original archives')):
    self.assertEqual(args[args.index(name)+1],str(value))
   self.assertIn('ANDROID ACCOUNT GAME REBUILD COMPLETE',self.output)
-  self.assertIn('completed 1192608, 1192609, 1192610, 1192611, 1192612, 1192613, 1192614, 1192615, 1192616, 1192617, 1192618 or 1192619 account stages before the 1192620 battle interface update',self.output)
-  self.assertIn('-KeepSavedProfile',self.output)
+  self.assertIn('completed 1192608, 1192609, 1192610, 1192611, 1192612, 1192613, 1192614, 1192615, 1192616, 1192617, 1192618, 1192619 or 1192620 account stages before the 1192621 product interface update',self.output)
+  self.assertIn('No server-profile import is needed.',self.output)
  def test_failed_preparation_prevents_build(self):
   self.config['prepare_exit']=2
   self.assertEqual(self.invoke_rebuild(),2,self.output)

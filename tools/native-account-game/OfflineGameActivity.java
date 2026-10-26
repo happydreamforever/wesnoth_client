@@ -37,9 +37,10 @@ public final class OfflineGameActivity extends SDLActivity {
     @Override protected void onCreate(Bundle savedInstanceState) {
         runId = OfflineInitActivity.runId(getIntent());
         try {
-            File profile = new File(getFilesDir(), "alliance-public-profile.json");
-            // Native account code validates this private, explicitly approved profile again.
+            File profile = BundledStartup.prepareProfile(this);
+            // Native account code independently validates the signed APK's public profile.
             android.system.Os.setenv("WESNOTH_ALLIANCE_PROFILE", profile.getCanonicalPath(), true);
+            android.system.Os.setenv("WESNOTH_UI_ASSETS", BundledStartup.prepareUi(this).getCanonicalPath(), true);
         } catch (Exception error) {
             throw new IllegalStateException("Cannot prepare the account profile path.", error);
         }

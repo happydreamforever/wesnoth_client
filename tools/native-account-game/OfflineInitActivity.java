@@ -2,6 +2,9 @@ package org.wesnoth.offline;
 
 import android.app.Activity;
 import android.content.Intent;
+import android.graphics.BitmapFactory;
+import android.graphics.Color;
+import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.os.SystemClock;
 import android.system.ErrnoException;
@@ -14,6 +17,8 @@ import android.view.View;
 import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.LinearLayout;
+import android.widget.FrameLayout;
+import android.widget.ImageView;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 import java.io.File;
@@ -35,6 +40,7 @@ public final class OfflineInitActivity extends Activity {
     private boolean working;
     private volatile boolean destroyed;
     private long lastProgress;
+    private String lastPhase = "";
 
     static String runId(Intent intent) {
         String value = intent.getStringExtra("wesnoth_run_id");
@@ -61,32 +67,59 @@ public final class OfflineInitActivity extends Activity {
     @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         runId = runId(getIntent());
+        FrameLayout screen = new FrameLayout(this);
+        screen.setBackgroundColor(Color.rgb(18, 24, 32));
+        ImageView background = new ImageView(this);
+        background.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        loadArt(background, "startup/titlescreen.webp");
+        screen.addView(background, new FrameLayout.LayoutParams(-1, -1));
+        View shade = new View(this);
+        shade.setBackground(new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
+                new int[] {0x55202b34, 0xcc101820}));
+        screen.addView(shade, new FrameLayout.LayoutParams(-1, -1));
         LinearLayout layout = new LinearLayout(this);
         layout.setOrientation(LinearLayout.VERTICAL);
         layout.setGravity(Gravity.CENTER);
         int padding = (int) (32 * getResources().getDisplayMetrics().density);
         layout.setPadding(padding, padding, padding, padding);
-        TextView title = new TextView(this);
-        title.setText("Wesnoth Offline");
-        title.setTextSize(28);
-        title.setGravity(Gravity.CENTER);
-        layout.addView(title);
+        ImageView title = new ImageView(this);
+        title.setContentDescription("The Battle for Wesnoth");
+        title.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        loadArt(title, "startup/logo.png");
+        layout.addView(title, new LinearLayout.LayoutParams(-1, padding * 4));
         status = new TextView(this);
         status.setText("Preparing game data…");
         status.setTextSize(18);
+        status.setTextColor(Color.rgb(248, 240, 217));
+        status.setShadowLayer(3, 0, 1, Color.BLACK);
         status.setGravity(Gravity.CENTER);
         status.setPadding(0, padding / 2, 0, padding / 2);
         layout.addView(status);
         progress = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
-        progress.setMax(1000);
+        progress.setMax(100);
+        progress.setProgressTintList(android.content.res.ColorStateList.valueOf(Color.rgb(222, 187, 111)));
+        progress.setProgressBackgroundTintList(android.content.res.ColorStateList.valueOf(0xcc263746));
         layout.addView(progress, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
         retry = new Button(this);
         retry.setText("Try again");
         retry.setVisibility(View.GONE);
         retry.setOnClickListener(view -> begin());
         layout.addView(retry);
-        setContentView(layout);
+        FrameLayout.LayoutParams panel = new FrameLayout.LayoutParams(
+                Math.min(getResources().getDisplayMetrics().widthPixels, (int) (720 * getResources().getDisplayMetrics().density)), -2, Gravity.CENTER);
+        screen.addView(layout, panel);
+        setContentView(screen);
+        Log.i(TAG, "WESNOTH_STARTUP_READY run_id=" + runId);
         begin();
+    }
+
+    private void loadArt(ImageView target, String asset) {
+        try (InputStream source = getAssets().open(asset)) {
+            BitmapFactory.Options options = new BitmapFactory.Options();
+            options.inPreferredConfig = asset.endsWith("logo.png")
+                    ? android.graphics.Bitmap.Config.ARGB_8888 : android.graphics.Bitmap.Config.RGB_565;
+            target.setImageBitmap(BitmapFactory.decodeStream(source, null, options));
+        } catch (IOException error) { Log.e(TAG, "WESNOTH_STARTUP_ART_UNAVAILABLE"); }
     }
 
     private void begin() {
@@ -97,8 +130,13 @@ public final class OfflineInitActivity extends Activity {
         progress.setIndeterminate(true);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         lastProgress = 0;
+        lastPhase = "";
         worker.execute(() -> {
+            String stage = "server configuration";
             try {
+                BundledStartup.prepareProfile(this);
+                BundledStartup.prepareUi(this);
+                stage = "game data";
                 OfflineDataInstaller.Manifest manifest;
                 try (InputStream input = getAssets().open("gamedata-files.jsonl")) {
                     manifest = OfflineDataInstaller.readManifest(input, OfflineDataInstaller.MANIFEST_SHA256,
@@ -113,6 +151,8 @@ public final class OfflineInitActivity extends Activity {
                 runOnUiThread(() -> {
                     if (destroyed || isFinishing()) return;
                     working = false;
+                    progress.setIndeterminate(false);
+                    progress.setProgress(StartupProgress.percent(manifest.bytes, manifest.bytes, true));
                     status.setText("Starting Wesnoth…");
                     getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
                     Intent game = new Intent(this, OfflineGameActivity.class);
@@ -122,13 +162,17 @@ public final class OfflineInitActivity extends Activity {
                     finish();
                 });
             } catch (Exception error) {
-                Log.e(TAG, "WESNOTH_GAME FAIL run_id=" + runId + " message=" + error.getMessage(), error);
+                final boolean configurationFailed = stage.equals("server configuration");
+                Log.e(TAG, "WESNOTH_GAME FAIL run_id=" + runId +
+                        (configurationFailed ? " bundled_configuration_failed" : " game_data_preparation_failed"));
                 runOnUiThread(() -> {
                     if (destroyed || isFinishing()) return;
                     working = false;
                     progress.setIndeterminate(false);
                     progress.setProgress(0);
-                    status.setText("Game data could not be prepared. Check that the supplied game-data file is installed, then try again. Your saved games have been kept.");
+                    status.setText(configurationFailed
+                            ? "This app's server configuration could not be prepared. Ask the server administrator for the current app build. Your saved games have been kept."
+                            : "Game data could not be prepared. Check that the supplied game-data file is installed, then try again. Your saved games have been kept.");
                     retry.setVisibility(View.VISIBLE);
                     getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
                 });
@@ -137,15 +181,16 @@ public final class OfflineInitActivity extends Activity {
     }
     private void showProgress(String phase, int files, int totalFiles, long bytes, long totalBytes) {
         long now = SystemClock.elapsedRealtime();
-        if (files != totalFiles && now - lastProgress < 500) return;
+        if (phase.equals(lastPhase) && files != totalFiles && now - lastProgress < 150) return;
         lastProgress = now;
-        int value = totalBytes == 0 ? 0 : (int) Math.min(1000, bytes * 1000 / totalBytes);
+        lastPhase = phase;
+        int value = StartupProgress.percent(bytes, totalBytes, false);
         Log.i(TAG, "WESNOTH_GAME_DATA_PROGRESS run_id=" + runId + " phase=" + phase + " files=" + files + "/" + totalFiles);
         runOnUiThread(() -> {
             if (destroyed || isFinishing()) return;
             progress.setIndeterminate(false);
             progress.setProgress(value);
-            status.setText(phase + "\n" + String.format(Locale.getDefault(), "%,d / %,d files", files, totalFiles));
+            status.setText(phase + " — " + value + "%\n" + String.format(Locale.getDefault(), "%,d / %,d files", files, totalFiles));
         });
     }
     @Override protected void onDestroy() {
