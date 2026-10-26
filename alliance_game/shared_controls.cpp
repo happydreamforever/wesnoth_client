@@ -14,6 +14,7 @@ void add_shared_controls(config& scenario,const alliance::account::Battle& battl
         const auto& team=battle.teams[index];
         if(!alliance::progression_protocol::uuid(team.id)||!alliance::progression_protocol::uuid(team.captain_id))throw std::invalid_argument("Invalid captain identity.");
         code<<"teams["<<index+1<<"]='"<<team.id<<"'\n";
+        for(const auto& slot:team.slots)if(slot.kind!="closed")code<<"side_team["<<slot.side<<"]="<<index+1<<"\n";
         for(const auto& player:team.players) {
             if(player.side<1||player.side>8)throw std::invalid_argument("Invalid captain side.");
             code<<"side_team["<<player.side<<"]="<<index+1<<"\n";
@@ -33,6 +34,7 @@ local function finish(kind,winner)
     end
     wesnoth.wml_actions.endlevel(cfg)
 end
+function alliance_time_limit_draw() finish('draw',nil) end
 function wesnoth.custom_synced_commands.alliance_captain_v1(cfg)
     local side=wesnoth.current.side
     if not captain_side[side] or wml.variables.alliance_terminal_kind then
@@ -69,6 +71,10 @@ function alliance_captain_prompt(action)
 end
 )LUA";
     scenario.add_child("lua")["code"]=code.str();
+    if(battle.format==2&&battle.settings.turns>0) {
+        auto& timeout=scenario.add_child("event");timeout["name"]="time over";
+        timeout.add_child("lua")["code"]="alliance_time_limit_draw()";
+    }
     auto& event=scenario.add_child("event");event["name"]="prestart";
     for(const auto& team:battle.teams)for(const auto& player:team.players)if(player.id==team.captain_id) {
         for(const auto& action:{"surrender","offer_draw","withdraw_draw"}) {

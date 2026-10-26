@@ -26,10 +26,11 @@ if not args.binary.is_file() or args.binary.stat().st_size < 1000000:
     raise RuntimeError('Completed native fixture executable is required')
 data = json.loads(args.fixture.read_text())
 assert data['purpose'] == 'disposable-shared-engine-fixture'
-assert data['size'] == args.size and len(data['players']) == args.size * 2
+flexible = data.get('flexible', False)
+assert data['size'] == args.size and len(data['players']) == (2 if flexible else args.size * 2)
 assert data['map_id'] == {2: 'isars-cross', 3: 'hexcake', 4: 'mokena-prairie'}[args.size]
-assert data['captain_indices'] == [0, args.size]
-assert sorted(actor['side'] for actor in data['players']) == list(range(1, args.size * 2 + 1))
+assert data['captain_indices'] == [0, 1 if flexible else args.size]
+assert sorted(actor['side'] for actor in data['players']) == ([2,4] if flexible else list(range(1, args.size * 2 + 1)))
 args.output.mkdir()
 children = []
 records = []
@@ -44,6 +45,7 @@ try:
         env = dict(os.environ, SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy',
             WESNOTH_ALLIANCE_PROFILE=str(public), ALLIANCE_SHARED_FIXTURE_TERMINAL='yes',
             XDG_CACHE_HOME=str(own / 'font-cache'))
+        if flexible: env['ALLIANCE_SHARED_FIXTURE_FLEXIBLE'] = 'yes'
         extra = []
         if index == 0:
             env['ALLIANCE_SHARED_FIXTURE_HUMAN'] = 'yes'
@@ -103,16 +105,17 @@ end
     result = {'size': args.size, 'map_id': data['map_id'], 'clients': len(records),
         'seconds': round(time.monotonic() - started_at, 3),
         'binary_sha256': hashlib.sha256(args.binary.read_bytes()).hexdigest(), 'records': records,
+        'flexible_slots': flexible,
         'scope': 'Real Linux host engine, strict TLS daemon and disposable MongoDB; one scripted human captain plus computer-controlled seats. Fixture prestart assertions and explicit surrender at round3; not Android rendering or multiple-human acceptance.'}
     (args.output / 'result.json').write_text(json.dumps(result, indent=2) + '\n')
     assert all(row['exit'] == 0 and not row['timed_out'] and row['started'] and
         row['initial_config_verified'] and row['network_round_verified'] and row['finished'] and
         row['acknowledged'] and not row['failed'] and row.get('journal_acknowledged') and
         row.get('journal_draw_false') and row.get('journal_winner_matches_opponent') and
-        row.get('replay_hash_verified') and row.get('replay_end_turn_commands', 0) >= args.size * 4
+        row.get('replay_hash_verified') and row.get('replay_end_turn_commands', 0) >= (8 if flexible else args.size * 4)
         for row in records), records
     assert 'MULTISEAT CAPTAIN TERMINAL REQUESTED AFTER TWO ROUNDS' in (args.output / '0/engine.log').read_text()
-    print('PASS actual ' + str(args.size) + 'v' + str(args.size) + ' native clients: fixed initial config, two rounds, captain surrender and all replay acknowledgements', flush=True)
+    print(('PASS two human clients, two host-controlled native AI sides and two Closed sides' if flexible else 'PASS actual ' + str(args.size) + 'v' + str(args.size) + ' native clients') + ': fixed initial config, two rounds, captain surrender and all replay acknowledgements', flush=True)
 finally:
     for process, log, _, _ in children:
         if process.poll() is None:

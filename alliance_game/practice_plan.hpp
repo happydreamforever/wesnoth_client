@@ -23,12 +23,17 @@ struct PracticeSeat {
     bool human = false;
     std::string hero_id, form_id;
     std::int64_t hero_level = 1, hero_revision = 0;
+    bool computer = false, closed = false;
 };
 struct PracticePlan {
     std::string battle_id, map_id, map_name, scenario_id, map_file;
     int size = 0, controlled_side = 0;
     PracticeSettings settings;
     std::vector<PracticeSeat> seats;
+    int shared_format = 1;
+    alliance::account::BattleSettings shared_settings;
+    std::string engine_host_account_id;
+    std::vector<int> controlled_sides;
 };
 enum class PracticeEligibility {
     eligible, inactive_plan, invalid_plan, unavailable_plan,

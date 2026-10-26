@@ -34,7 +34,7 @@ void directory(const fs::path& p){if(fs::exists(p)){if(!fs::is_directory(p)||fs:
 fs::path record(const std::string& account,const std::string& run,bool create=false){
     if(!uuid(account)||!uuid(run))throw std::invalid_argument("Invalid shared identity.");
     const char* p=std::getenv("WESNOTH_ALLIANCE_PROFILE");if(!p)throw std::runtime_error("Private shared storage is unavailable.");
-    const fs::path profile(p);if(!profile.is_absolute()||profile.filename()!="alliance-public-profile.json"||!fs::is_directory(profile.parent_path())||fs::is_symlink(profile.parent_path()))throw std::runtime_error("Invalid shared profile directory.");
+    const fs::path profile(p);if(!profile.is_absolute()||(profile.filename()!="alliance-public-profile.json"&&profile.filename()!="alliance-bundled-profile.json")||!fs::is_directory(profile.parent_path())||fs::is_symlink(profile.parent_path()))throw std::runtime_error("Invalid shared profile directory.");
     const auto root=profile.parent_path()/"alliance-shared",owner=root/account;
     for(const auto& path:{root,owner}) {if(create)directory(path);if(fs::exists(path)&&(!fs::is_directory(path)||fs::is_symlink(path)))throw std::runtime_error("Invalid shared directory.");}
     return owner/(run+".cfg");
@@ -62,7 +62,7 @@ void validate_replay_bytes(const std::string& bytes,const std::string& run){
     while(status==Z_OK){stream.next_out=reinterpret_cast<Bytef*>(buffer.data());stream.avail_out=buffer.size();status=inflate(&stream,Z_NO_FLUSH);const auto n=buffer.size()-stream.avail_out;if(plain.size()+n>128*1024*1024)throw std::runtime_error("Replay exceeds its decompression limit.");plain.append(buffer.data(),n);}
     if(status!=Z_STREAM_END||stream.avail_in)throw std::runtime_error("Replay compression is invalid.");
     const auto c=io::read(plain);const auto& v=c.child_or_empty("replay_start").child_or_empty("variables");
-    if(!v["alliance_shared"].to_bool()||v["alliance_shared_run_id"].str()!=run||v["alliance_shared_version"].str()!="alliance-shared-v1"||!c.has_child("replay"))throw std::runtime_error("Downloaded replay belongs to another game.");
+    if(!v["alliance_shared"].to_bool()||v["alliance_shared_run_id"].str()!=run||(v["alliance_shared_version"].str()!="alliance-shared-v1"&&v["alliance_shared_version"].str()!="alliance-shared-v2")||!c.has_child("replay"))throw std::runtime_error("Downloaded replay belongs to another game.");
 }
 }
 SharedActiveLaunch::SharedActiveLaunch(const PracticePlan& p,const std::string& a){if(active||!uuid(p.battle_id)||!uuid(a)||std::none_of(p.seats.begin(),p.seats.end(),[&](const auto& s){return s.id==a;}))throw std::runtime_error("Invalid shared launch.");active=Active{p,a};}
@@ -87,7 +87,7 @@ void observe_shared_completion(saved_game& state,level_result::type result)noexc
     if(!active||(result!=level_result::type::victory&&result!=level_result::type::defeat))return;
     try{
         const auto& cfg=state.get_starting_point();const auto& vars=cfg.child_or_empty("variables");
-        if(!vars["alliance_shared"].to_bool()||vars["alliance_shared_run_id"].str()!=active->plan.battle_id||vars["alliance_shared_version"].str()!="alliance-shared-v1")throw std::runtime_error("Shared result identity mismatch.");
+        if(!vars["alliance_shared"].to_bool()||vars["alliance_shared_run_id"].str()!=active->plan.battle_id||vars["alliance_shared_version"].str()!=(active->plan.shared_format==2?"alliance-shared-v2":"alliance-shared-v1"))throw std::runtime_error("Shared result identity mismatch.");
         const auto own=std::find_if(active->plan.seats.begin(),active->plan.seats.end(),[&](const auto& s){return s.id==active->owner;});
         const auto rival=std::find_if(active->plan.seats.begin(),active->plan.seats.end(),[&](const auto& s){return s.team_id!=own->team_id;});
         if(rival==active->plan.seats.end())throw std::runtime_error("Shared opponent missing.");

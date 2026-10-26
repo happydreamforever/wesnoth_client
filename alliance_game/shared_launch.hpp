@@ -10,6 +10,7 @@ struct SharedAdmission {
     std::string run_id,account_id,token;
     bool upload_only=false;
     bool download_only=false;
+    bool observer=false; // Read-only current-team spectator, never a player reservation.
     std::string captain_action; // Explicit headless test policy, never ordinary GUI admission.
     int after_turn=0;
     bool computer_controlled=false; // Explicit authenticated companion; ordinary UI leaves this false.

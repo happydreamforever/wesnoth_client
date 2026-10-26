@@ -7,6 +7,7 @@
 #include <openssl/evp.h>
 #include <zlib.h>
 #include <array>
+#include <atomic>
 #include <deque>
 #include <map>
 #include <memory>
@@ -22,6 +23,7 @@ struct alliance_socket_state {
     alliance::TrustedProfile profile;
     boost::asio::steady_timer timer;
     bool partial_frame=false;
+    std::atomic<bool> read_only_observer{false};
     std::size_t queued_send_bytes=0,queued_receive_bytes=0;
     std::deque<std::size_t> queued_receive_sizes;
     alliance_socket_state(const alliance::TrustedProfile& p,boost::asio::io_context& io):profile(p),timer(io){}

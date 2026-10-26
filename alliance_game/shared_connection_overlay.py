@@ -13,7 +13,7 @@ def transform_header(text):
     if hashlib.sha256(text.encode()).hexdigest() != "654ae1f630d3652256a3469eed90aebd0df31db7a20e16ca6bfe9f444a93d752":
         raise RuntimeError("Pinned connection header changed")
     text = once(text, '/** A class that represents', 'namespace alliance { struct TrustedProfile; }\n\n/** A class that represents')
-    text = once(text, '\twesnothd_connection(const std::string& host, const std::string& service);', '\twesnothd_connection(const std::string& host, const std::string& service);\n\texplicit wesnothd_connection(const alliance::TrustedProfile& profile);')
+    text = once(text, '\twesnothd_connection(const std::string& host, const std::string& service);', '\twesnothd_connection(const std::string& host, const std::string& service);\n\texplicit wesnothd_connection(const alliance::TrustedProfile& profile);\n\tvoid set_alliance_observer();')
     return once(text, 'private:\n', 'private:\n\tvoid alliance_fail(const boost::system::error_code&);\n')
 
 
@@ -84,7 +84,16 @@ def transform_source(text):
     text = once(text, '\tassert(use_tls_ == true);', '\tif(alliance_socket_lookup(this)) throw system_error(boost::asio::error::operation_not_supported);\n\tassert(use_tls_ == true);')
     text = once(text, 'auto timeout = 60s;', 'auto timeout = alliance_socket_lookup(this) ? 10s : 60s;')
     text = once(text, 'if(err.code() == boost::asio::error::operation_aborted || err.code() == boost::asio::error::eof) {', 'if(!alliance_socket_lookup(this) && (err.code() == boost::asio::error::operation_aborted || err.code() == boost::asio::error::eof)) {')
-    text = once(text, '\tio::write_gz(os, request);', '''    if(alliance_socket_lookup(this)) {
+    text = once(text, '\tio::write_gz(os, request);', '''    if(auto state=alliance_socket_lookup(this); state && state->read_only_observer.load()) {
+        // The stock engine generates an init_side command while catching up.
+        // A spectator never transmits game actions, including that transient
+        // command. Authority remains enforced independently by the daemon.
+        std::ostringstream plain; io::write(plain, request);
+        const config packet=io::read(plain.str());
+        if(packet.attribute_count()!=0 || packet.all_children_count()!=1 ||
+           (!packet.has_child("leave_game") && !packet.has_child("stop_updates"))) return;
+    }
+    if(alliance_socket_lookup(this)) {
         std::ostringstream plain; io::write(plain, request);
         if(plain.str().size() > alliance_plain_limit(this)) throw error(boost::asio::error::make_error_code(boost::asio::error::message_size));
     }
@@ -138,6 +147,12 @@ def transform_source(text):
 \t\t\trecv_queue_.pop();''')
     text = once(text, 'bool wesnothd_connection::wait_and_receive_data(config& data)\n{', 'bool wesnothd_connection::wait_and_receive_data(config& data)\n{\n    if(alliance_socket_lookup(this)) {\n        while(!receive_data(data)) { gui2::dialogs::loading_screen::spin(); std::this_thread::sleep_for(10ms); }\n        return true;\n    }')
     text += '''
+void wesnothd_connection::set_alliance_observer()
+{
+    auto state=alliance_socket_lookup(this);
+    if(!state || state->profile.port!=15002) throw std::runtime_error("Observer socket is unavailable.");
+    state->read_only_observer.store(true);
+}
 void wesnothd_connection::alliance_fail(const error_code& code)
 {
     { std::scoped_lock lock(last_error_mutex_); last_error_=code; }

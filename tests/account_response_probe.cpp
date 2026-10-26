@@ -27,7 +27,7 @@ std::string safe_error(const std::string& value)
           "invalid_session", "forbidden", "suspended", "conflict", "rate_limited",
           "timeout", "cancelled", "identity", "protocol", "unavailable",
           "profile_rejected", "document_rejected", "team_failed", "already_member", "busy", "not_found", "capacity", "not_requested", "not_member", "captain_transfer_required",
-          "planning_exists", "invalid_map", "invalid_lineup", "different_area", "stale_proposal", "advancement_required", "approval_required", "invalid_state"}) {
+          "stale_revision", "slot_taken", "update_required", "human_required", "limit_reached", "hero_locked", "form_locked", "unbalanced_sides", "planning_exists", "invalid_map", "invalid_lineup", "different_area", "stale_proposal", "advancement_required", "approval_required", "invalid_state"}) {
         if(value == allowed) return value;
     }
     return "unrecognized_error";
@@ -108,6 +108,20 @@ int main(int argc, char** argv)
         request.hero_id = field(input, "hero_id");
         request.form_id = field(input, "form_id");
         request.game_id = field(input, "game_id");
+        if(const auto* v=input.if_contains("revision"))request.revision=v->as_int64();
+        if(const auto* v=input.if_contains("settings")) {
+            const auto& r=v->as_object();
+            request.settings.gold=r.at("gold").as_int64();
+            request.settings.base_income=r.at("base_income").as_int64();
+            request.settings.turns=r.at("turns").as_int64();
+            request.settings.fog=r.at("fog").as_bool();request.settings.shroud=r.at("shroud").as_bool();
+            request.settings.observers=r.at("observers").as_bool();
+        }
+        if(const auto* v=input.if_contains("slots"))for(const auto& item:v->as_array()) {
+            const auto& row=item.as_object();BattleSlot slot;slot.side=row.at("side").as_int64();
+            slot.kind=field(row,"kind");slot.account_id=field(row,"account_id");
+            slot.ai_faction=field(row,"ai_faction");slot.ai_leader=field(row,"ai_leader");request.slots.push_back(std::move(slot));
+        }
         if(const auto* side=input.if_contains("side")) {if(!side->is_int64())throw std::runtime_error("input");request.side=static_cast<int>(side->as_int64());}
         if(const auto* ready = input.if_contains("ready")) {
             if(!ready->is_bool()) throw std::runtime_error("input");

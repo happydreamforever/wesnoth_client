@@ -14,6 +14,12 @@
 #include <sstream>
 #include <stdexcept>
 extern "C" int __real_main(int,char**);
+// This executable exercises Team transport/AI. Individual-room companions
+// have a separate real-engine fixture and are intentionally unavailable here.
+namespace alliance_game {
+bool individual_companion_requested() noexcept { return false; }
+int run_individual_companion() noexcept { return 1; }
+}
 bool shared_fixture_companion() {
     static bool consumed=false;if(consumed||!std::getenv("ALLIANCE_SHARED_FIXTURE_COMPANION"))return false;consumed=true;
     const int result=alliance_game::run_companion();if(result!=0)throw std::runtime_error("Production companion did not acknowledge its native result.");
@@ -32,6 +38,33 @@ bool shared_fixture_replay() {
 // Fixture-only deterministic ending after two real networked AI rounds. This
 // event is added identically before each client's canonical-scenario digest.
 void shared_fixture_decorate(config& scenario) {
+    if(std::getenv("ALLIANCE_SHARED_FIXTURE_FLEXIBLE")) {
+        auto& start=scenario.add_child("event");start["name"]="prestart";
+        start.add_child("lua")["code"]=R"(
+            assert(#wesnoth.sides==6)
+            for _,i in ipairs{1,6} do assert(#wesnoth.units.find_on_map{side=i}==0) end
+            for _,i in ipairs{2,3,4,5} do
+                assert(wesnoth.sides[i].gold==125)
+                assert(wesnoth.sides[i].base_income==4)
+                local leaders=wesnoth.units.find_on_map{side=i,canrecruit=true}
+                assert(#leaders==1)
+                if i==2 or i==4 then
+                    assert(leaders[1].type:match('^AH_konrad_'))
+                    assert(leaders[1].variables.alliance_hero_level==2)
+                else
+                    assert(leaders[1].type==(i==3 and 'Elvish Captain' or 'Lieutenant'))
+                    assert(leaders[1].variables.alliance_hero_id==nil)
+                end
+            end
+            std_print('SHARED REAL INITIAL CONFIG VERIFIED')
+        )";
+        auto& round=scenario.add_child("event");round["name"]="turn 2";
+        round.add_child("lua")["code"]=R"(
+            for _,i in ipairs{1,6} do assert(#wesnoth.units.find_on_map{side=i}==0) end
+            for _,i in ipairs{3,5} do assert(#wesnoth.units.find_on_map{side=i}>1,'Native AI must recruit') end
+            std_print('SHARED REAL NETWORK ROUND VERIFIED')
+        )";
+    } else {
     auto& start=scenario.add_child("event");start["name"]="prestart";
     start.add_child("lua")["code"]=R"(
         assert(#wesnoth.sides==4 or #wesnoth.sides==6 or #wesnoth.sides==8)
@@ -55,6 +88,7 @@ void shared_fixture_decorate(config& scenario) {
         assert(#wesnoth.units.find_on_map{}>#wesnoth.sides,'AI seats must have recruited through the actual engine')
         std_print('SHARED REAL NETWORK ROUND VERIFIED')
     )";
+    }
     if(!std::getenv("ALLIANCE_SHARED_FIXTURE_TERMINAL")) {
     auto& end=scenario.add_child("event");end["name"]="turn 3";
     end.add_child("lua")["code"]=R"(
@@ -82,10 +116,11 @@ extern "C" int __wrap_main(int argc,char** argv) {
     try{
         std::ifstream input(argv[2]);std::ostringstream data;data<<input.rdbuf();
         const auto fixture=boost::json::parse(data.str()).as_object();
-        const int index=std::stoi(argv[3]);const auto& actor=fixture.at("players").as_array().at(index).as_object();
+        const int index=std::stoi(argv[3]);const bool observing=std::getenv("ALLIANCE_SHARED_FIXTURE_OBSERVER")!=nullptr;
+        const auto& actor=fixture.at(observing?"observers":"players").as_array().at(index).as_object();
         alliance_game::SharedAdmission a;
         a.profile=alliance::account::read_public_profile(std::getenv("WESNOTH_ALLIANCE_PROFILE"));a.profile.port=15002;
-        a.run_id=std::string(fixture.at("run_id").as_string());a.account_id=std::string(actor.at("account_id").as_string());a.token=std::string(actor.at("token").as_string());a.computer_controlled=std::getenv("ALLIANCE_SHARED_FIXTURE_HUMAN")==nullptr;
+        a.run_id=std::string(fixture.at("run_id").as_string());a.account_id=std::string(actor.at("account_id").as_string());a.token=std::string(actor.at("token").as_string());a.computer_controlled=!observing&&std::getenv("ALLIANCE_SHARED_FIXTURE_HUMAN")==nullptr;a.observer=observing;
         const char* mode=std::getenv("ALLIANCE_SHARED_FIXTURE_MODE");
         a.upload_only=mode&&std::string(mode)=="upload";a.download_only=mode&&std::string(mode)=="download";
         if(const char* action=std::getenv("ALLIANCE_SHARED_FIXTURE_CAPTAIN")){a.captain_action=action;a.after_turn=1;a.computer_controlled=false;}

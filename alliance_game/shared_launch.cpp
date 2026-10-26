@@ -106,7 +106,7 @@ void queue_shared(SharedAdmission admission){
     const bool token=admission.token.size()==43&&std::all_of(admission.token.begin(),admission.token.end(),[](char x){return(x>='a'&&x<='z')||(x>='A'&&x<='Z')||(x>='0'&&x<='9')||x=='-'||x=='_';});
     const bool captain=admission.captain_action.empty()?admission.after_turn==0:
         ((admission.captain_action=="surrender"||admission.captain_action=="offer_draw"||admission.captain_action=="withdraw_draw")&&admission.after_turn>=1&&admission.after_turn<=100&&!admission.computer_controlled&&!admission.upload_only&&!admission.download_only);
-    if(!captain||pending||(admission.upload_only&&admission.download_only)||!uuid(admission.run_id)||!uuid(admission.account_id)||!token||admission.profile.port!=15002||!alliance::validate_profile(admission.profile))throw std::invalid_argument("Invalid shared admission.");
+    if((admission.observer&&(admission.upload_only||admission.download_only||admission.computer_controlled||!admission.captain_action.empty()))||!captain||pending||(admission.upload_only&&admission.download_only)||!uuid(admission.run_id)||!uuid(admission.account_id)||!token||admission.profile.port!=15002||!alliance::validate_profile(admission.profile))throw std::invalid_argument("Invalid shared admission.");
     pending=std::move(admission);
 }
 bool shared_pending()noexcept{return pending.has_value();}
@@ -115,45 +115,54 @@ void run_pending_shared(){
     auto admission=take_pending_shared();if(!admission)return;SecretCleanup cleanup{*admission};
     try{
         wesnothd_connection connection(admission->profile);connection.wait_for_handshake();
-        config request;auto& join=request.add_child("alliance_join");join["run_id"]=admission->run_id;join["intent"]=admission->download_only?"replay_download":admission->upload_only?"result_retry":"play";join["token"]=admission->token;
+        config request;auto& join=request.add_child("alliance_join");join["run_id"]=admission->run_id;join["intent"]=admission->download_only?"replay_download":admission->upload_only?"result_retry":admission->observer?"observe":"play";join["token"]=admission->token;
         connection.send_data(request);join["token"]="";request.clear();wipe(admission->token);
         if(admission->download_only){download(connection,*admission);return;}
         const auto room=response(connection,"alliance_room","Checking your fixed battle seat.");
         auto descriptor=alliance::account::parse_shared_battle_descriptor(room["descriptor"].str());
         if(descriptor.id!=admission->run_id)throw std::runtime_error("Shared run mismatch.");
         if(admission->upload_only){const auto records=inspect_pending_shared(admission->account_id);const auto found=std::find_if(records.begin(),records.end(),[&](const auto& r){return r.run_id==admission->run_id;});if(found==records.end())throw std::runtime_error("No saved shared result.");upload(connection,*found);return;}
-        const auto plan=make_shared_plan(descriptor,admission->account_id);
+        const auto plan=make_shared_plan(descriptor,admission->account_id,admission->observer);
         const int side=room["side"].to_int();if(side!=plan.controlled_side)throw std::runtime_error("Shared seat mismatch.");
+        if(plan.shared_format==2) {
+            std::string controlled;for(const int value:plan.controlled_sides){if(!controlled.empty())controlled+=",";controlled+=std::to_string(value);}
+            if(room["controlled_sides"].str()!=controlled||!room.has_attribute("engine_host")||room["engine_host"].to_bool()!=(!admission->observer&&plan.engine_host_account_id==admission->account_id)||room["observer"].to_bool()!=admission->observer)throw std::runtime_error("Shared controller authority differs.");
+        }
         captain_policy(*admission,descriptor,side);
         const auto seed=room["seed"].str();if(seed.size()!=8||!std::all_of(seed.begin(),seed.end(),[](char x){return(x>='0'&&x<='9')||(x>='a'&&x<='f');}))throw std::runtime_error("Invalid shared random seed.");
         const bool reconnect=room["reconnect"].to_bool();
+        if(admission->observer&&!reconnect)throw std::runtime_error("Observer catch-up is missing.");
 
         auto* manager=game_config_manager::get();if(!manager)throw std::runtime_error("Game data unavailable.");manager->load_game_config_for_create(true);
         const auto& game=manager->game_config();const auto source=game.find_child("multiplayer","id",plan.scenario_id),era=game.find_child("era","id","era_default");if(!source||!era)throw std::runtime_error("Shared map unavailable.");
         auto scenario=make_shared_scenario(plan,*source,*era);add_shared_controls(scenario,descriptor);saved_game::expand_map_file(scenario);
         const gamemap map(scenario["map_data"].str());if(map.num_valid_starting_positions()!=static_cast<int>(plan.seats.size()))throw std::runtime_error("Shared map positions do not match.");
-        for(const auto& seat:plan.seats){const auto* type=unit_types.find(seat.unit_type);if(!type||type->level()!=seat.level||!map.on_board(map.starting_position(seat.side)))throw std::runtime_error("Shared leader unavailable.");}
-        const auto hash=shared_scenario_digest(scenario);localize_shared_scenario(scenario,side);
-        if(admission->computer_controlled)scenario.find_child("side","side",std::to_string(side))->operator[]("controller")="ai";
+        for(const auto& seat:plan.seats){if(seat.closed)continue;const auto* type=unit_types.find(seat.unit_type);if(!type||type->level()!=seat.level||!map.on_board(map.starting_position(seat.side)))throw std::runtime_error("Shared leader unavailable.");}
+        const auto hash=shared_scenario_digest(scenario);localize_shared_scenario(scenario,plan);
+        if(admission->computer_controlled&&!admission->observer)scenario.find_child("side","side",std::to_string(side))->operator[]("controller")="ai";
         saved_game state;state.classification().type=campaign_type::type::multiplayer;state.classification().era_id="era_default";state.classification().end_credits=false;
         state.mp_settings().name=scenario["name"].str();state.mp_settings().mp_scenario=scenario["id"].str();state.mp_settings().use_map_settings=true;state.mp_settings().shuffle_sides=false;
-        state.mp_settings().num_turns=-1;state.mp_settings().fog_game=true;state.mp_settings().shroud_game=false;state.mp_settings().xp_modifier=100;state.mp_settings().allow_observers=false;state.mp_settings().private_replay=true;
+        state.mp_settings().num_turns=plan.shared_settings.turns;state.mp_settings().fog_game=plan.shared_settings.fog;state.mp_settings().shroud_game=plan.shared_settings.shroud;state.mp_settings().xp_modifier=100;state.mp_settings().allow_observers=plan.shared_settings.observers;state.mp_settings().private_replay=true;
         state.set_scenario(std::move(scenario));state.set_carryover_sides_start(config{"random_seed",seed,"random_calls",0});
         connection.send_data(config{"alliance_loaded",config{"scenario_sha256",hash}});
+        const int human_count=std::count_if(plan.seats.begin(),plan.seats.end(),[](const auto& s){return !s.closed&&!s.computer;});
         std::size_t replay_bytes=0,commands=0;
         receive(connection,"Waiting for all fixed players to load the same battle. No side may be replaced by a guest.",[&](const config& frame){
             if(frame.all_children_count()!=1)throw std::runtime_error("Invalid shared barrier packet.");
-            if(frame.has_child("alliance_waiting")) { const auto& waiting=frame.mandatory_child("alliance_waiting"); if(reconnect||waiting["required"].to_int()!=static_cast<int>(plan.seats.size())||waiting["connected"].to_int()<1||waiting["connected"].to_int()>static_cast<int>(plan.seats.size()))throw std::runtime_error("Invalid shared wait count.");return false; }
+            if(frame.has_child("alliance_waiting")) { const auto& waiting=frame.mandatory_child("alliance_waiting"); if(reconnect||waiting["required"].to_int()!=human_count||waiting["connected"].to_int()<1||waiting["connected"].to_int()>human_count)throw std::runtime_error("Invalid shared wait count.");return false; }
             if(frame.has_child("alliance_start")){if(frame.mandatory_child("alliance_start")["reconnect"].to_bool()!=reconnect)throw std::runtime_error("Shared restart mismatch.");return true;}
             if(!reconnect||!frame.has_child("turn"))throw std::runtime_error("Unexpected shared barrier packet.");
             std::ostringstream text;io::write(text,frame);replay_bytes+=text.str().size();const auto& turn=frame.mandatory_child("turn");commands+=turn.child_count("command");
             if(replay_bytes>32*1024*1024||commands>100000||turn.all_children_count()!=turn.child_count("command"))throw std::runtime_error("Shared replay exceeds its limit.");state.get_replay().append_config(turn);return false;
-        },600);
-        mp_game_metadata metadata(connection);metadata.is_host=side==1;metadata.queue_id=0;metadata.current_turn=room["current_turn"].to_unsigned(1);metadata.skip_replay=reconnect;
+        },310);
+        mp_game_metadata metadata(connection);metadata.is_host=!admission->observer&&(plan.shared_format==2?plan.engine_host_account_id==admission->account_id:side==1);metadata.queue_id=0;metadata.current_turn=room["current_turn"].to_unsigned(1);metadata.skip_replay=reconnect;
         if(metadata.current_turn<1||metadata.current_turn>1000000)throw std::runtime_error("Invalid shared replay turn.");
-        for(const auto& seat:plan.seats)metadata.connected_players.insert(seat.username);
-        events::discard_input();cursor::set(cursor::NORMAL);SharedActiveLaunch active(plan,admission->account_id);
+        for(const auto& seat:plan.seats)if(!seat.closed&&!seat.computer)metadata.connected_players.insert(seat.username);
+        if(admission->observer)connection.set_alliance_observer();
+        events::discard_input();cursor::set(cursor::NORMAL);std::unique_ptr<SharedActiveLaunch> active;
+        if(!admission->observer)active=std::make_unique<SharedActiveLaunch>(plan,admission->account_id);
         campaign_controller controller(state);controller.set_mp_info(&metadata);controller.play_game();
+        if(admission->observer)return;
         const auto records=inspect_pending_shared(admission->account_id);const auto result=std::find_if(records.begin(),records.end(),[&](const auto& row){return row.run_id==admission->run_id&&row.status=="pending";});
         if(result!=records.end())upload(connection,*result);
     }catch(const std::exception&){if(video::headless()){std::cerr<<"Shared battle did not complete. No automatic retry was made. [shared-connection]"<<std::endl;return;}gui2::show_error_message("The shared battle connection or replay transfer did not complete. No automatic retry was made. Return to Alliance to reconnect or submit a retained result. Keep the Windows database, account service and shared battle service running. [shared-connection]");}

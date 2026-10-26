@@ -39,7 +39,7 @@ std::string uuid(){unsigned char b[16];if(RAND_bytes(b,16)!=1)throw std::runtime
 std::string digest(const std::string& data){unsigned char b[32];unsigned int n=0;if(EVP_Digest(data.data(),data.size(),b,&n,EVP_sha256(),nullptr)!=1||n!=32)throw std::runtime_error("Story digest failed.");return hex(b,32);}
 fs::path directory(const PlayerSession& s,bool create){
  const char* env=std::getenv("WESNOTH_ALLIANCE_PROFILE");if(!env||!*env||!pp::uuid(s.account.account_id)||!pp::uuid(s.account.database_generation))throw std::runtime_error("Story account storage unavailable.");
- const fs::path profile(env);if(!profile.is_absolute()||profile.filename()!="alliance-public-profile.json")throw std::runtime_error("Story profile unavailable.");
+ const fs::path profile(env);if(!profile.is_absolute()||(profile.filename()!="alliance-public-profile.json"&&profile.filename()!="alliance-bundled-profile.json"))throw std::runtime_error("Story profile unavailable.");
  auto p=profile.parent_path();for(const auto& part:{std::string("unified-story"),s.account.database_generation,s.account.account_id}){p/=part;if(create&&!fs::exists(p)){fs::create_directory(p);fs::permissions(p,fs::perms::owner_all);}if(fs::exists(p)&&(!fs::is_directory(p)||fs::is_symlink(p)))throw std::runtime_error("Unsafe story directory.");}return p;
 }
 j::object read(const fs::path& p){if(fs::is_symlink(p)||!fs::is_regular_file(p)||fs::file_size(p)>max_record)throw std::runtime_error("Invalid story record.");std::ifstream in(p,std::ios::binary);std::string data((std::istreambuf_iterator<char>(in)),{});if(in.bad()||data.size()>max_record)throw std::runtime_error("Story read failed.");return j::parse(data).as_object();}

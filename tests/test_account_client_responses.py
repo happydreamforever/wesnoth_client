@@ -89,7 +89,7 @@ class AccountClientResponseTests(unittest.TestCase):
     @classmethod
     def success(cls, request):
         return {
-            "v": 2, "id": request["id"], "ok": True, "status": 200,
+            "v": 3, "id": request["id"], "ok": True, "status": 200,
             "data": {"token": "a" * 43, "account": cls.account()},
         }
 
@@ -225,7 +225,7 @@ class AccountClientResponseTests(unittest.TestCase):
 
     @staticmethod
     def team_reply(data, status=200):
-        return lambda request: {"v": 2, "id": request["id"], "ok": True,
+        return lambda request: {"v": 3, "id": request["id"], "ok": True,
                                 "status": status, "data": data}
 
     def team_rejects(self, operation, data, **fields):
@@ -384,7 +384,7 @@ class AccountClientResponseTests(unittest.TestCase):
                                        (503, "unrecognized", "team_failed"),
                                        (503, "invalid_session", "team_failed")]:
             def responder(request):
-                return {"v": 2, "id": request["id"], "ok": False, "status": status,
+                return {"v": 3, "id": request["id"], "ok": False, "status": status,
                         "data": {"code": code, "message": "server-secret-must-not-be-reflected"}}
             output, _ = self.exercise(responder, self.team_request("my_team"))
             self.assertFalse(output["ok"])
@@ -574,7 +574,7 @@ class AccountClientResponseTests(unittest.TestCase):
                                            (409, "captain_transfer_required", "captain_transfer_required"),
                                            (409, "busy", "busy"), (503, "service_unavailable", "team_failed")):
                 def error(received):
-                    return {"v": 2, "id": received["id"], "ok": False, "status": status,
+                    return {"v": 3, "id": received["id"], "ok": False, "status": status,
                             "data": {"code": code, "message": "Private backend detail"}}
                 output, _ = self.exercise(error, self.team_request(operation, **fields))
                 self.assertEqual(output["error_code"], expected)
@@ -680,7 +680,7 @@ class AccountClientResponseTests(unittest.TestCase):
                                        (409, "capacity", "capacity"),
                                        (409, "not_requested", "not_requested")]:
             def error(received):
-                return {"v": 2, "id": received["id"], "ok": False, "status": status,
+                return {"v": 3, "id": received["id"], "ok": False, "status": status,
                         "data": {"code": code, "message": "Private server detail"}}
             output, _ = self.exercise(error, self.team_request("approve_application", team_id=team_id,
                                                                account_id=account_id))
@@ -806,7 +806,7 @@ class AccountClientResponseTests(unittest.TestCase):
                                            (404, "not_found", "not_found"),
                                            (503, "service_unavailable", "team_failed")):
                 def error(received):
-                    return {"v": 2, "id": received["id"], "ok": False, "status": status,
+                    return {"v": 3, "id": received["id"], "ok": False, "status": status,
                             "data": {"code": code, "message": "Private backend detail"}}
                 output, _ = self.exercise(error, self.team_request(operation, **fields))
                 self.assertEqual(output["error_code"], expected)
@@ -871,7 +871,7 @@ class AccountClientResponseTests(unittest.TestCase):
             for status in (401, 403):
                 for code in ("scope_mismatch", "invalid_credentials"):
                     def responder(received):
-                        return {"v": 2, "id": received["id"], "ok": False, "status": status,
+                        return {"v": 3, "id": received["id"], "ok": False, "status": status,
                                 "data": {"code": code, "message": secret_message}}
                     output, received = self.exercise(responder, request)
                     self.assertFalse(output["ok"])
@@ -882,7 +882,7 @@ class AccountClientResponseTests(unittest.TestCase):
 
     def test_login_401_keeps_invalid_credentials_meaning(self):
         def responder(received):
-            return {"v": 2, "id": received["id"], "ok": False, "status": 401,
+            return {"v": 3, "id": received["id"], "ok": False, "status": 401,
                     "data": {"code": "invalid_credentials", "message": "Invalid credentials."}}
         output, _ = self.exercise(responder)
         self.assertFalse(output["ok"])
@@ -940,7 +940,7 @@ class AccountClientResponseTests(unittest.TestCase):
         request = {'operation': 'register', 'username':'NewPlayer', 'password':'disposable-password-only'}
         output, received = self.exercise(reply, request)
         self.assertTrue(output['ok']); self.assertEqual(output['hero_count'], 0)
-        self.assertEqual(received['v'], 2)
+        self.assertEqual(received['v'], 3)
         self.assertEqual(set(received['body']), {'username','password'})
         self.rejects(lambda r:r.update(v=1))
         with self.peer() as (port,state):
@@ -951,7 +951,7 @@ class AccountClientResponseTests(unittest.TestCase):
         data=self.account(); hero=data['heroes'][0]
         hero.update(hero_level=1000000,experience=2147483648,total_experience=9223372036854775807,revision=2147483648)
         data['heroes'].append({**hero,'hero_id':'delfador','name':'Delfador','hero_level':25,'forms':['delfador_young','delfador_elder']})
-        output,_=self.exercise(lambda r:{'v':2,'id':r['id'],'ok':True,'status':200,'data':{'token':'a'*43,'account':data}})
+        output,_=self.exercise(lambda r:{'v':3,'id':r['id'],'ok':True,'status':200,'data':{'token':'a'*43,'account':data}})
         self.assertTrue(output['ok']);self.assertEqual(output['hero_count'],2)
 
     def test_v2_hero_shapes_generation_and_duplicates_are_rejected(self):

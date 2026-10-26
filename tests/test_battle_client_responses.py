@@ -246,7 +246,7 @@ class BattleClientResponseTests(AccountClientResponseTests):
         cases += [(403, "forbidden", "forbidden"), (401, "forbidden", "invalid_session"), (503, "private", "team_failed")]
         for status, code, expected in cases:
             def responder(request):
-                return {"v": 2, "id": request["id"], "ok": False, "status": status,
+                return {"v": 3, "id": request["id"], "ok": False, "status": status,
                         "data": {"code": code, "message": "Private backend detail must not be shown"}}
             output, _ = self.exercise(responder, self.team_request("approve_battle", battle_id=battle["id"]))
             self.assertEqual(output["error_code"], expected)

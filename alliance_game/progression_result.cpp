@@ -39,7 +39,7 @@ fs::path private_root() {
     const char* value=std::getenv("WESNOTH_ALLIANCE_PROFILE");
     if(!value||!*value) throw std::runtime_error("Private mission storage is unavailable.");
     const fs::path profile(value);
-    if(!profile.is_absolute()||profile.filename()!="alliance-public-profile.json") throw std::runtime_error("Invalid private mission storage.");
+    if(!profile.is_absolute()||(profile.filename()!="alliance-public-profile.json"&&profile.filename()!="alliance-bundled-profile.json")) throw std::runtime_error("Invalid private mission storage.");
     const auto base=profile.parent_path();
     if(!fs::is_directory(base)||fs::is_symlink(base)) throw std::runtime_error("Invalid private mission directory.");
     return base/"alliance-progression";

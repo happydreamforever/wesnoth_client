@@ -8,6 +8,14 @@
 #include <cstdint>
 
 namespace alliance::account {
+struct BattleSettings {
+    int gold = 100, base_income = 2, turns = -1;
+    bool fog = true, shroud = false, observers = false;
+};
+struct BattleSlot {
+    int side = 0;
+    std::string kind = "open", account_id, ai_faction, ai_leader;
+};
 struct Lineup { std::string team_id; std::vector<std::string> account_ids; };
 struct Request {
     std::string operation, username, password, starter_id, token;
@@ -18,6 +26,9 @@ struct Request {
     int side = 0;
     std::vector<Lineup> lineups;
     bool ready = false;
+    std::int64_t revision = 0;
+    BattleSettings settings;
+    std::vector<BattleSlot> slots;
     // Closed progression extension; validated before opening any socket.
     std::string progression_json;
 };
@@ -70,11 +81,17 @@ struct BattleTeam {
     std::string id, name, captain_id;
     bool approved = false;
     std::vector<BattlePlayer> players;
+    std::vector<BattleSlot> slots;
 };
 struct Battle {
     std::string id, area_id, state, created_at, validity;
     BattleMap map;
     std::vector<BattleTeam> teams;
+    int format = 1;
+    std::int64_t revision = 0;
+    BattleSettings settings;
+    bool ranked = true;
+    std::string room_state, generation, engine_host_account_id;
 };
 struct Reply {
     std::string progression_json;
