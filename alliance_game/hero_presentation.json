@@ -1,0 +1,3547 @@
+{
+  "format": 1,
+  "game_version": "1.19.26",
+  "catalog_sha256": "716cc8e34cfb9c68e735c8cccdc74af6ae233f3487b2b87e575e209cc0c5041c",
+  "discovery_policy": "scenario-victory; campaign branches and survivors determine discoveries",
+  "heroes": [
+    {
+      "id": "abhai",
+      "name": "Abhai",
+      "biography": "Abhai appears as a Spectre in Northern Rebirth.",
+      "portrait": "data/core/images/portraits/undead/wraith.webp",
+      "campaigns": [
+        {
+          "id": "Northern_Rebirth",
+          "title": "Northern Rebirth"
+        }
+      ],
+      "abilities": [],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/core/images/portraits/undead/wraith.webp",
+        "sha256": "95810c4bc7e4736fc19a984fe210a6565ff2e1c8ebf7e4aa93d07e6651dd76e4"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Northern_Rebirth"
+        ],
+        "native_types": [
+          "Spectre",
+          "Wraith"
+        ]
+      }
+    },
+    {
+      "id": "aiglondur",
+      "name": "Aiglondur",
+      "biography": "A dwarvish fighter sent from Knalga to seek the Hammer of Thursagan.",
+      "portrait": "data/campaigns/The_Hammer_of_Thursagan/images/portraits/aiglondur.webp",
+      "campaigns": [
+        {
+          "id": "The_Hammer_of_Thursagan",
+          "title": "The Hammer of Thursagan"
+        }
+      ],
+      "abilities": [],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/campaigns/The_Hammer_of_Thursagan/images/portraits/aiglondur.webp",
+        "sha256": "c8766b3d279391529054fe3955c708201231b28d2077300fcd8c7c96c27f1d56"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "The_Hammer_of_Thursagan"
+        ],
+        "native_types": [
+          "Dwarvish Fighter",
+          "Dwarvish Lord",
+          "Dwarvish Steelclad"
+        ]
+      }
+    },
+    {
+      "id": "anduilas",
+      "name": "Anduilas",
+      "biography": "Anduilas appears as an Elvish Ranger in Legend of Wesmere.",
+      "portrait": "data/core/images/portraits/elves/archer.webp",
+      "campaigns": [
+        {
+          "id": "LOW",
+          "title": "Legend of Wesmere"
+        }
+      ],
+      "abilities": [
+        "ambush"
+      ],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/core/images/portraits/elves/archer.webp",
+        "sha256": "c5ee72e9b19af5295eaeb71b3c934f9a12920237d8a11ce17e8af830ca254bc8"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Legend_of_Wesmere"
+        ],
+        "native_types": [
+          "Elvish Archer",
+          "Elvish Avenger",
+          "Elvish Marksman",
+          "Elvish Ranger",
+          "Elvish Sharpshooter"
+        ]
+      }
+    },
+    {
+      "id": "angarthing",
+      "name": "Angarthing",
+      "biography": "A dwarvish witness who accompanies Aiglondur’s expedition.",
+      "portrait": "data/campaigns/The_Hammer_of_Thursagan/images/portraits/angarthing.webp",
+      "campaigns": [
+        {
+          "id": "The_Hammer_of_Thursagan",
+          "title": "The Hammer of Thursagan"
+        }
+      ],
+      "abilities": [
+        "witness"
+      ],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/campaigns/The_Hammer_of_Thursagan/images/portraits/angarthing.webp",
+        "sha256": "d1f6476415b91f7c22bd1a3a2b25dea8d0e7f72a540b76c3748d0820a5aadc1c"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "The_Hammer_of_Thursagan"
+        ],
+        "native_types": [
+          "Dwarvish Annalist",
+          "Dwarvish Loremaster",
+          "Dwarvish Witness"
+        ]
+      }
+    },
+    {
+      "id": "arand",
+      "name": "Arand",
+      "biography": "Arand appears as a Prince of Wesnoth in The Deceiver’s Gambit — Part I.",
+      "portrait": "data/core/images/portraits/humans/marshal-2.webp",
+      "campaigns": [
+        {
+          "id": "The Deceivers Gambit 1",
+          "title": "The Deceiver’s Gambit — Part I"
+        },
+        {
+          "id": "The Deceivers Gambit 2",
+          "title": "The Deceiver’s Gambit — Part II"
+        }
+      ],
+      "abilities": [
+        "leadership"
+      ],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/core/images/portraits/humans/marshal-2.webp",
+        "sha256": "54fb949c10e622c32bcee08eb62d6186a49008a0281d1527159b1fc61332728f"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "The_Deceivers_Gambit"
+        ],
+        "native_types": [
+          "Prince of Wesnoth"
+        ]
+      }
+    },
+    {
+      "id": "ardonna",
+      "name": "Ardonna",
+      "biography": "A student of necromancy pursuing the secrets of the ancients.",
+      "portrait": "data/campaigns/Secrets_of_the_Ancients/images/portraits/ardonna.webp",
+      "campaigns": [
+        {
+          "id": "Secrets of the Ancients",
+          "title": "Secrets of the Ancients"
+        }
+      ],
+      "abilities": [],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/campaigns/Secrets_of_the_Ancients/images/portraits/ardonna.webp",
+        "sha256": "2987e90008dc1c129f68b10745be7db9e7069f2cf8f43d4006c7738ed86dabf5"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Secrets_of_the_Ancients"
+        ],
+        "native_types": [
+          "SotA Dark Adept",
+          "SotA Dark Sorcerer",
+          "SotA Necromancer"
+        ]
+      }
+    },
+    {
+      "id": "arinexis",
+      "name": "Arinexis",
+      "biography": "Arinexis appears as a Saurian Flanker in Winds of Fate.",
+      "portrait": "data/core/images/portraits/saurians/skirmisher.webp",
+      "campaigns": [
+        {
+          "id": "Winds_of_Fate",
+          "title": "Winds of Fate"
+        }
+      ],
+      "abilities": [
+        "skirmisher"
+      ],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/core/images/portraits/saurians/skirmisher.webp",
+        "sha256": "a684ae0ba7b631d31f18d1c9ac1a373ae8474b3460c0c2cac3d76a2ec0337e12"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Winds_of_Fate"
+        ],
+        "native_types": [
+          "Saurian Ambusher",
+          "Saurian Flanker"
+        ]
+      }
+    },
+    {
+      "id": "arkildur",
+      "name": "Arkildur",
+      "biography": "Arkildur appears as an Elvish Captain in Legend of Wesmere.",
+      "portrait": "data/core/images/portraits/elves/fighter.webp",
+      "campaigns": [
+        {
+          "id": "LOW",
+          "title": "Legend of Wesmere"
+        }
+      ],
+      "abilities": [
+        "leadership"
+      ],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/core/images/portraits/elves/fighter.webp",
+        "sha256": "f7f6962c9a8510fd0947a8fede5aed19d00ced2ba2053553754e3a08899ed3d7"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Legend_of_Wesmere"
+        ],
+        "native_types": [
+          "Elvish Captain",
+          "Elvish Champion",
+          "Elvish Fighter",
+          "Elvish Hero",
+          "Elvish Marshal"
+        ]
+      }
+    },
+    {
+      "id": "arru",
+      "name": "Arru",
+      "biography": "Arru appears as a Troll Warrior in Dusk of Dawn.",
+      "portrait": "data/core/images/portraits/trolls/whelp.webp",
+      "campaigns": [
+        {
+          "id": "Dusk_of_Dawn",
+          "title": "Dusk of Dawn"
+        }
+      ],
+      "abilities": [
+        "regenerates"
+      ],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/core/images/portraits/trolls/whelp.webp",
+        "sha256": "73240c4cea31edd8e0491c1a3c4d82a3e2e5694b3020b9a256453e69400704f0"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Dusk_of_Dawn"
+        ],
+        "native_types": [
+          "Troll",
+          "Troll Rocklobber",
+          "Troll Warrior",
+          "Troll Whelp"
+        ]
+      }
+    },
+    {
+      "id": "arvith",
+      "name": "Arvith",
+      "biography": "A knight returning to help his brother Baran and the people of their village.",
+      "portrait": "data/campaigns/Two_Brothers/images/portraits/arvith.webp",
+      "campaigns": [
+        {
+          "id": "Two_Brothers",
+          "title": "Two Brothers"
+        }
+      ],
+      "abilities": [
+        "heals +4"
+      ],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/campaigns/Two_Brothers/images/portraits/arvith.webp",
+        "sha256": "c63dafa7bb81bc14f8aed75f120274314a98e77dc190c6d21bb1d204c5de8295"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Two_Brothers"
+        ],
+        "native_types": [
+          "Grand Knight",
+          "Knight",
+          "Paladin"
+        ]
+      }
+    },
+    {
+      "id": "baglur",
+      "name": "Baglur",
+      "biography": "Baglur appears as a Dwarvish Stalwart in Sceptre of Fire.",
+      "portrait": "data/campaigns/Sceptre_of_Fire/images/portraits/baglur.webp",
+      "campaigns": [
+        {
+          "id": "Sceptre_of_Fire",
+          "title": "Sceptre of Fire"
+        }
+      ],
+      "abilities": [
+        "steadfast"
+      ],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/campaigns/Sceptre_of_Fire/images/portraits/baglur.webp",
+        "sha256": "51732cb74fbaa85932e45df38c226cdc4217af1562018be57aa3cc57e09c44d2"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Sceptre_of_Fire"
+        ],
+        "native_types": [
+          "Dwarvish Sentinel",
+          "Dwarvish Stalwart"
+        ]
+      }
+    },
+    {
+      "id": "baldras",
+      "name": "Baldras",
+      "biography": "A village leader who takes up arms during the struggle for liberty.",
+      "portrait": "data/campaigns/Liberty/images/portraits/baldras.webp",
+      "campaigns": [
+        {
+          "id": "Liberty",
+          "title": "Liberty"
+        }
+      ],
+      "abilities": [],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/campaigns/Liberty/images/portraits/baldras.webp",
+        "sha256": "88134cadd1ea79cfba4b240cb370b6c7f8cc8a562a7b6e3827c825e05a310137"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Liberty"
+        ],
+        "native_types": [
+          "Bandit",
+          "Bandit_Peasant",
+          "Highwayman",
+          "Highwayman_Peasant"
+        ]
+      }
+    },
+    {
+      "id": "baran",
+      "name": "Baran",
+      "biography": "A mage and Arvith’s brother, caught in the danger threatening their village.",
+      "portrait": "data/campaigns/Two_Brothers/images/portraits/baran.webp",
+      "campaigns": [
+        {
+          "id": "Two_Brothers",
+          "title": "Two Brothers"
+        }
+      ],
+      "abilities": [
+        "teleport"
+      ],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/campaigns/Two_Brothers/images/portraits/baran.webp",
+        "sha256": "218d463a52cc42908d8f87339376be660de35482d8018fafaf5d08ce422e5c2b"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Two_Brothers"
+        ],
+        "native_types": [
+          "Arch Mage",
+          "Great Mage",
+          "Red Mage",
+          "Silver Mage"
+        ]
+      }
+    },
+    {
+      "id": "burin_the_lost",
+      "name": "Burin the Lost",
+      "biography": "Burin the Lost appears as a Dwarvish Steelclad in The Rise Of Wesnoth.",
+      "portrait": "data/campaigns/The_Rise_Of_Wesnoth/images/portraits/burin.webp",
+      "campaigns": [
+        {
+          "id": "The_Rise_of_Wesnoth",
+          "title": "The Rise Of Wesnoth"
+        }
+      ],
+      "abilities": [],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/campaigns/The_Rise_Of_Wesnoth/images/portraits/burin.webp",
+        "sha256": "433e9eba745082ceffb4c22e0980d18910e99c976b290121b32449cdeac6f716"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "The_Rise_Of_Wesnoth"
+        ],
+        "native_types": [
+          "Dwarvish Lord",
+          "Dwarvish Steelclad"
+        ]
+      }
+    },
+    {
+      "id": "caladon",
+      "name": "Caladon",
+      "biography": "Caladon appears as a Silver Mage in Dead Water.",
+      "portrait": "data/campaigns/Dead_Water/images/portraits/caladon.webp",
+      "campaigns": [
+        {
+          "id": "Dead_Water",
+          "title": "Dead Water"
+        }
+      ],
+      "abilities": [
+        "teleport"
+      ],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/campaigns/Dead_Water/images/portraits/caladon.webp",
+        "sha256": "c2e861d7867f2a1a0263d7651c38cfc511cc0e5666ad43edc8380bb0918f3336"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Dead_Water"
+        ],
+        "native_types": [
+          "Silver Mage"
+        ]
+      }
+    },
+    {
+      "id": "carcyn",
+      "name": "Carcyn",
+      "biography": "Carcyn appears as a Highwayman in Secrets of the Ancients.",
+      "portrait": "data/core/images/portraits/humans/ruffian.webp",
+      "campaigns": [
+        {
+          "id": "Secrets of the Ancients",
+          "title": "Secrets of the Ancients"
+        }
+      ],
+      "abilities": [
+        "concealment"
+      ],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/core/images/portraits/humans/ruffian.webp",
+        "sha256": "5641205d042e20b63afda4d5ec55d27e21b666211880ef1654aa6f892bcecba8"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Secrets_of_the_Ancients"
+        ],
+        "native_types": [
+          "Bandit",
+          "Footpad",
+          "Fugitive",
+          "Highwayman",
+          "Outlaw",
+          "SotA Dark Adept",
+          "SotA Dark Sorcerer",
+          "SotA Necromancer",
+          "SotA Ruffian",
+          "Thug"
+        ]
+      }
+    },
+    {
+      "id": "chantal",
+      "name": "Chantal",
+      "biography": "Chantal appears as an Elvish Shyde in Heir to the Throne.",
+      "portrait": "data/campaigns/Heir_To_The_Throne_Classic/images/portraits/chantal-shyde.webp",
+      "campaigns": [
+        {
+          "id": "Heir 2 The Throne",
+          "title": "Heir to the Throne"
+        },
+        {
+          "id": "Heir_To_The_Throne_Classic",
+          "title": "Heir to the Throne (Classic)"
+        },
+        {
+          "id": "The Deceivers Gambit 1",
+          "title": "The Deceiver’s Gambit — Part I"
+        },
+        {
+          "id": "The Deceivers Gambit 2",
+          "title": "The Deceiver’s Gambit — Part II"
+        }
+      ],
+      "abilities": [
+        "heals +8",
+        "cures"
+      ],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/campaigns/Heir_To_The_Throne_Classic/images/portraits/chantal-shyde.webp",
+        "sha256": "1a917de7f008e82dd3e48b08e6565d1a32d621c2478e9da68554254a43b990ce"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Heir_To_The_Throne",
+          "Heir_To_The_Throne_Classic",
+          "The_Deceivers_Gambit"
+        ],
+        "native_types": [
+          "Elvish Druid",
+          "Elvish Shyde"
+        ]
+      }
+    },
+    {
+      "id": "cleodil",
+      "name": "Cleodil",
+      "biography": "Cleodil appears as an Elvish Shyde in Legend of Wesmere.",
+      "portrait": "data/campaigns/Legend_of_Wesmere/images/portraits/cleodil.webp",
+      "campaigns": [
+        {
+          "id": "LOW",
+          "title": "Legend of Wesmere"
+        }
+      ],
+      "abilities": [
+        "heals +8",
+        "cures"
+      ],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/campaigns/Legend_of_Wesmere/images/portraits/cleodil.webp",
+        "sha256": "8d1545ac3bf74e26454b0dadcc8cf6d99b12fd183bbae046c42a62903735719a"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Legend_of_Wesmere"
+        ],
+        "native_types": [
+          "Elvish Shyde"
+        ]
+      }
+    },
+    {
+      "id": "cylanna",
+      "name": "Cylanna",
+      "biography": "A mermaid priestess who advises and supports Kai Krellis.",
+      "portrait": "data/campaigns/Dead_Water/images/portraits/cylanna.webp",
+      "campaigns": [
+        {
+          "id": "Dead_Water",
+          "title": "Dead Water"
+        }
+      ],
+      "abilities": [
+        "heals +8",
+        "cures",
+        "illuminates"
+      ],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/campaigns/Dead_Water/images/portraits/cylanna.webp",
+        "sha256": "a6cccaab0af229f78efb1a3d382cf9ee04b7172d59be4c2a1bbee539d682173e"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Dead_Water"
+        ],
+        "native_types": [
+          "Mermaid Diviner",
+          "Mermaid Priestess"
+        ]
+      }
+    },
+    {
+      "id": "dacyn",
+      "name": "Dacyn",
+      "biography": "A mage accompanying Gweddry through the Eastern Invasion.",
+      "portrait": "data/campaigns/Eastern_Invasion/images/portraits/dacyn.webp",
+      "campaigns": [
+        {
+          "id": "Eastern_Invasion",
+          "title": "Eastern Invasion"
+        }
+      ],
+      "abilities": [
+        "heals +8",
+        "cures",
+        "darkens",
+        "rotting",
+        "illuminates"
+      ],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/campaigns/Eastern_Invasion/images/portraits/dacyn.webp",
+        "sha256": "cb9076f104d84f77bc19653105879ade5e6bf66d97316bcf18d1db1df202b329"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Eastern_Invasion"
+        ],
+        "native_types": [
+          "Dacyn L2",
+          "Dacyn L3",
+          "Fallen Mage"
+        ]
+      }
+    },
+    {
+      "id": "darken_volk",
+      "name": "Darken Volk",
+      "biography": "Darken Volk appears as a Lich in Descent Into Darkness.",
+      "portrait": "data/campaigns/Descent_Into_Darkness/images/portraits/darken_volk.webp",
+      "campaigns": [
+        {
+          "id": "Descent_into_Darkness",
+          "title": "Descent Into Darkness"
+        }
+      ],
+      "abilities": [
+        "submerge"
+      ],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/campaigns/Descent_Into_Darkness/images/portraits/darken_volk.webp",
+        "sha256": "83537b8992f79d060041ed2a88ceb4b55b033207faa188e501c95ed840d3fc5f"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Descent_Into_Darkness"
+        ],
+        "native_types": [
+          "Dark Sorcerer",
+          "Lich",
+          "Necromancer"
+        ]
+      }
+    },
+    {
+      "id": "delfador",
+      "name": "Delfador",
+      "biography": "A mage whose changing role spans the struggles of Wesnoth’s royal court and Konrad’s journey.",
+      "portrait": "data/campaigns/Heir_To_The_Throne_Classic/images/portraits/delfador.webp",
+      "campaigns": [
+        {
+          "id": "Heir 2 The Throne",
+          "title": "Heir to the Throne"
+        },
+        {
+          "id": "Heir_To_The_Throne_Classic",
+          "title": "Heir to the Throne (Classic)"
+        },
+        {
+          "id": "The Deceivers Gambit 1",
+          "title": "The Deceiver’s Gambit — Part I"
+        },
+        {
+          "id": "The Deceivers Gambit 2",
+          "title": "The Deceiver’s Gambit — Part II"
+        }
+      ],
+      "abilities": [
+        "levitate",
+        "summoner"
+      ],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/campaigns/Heir_To_The_Throne_Classic/images/portraits/delfador.webp",
+        "sha256": "2b8a34ef7679a367141d932ce494a9541669554a00de8a05d915df44f50cd987"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Heir_To_The_Throne",
+          "Heir_To_The_Throne_Classic",
+          "The_Deceivers_Gambit"
+        ],
+        "native_types": [
+          "Delfador",
+          "Delfador L1",
+          "Delfador L2",
+          "Delfador L3",
+          "Delfador L4",
+          "Elder Mage"
+        ]
+      }
+    },
+    {
+      "id": "deoran",
+      "name": "Deoran",
+      "biography": "A cavalry commander assigned to lead the South Guard.",
+      "portrait": "data/campaigns/The_South_Guard/images/portraits/deoran.webp",
+      "campaigns": [
+        {
+          "id": "The Deceivers Gambit 1",
+          "title": "The Deceiver’s Gambit — Part I"
+        },
+        {
+          "id": "The Deceivers Gambit 2",
+          "title": "The Deceiver’s Gambit — Part II"
+        },
+        {
+          "id": "The_South_Guard",
+          "title": "The South Guard"
+        }
+      ],
+      "abilities": [],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/campaigns/The_South_Guard/images/portraits/deoran.webp",
+        "sha256": "8f8ce7ce083688eb6f6fcce5fab4f666bae3e472da2c7dccc9df6f72df2e7aaa"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "The_Deceivers_Gambit",
+          "The_South_Guard"
+        ],
+        "native_types": [
+          "Cavalier Commander",
+          "Cavalryman Commander",
+          "Dragoon Commander",
+          "Veteran Cavalier"
+        ]
+      }
+    },
+    {
+      "id": "diondra",
+      "name": "Diondra",
+      "biography": "Diondra appears as a Mermaid Enchantress in Of Pearls and Pirates.",
+      "portrait": "data/core/images/portraits/merfolk/enchantress.webp",
+      "campaigns": [
+        {
+          "id": "Pearls_and_Pirates",
+          "title": "Of Pearls and Pirates"
+        }
+      ],
+      "abilities": [],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/core/images/portraits/merfolk/enchantress.webp",
+        "sha256": "3dd4df42666e46417c0a7ee60f16c09b5e9fa3fba50bb7922a78eb1d5423bcc9"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Of_Pearls_and_Pirates"
+        ],
+        "native_types": [
+          "Mermaid Enchantress",
+          "Mermaid Siren"
+        ]
+      }
+    },
+    {
+      "id": "dolburras",
+      "name": "Dolburras",
+      "biography": "Dolburras appears as a Dwarvish Lord in Eastern Invasion.",
+      "portrait": "data/core/images/portraits/dwarves/fighter.webp",
+      "campaigns": [
+        {
+          "id": "Eastern_Invasion",
+          "title": "Eastern Invasion"
+        }
+      ],
+      "abilities": [],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/core/images/portraits/dwarves/fighter.webp",
+        "sha256": "f0f0578713880ce54ff651e803f994dffdd42fc39bb62f1f88111b2eb38e1289"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Eastern_Invasion"
+        ],
+        "native_types": [
+          "Dwarvish Lord",
+          "Dwarvish Steelclad"
+        ]
+      }
+    },
+    {
+      "id": "dommel",
+      "name": "Colonel Dommel",
+      "biography": "Colonel Dommel appears as a Grand Marshal in The Deceiver’s Gambit — Part I.",
+      "portrait": "data/campaigns/The_Deceivers_Gambit/images/portraits/dommel.webp",
+      "campaigns": [
+        {
+          "id": "The Deceivers Gambit 1",
+          "title": "The Deceiver’s Gambit — Part I"
+        },
+        {
+          "id": "The Deceivers Gambit 2",
+          "title": "The Deceiver’s Gambit — Part II"
+        }
+      ],
+      "abilities": [
+        "leadership"
+      ],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/campaigns/The_Deceivers_Gambit/images/portraits/dommel.webp",
+        "sha256": "7d16e1dc5675b28d3f4179ff0672b6702518e277be94c84c7e199dcda9f2a175"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "The_Deceivers_Gambit"
+        ],
+        "native_types": [
+          "General",
+          "Grand Marshal"
+        ]
+      }
+    },
+    {
+      "id": "dulcatulos",
+      "name": "Dulcatulos",
+      "biography": "Dulcatulos appears as a Dwarvish Steelclad in The Hammer of Thursagan.",
+      "portrait": "data/campaigns/The_Hammer_of_Thursagan/images/portraits/dulcatulos.webp",
+      "campaigns": [
+        {
+          "id": "The_Hammer_of_Thursagan",
+          "title": "The Hammer of Thursagan"
+        }
+      ],
+      "abilities": [
+        "steadfast"
+      ],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/campaigns/The_Hammer_of_Thursagan/images/portraits/dulcatulos.webp",
+        "sha256": "0f4c9f942d46c64078a03e2727c94e016ff237aba80e9715974ce3996dcea1ec"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "The_Hammer_of_Thursagan"
+        ],
+        "native_types": [
+          "Dwarvish Lord",
+          "Dwarvish Sentinel",
+          "Dwarvish Stalwart",
+          "Dwarvish Steelclad"
+        ]
+      }
+    },
+    {
+      "id": "el_isomithir",
+      "name": "El’Isomithir",
+      "biography": "El’Isomithir appears as an Elvish Champion in Legend of Wesmere.",
+      "portrait": "data/core/images/portraits/elves/hero.webp",
+      "campaigns": [
+        {
+          "id": "LOW",
+          "title": "Legend of Wesmere"
+        }
+      ],
+      "abilities": [],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/core/images/portraits/elves/hero.webp",
+        "sha256": "2a6f730c18ccd6f0c70c23caaed513e0d24dc147b03b8ea2726254a71a538fe0"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Legend_of_Wesmere"
+        ],
+        "native_types": [
+          "Elvish Champion",
+          "Elvish Hero"
+        ]
+      }
+    },
+    {
+      "id": "elyn",
+      "name": "Constable Elyn",
+      "biography": "Constable Elyn appears as a Javelineer in Of Pearls and Pirates.",
+      "portrait": "data/core/images/portraits/humans/javelineer.webp",
+      "campaigns": [
+        {
+          "id": "Pearls_and_Pirates",
+          "title": "Of Pearls and Pirates"
+        }
+      ],
+      "abilities": [],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/core/images/portraits/humans/javelineer.webp",
+        "sha256": "b765825b4fdc1780edf2c5df74be50adb2765f06bb9e3167fce0195813a7d3ea"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Of_Pearls_and_Pirates"
+        ],
+        "native_types": [
+          "Javelineer"
+        ]
+      }
+    },
+    {
+      "id": "eradion",
+      "name": "Eradion",
+      "biography": "Eradion appears as an Elvish Marshal in Legend of Wesmere.",
+      "portrait": "data/core/images/portraits/elves/captain.webp",
+      "campaigns": [
+        {
+          "id": "LOW",
+          "title": "Legend of Wesmere"
+        }
+      ],
+      "abilities": [
+        "leadership"
+      ],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/core/images/portraits/elves/captain.webp",
+        "sha256": "720c12140f80ea3aabf7a5a1e3d000e334792e9bb35452db5d6439ef5a77c3dc"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Legend_of_Wesmere"
+        ],
+        "native_types": [
+          "Elvish Marshal"
+        ]
+      }
+    },
+    {
+      "id": "eryssa",
+      "name": "Eryssa",
+      "biography": "Eryssa appears as an Elvish Sylph in Northern Rebirth.",
+      "portrait": "data/campaigns/Northern_Rebirth/images/portraits/Eryssa.webp",
+      "campaigns": [
+        {
+          "id": "Northern_Rebirth",
+          "title": "Northern Rebirth"
+        }
+      ],
+      "abilities": [],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/campaigns/Northern_Rebirth/images/portraits/Eryssa.webp",
+        "sha256": "7982f4721241b4afdcfcf9d3133ebb9dae2c9ba32f97efbcdd7b8a5a1ab0b485"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Northern_Rebirth"
+        ],
+        "native_types": [
+          "Elvish Enchantress",
+          "Elvish Sorceress",
+          "Elvish Sylph"
+        ]
+      }
+    },
+    {
+      "id": "ethiliel",
+      "name": "Ethiliel",
+      "biography": "Ethiliel appears as an Elvish Shyde in Heir to the Throne.",
+      "portrait": "data/campaigns/The_South_Guard/images/portraits/ethiliel.webp",
+      "campaigns": [
+        {
+          "id": "Heir 2 The Throne",
+          "title": "Heir to the Throne"
+        },
+        {
+          "id": "The_South_Guard",
+          "title": "The South Guard"
+        }
+      ],
+      "abilities": [
+        "heals +8",
+        "cures"
+      ],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/campaigns/The_South_Guard/images/portraits/ethiliel.webp",
+        "sha256": "d85f7fe9879e5b92a03d0b35c923be039c82008e7908758444c90cbd3ef935d0"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Heir_To_The_Throne",
+          "The_South_Guard"
+        ],
+        "native_types": [
+          "Elvish Shyde"
+        ]
+      }
+    },
+    {
+      "id": "father_morvin",
+      "name": "Father Morvin",
+      "biography": "Father Morvin appears as a White Mage in Northern Rebirth.",
+      "portrait": "data/campaigns/Northern_Rebirth/images/portraits/Father_Morvin.webp",
+      "campaigns": [
+        {
+          "id": "Northern_Rebirth",
+          "title": "Northern Rebirth"
+        }
+      ],
+      "abilities": [
+        "heals +8",
+        "cures",
+        "illuminates"
+      ],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/campaigns/Northern_Rebirth/images/portraits/Father_Morvin.webp",
+        "sha256": "0b961385efdc79d6df27cd938ec4cb58a102566e2bbe663e35110f2b4adebeba"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Northern_Rebirth"
+        ],
+        "native_types": [
+          "Mage of Light",
+          "White Mage"
+        ]
+      }
+    },
+    {
+      "id": "galdrad",
+      "name": "Galdrad",
+      "biography": "Galdrad appears as an Elvish Champion in Heir to the Throne.",
+      "portrait": "data/core/images/portraits/elves/hero.webp",
+      "campaigns": [
+        {
+          "id": "Heir 2 The Throne",
+          "title": "Heir to the Throne"
+        }
+      ],
+      "abilities": [],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/core/images/portraits/elves/hero.webp",
+        "sha256": "2a6f730c18ccd6f0c70c23caaed513e0d24dc147b03b8ea2726254a71a538fe0"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Heir_To_The_Throne"
+        ],
+        "native_types": [
+          "Elvish Champion"
+        ]
+      }
+    },
+    {
+      "id": "galtrid",
+      "name": "Galtrid",
+      "biography": "Galtrid appears as an Elvish Captain in Legend of Wesmere.",
+      "portrait": "data/campaigns/Legend_of_Wesmere/images/portraits/galtrid.webp",
+      "campaigns": [
+        {
+          "id": "LOW",
+          "title": "Legend of Wesmere"
+        }
+      ],
+      "abilities": [
+        "leadership"
+      ],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/campaigns/Legend_of_Wesmere/images/portraits/galtrid.webp",
+        "sha256": "e048d7c8f7433e3cee4b5b9cd8ba2154f8af8cf22d4385a1aaf8d34946e16a54"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Legend_of_Wesmere"
+        ],
+        "native_types": [
+          "Elvish Captain",
+          "Elvish Marshal"
+        ]
+      }
+    },
+    {
+      "id": "gao",
+      "name": "Gao",
+      "biography": "Gao appears as a Troll Warrior in Dusk of Dawn.",
+      "portrait": "data/core/images/portraits/trolls/whelp.webp",
+      "campaigns": [
+        {
+          "id": "Dusk_of_Dawn",
+          "title": "Dusk of Dawn"
+        }
+      ],
+      "abilities": [
+        "regenerates"
+      ],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/core/images/portraits/trolls/whelp.webp",
+        "sha256": "73240c4cea31edd8e0491c1a3c4d82a3e2e5694b3020b9a256453e69400704f0"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Dusk_of_Dawn"
+        ],
+        "native_types": [
+          "Troll",
+          "Troll Rocklobber",
+          "Troll Warrior",
+          "Troll Whelp"
+        ]
+      }
+    },
+    {
+      "id": "garak",
+      "name": "Garak",
+      "biography": "A veteran Quenoth champion who stands with his people.",
+      "portrait": "data/campaigns/Under_the_Burning_Suns/images/portraits/garak.webp",
+      "campaigns": [
+        {
+          "id": "Under_the_Burning_Suns",
+          "title": "Under the Burning Suns"
+        }
+      ],
+      "abilities": [],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/campaigns/Under_the_Burning_Suns/images/portraits/garak.webp",
+        "sha256": "7a7f09baf5d4a8e0335ac83fc3620a0afe1d3c514df4e50e21edd87b64158f76"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Under_the_Burning_Suns"
+        ],
+        "native_types": [
+          "Quenoth Champion"
+        ]
+      }
+    },
+    {
+      "id": "garard",
+      "name": "Garard II",
+      "biography": "Garard II appears as a King of Wesnoth in The Deceiver’s Gambit — Part I.",
+      "portrait": "data/campaigns/The_Deceivers_Gambit/images/portraits/garard.webp",
+      "campaigns": [
+        {
+          "id": "The Deceivers Gambit 1",
+          "title": "The Deceiver’s Gambit — Part I"
+        },
+        {
+          "id": "The Deceivers Gambit 2",
+          "title": "The Deceiver’s Gambit — Part II"
+        }
+      ],
+      "abilities": [
+        "leadership"
+      ],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/campaigns/The_Deceivers_Gambit/images/portraits/garard.webp",
+        "sha256": "a11469bb1ebc8fa640194c257fd5d567de1db5974ad7098dc904d87553d09a07"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "The_Deceivers_Gambit"
+        ],
+        "native_types": [
+          "King of Wesnoth"
+        ]
+      }
+    },
+    {
+      "id": "gork",
+      "name": "Gork",
+      "biography": "Gork appears as an Orcish Shaman in Son of the Black Eye.",
+      "portrait": "data/campaigns/Son_Of_The_Black_Eye/images/portraits/old_orcish_shaman.webp",
+      "campaigns": [
+        {
+          "id": "Son_of_the_Black-Eye",
+          "title": "Son of the Black Eye"
+        }
+      ],
+      "abilities": [],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/campaigns/Son_Of_The_Black_Eye/images/portraits/old_orcish_shaman.webp",
+        "sha256": "35660a9e40aab0aa1ff5ac66a496f1aec233db20a803a406a4127a05395e0267"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Son_Of_The_Black_Eye"
+        ],
+        "native_types": [
+          "Orcish Shaman"
+        ]
+      }
+    },
+    {
+      "id": "gorlack",
+      "name": "Gorlack",
+      "biography": "A drake whose journey is shaped by the hunt and the search for a future for his people.",
+      "portrait": "data/core/images/portraits/drakes/burner.webp",
+      "campaigns": [
+        {
+          "id": "Winds_of_Fate",
+          "title": "Winds of Fate"
+        }
+      ],
+      "abilities": [
+        "leadership"
+      ],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/core/images/portraits/drakes/burner.webp",
+        "sha256": "f3c3f7689827bb0363025461482282b5f54dcaab8412aa296e5a23b42f04c41a"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Winds_of_Fate"
+        ],
+        "native_types": [
+          "Armageddon Drake",
+          "Drake Burner",
+          "Drake Flameheart",
+          "Drake Flare",
+          "Fire Drake",
+          "Inferno Drake"
+        ]
+      }
+    },
+    {
+      "id": "grog",
+      "name": "Grog",
+      "biography": "Grog appears as a Troll Warrior in Under the Burning Suns.",
+      "portrait": "data/core/images/portraits/trolls/troll-hero-alt.webp",
+      "campaigns": [
+        {
+          "id": "Under_the_Burning_Suns",
+          "title": "Under the Burning Suns"
+        }
+      ],
+      "abilities": [
+        "regenerates"
+      ],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/core/images/portraits/trolls/troll-hero-alt.webp",
+        "sha256": "32c4dbf6ed3f317ef25f12aebfa97cc397379544d945569002bf1995d36cc84c"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Under_the_Burning_Suns"
+        ],
+        "native_types": [
+          "Troll",
+          "Troll Warrior"
+        ]
+      }
+    },
+    {
+      "id": "grug",
+      "name": "Grug",
+      "biography": "Grug appears as an Ogre in Eastern Invasion.",
+      "portrait": "data/core/images/portraits/monsters/ogre.webp",
+      "campaigns": [
+        {
+          "id": "Eastern_Invasion",
+          "title": "Eastern Invasion"
+        }
+      ],
+      "abilities": [],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/core/images/portraits/monsters/ogre.webp",
+        "sha256": "d7210bb77d3faf240a92181872adce35e413051fe4c5c82458cf1194d996d03d"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Eastern_Invasion"
+        ],
+        "native_types": [
+          "Ogre"
+        ]
+      }
+    },
+    {
+      "id": "gruu",
+      "name": "Grüü",
+      "biography": "Grüü appears as a Troll Hero in Son of the Black Eye.",
+      "portrait": "data/campaigns/Son_Of_The_Black_Eye/images/portraits/gruu.webp",
+      "campaigns": [
+        {
+          "id": "Son_of_the_Black-Eye",
+          "title": "Son of the Black Eye"
+        }
+      ],
+      "abilities": [
+        "regenerates"
+      ],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/campaigns/Son_Of_The_Black_Eye/images/portraits/gruu.webp",
+        "sha256": "0392154d8af86833b28a90b261076363bb03bcf34ac468baefe8f082466c84d6"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Son_Of_The_Black_Eye"
+        ],
+        "native_types": [
+          "Great Troll",
+          "Troll Hero"
+        ]
+      }
+    },
+    {
+      "id": "gwabbo",
+      "name": "Gwabbo",
+      "biography": "Gwabbo appears as a Merman Entangler in Dead Water.",
+      "portrait": "data/campaigns/Dead_Water/images/portraits/gwabbo.webp",
+      "campaigns": [
+        {
+          "id": "Dead_Water",
+          "title": "Dead Water"
+        }
+      ],
+      "abilities": [],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/campaigns/Dead_Water/images/portraits/gwabbo.webp",
+        "sha256": "591f8b800d661296dbd1dfacc444320ddf33e7f26ece7c93e76858158e2a9635"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Dead_Water"
+        ],
+        "native_types": [
+          "Merman Entangler",
+          "Merman Netcaster"
+        ]
+      }
+    },
+    {
+      "id": "gweddry",
+      "name": "Gweddry",
+      "biography": "A frontier commander drawn into the defence of eastern Wesnoth.",
+      "portrait": "data/campaigns/Eastern_Invasion/images/portraits/gweddry.webp",
+      "campaigns": [
+        {
+          "id": "Eastern_Invasion",
+          "title": "Eastern Invasion"
+        }
+      ],
+      "abilities": [
+        "leadership"
+      ],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/campaigns/Eastern_Invasion/images/portraits/gweddry.webp",
+        "sha256": "7ac1db7402d73afc32aaa527d066d873c355eb2eaa5228009bb7ae616ae6462d"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Eastern_Invasion"
+        ],
+        "native_types": [
+          "Frontier Lieutenant",
+          "Frontier Sergeant",
+          "Veteran Commander",
+          "Veteran Lieutenant"
+        ]
+      }
+    },
+    {
+      "id": "haldiel",
+      "name": "Haldiel",
+      "biography": "Haldiel appears as a Lancer in Heir to the Throne.",
+      "portrait": "data/core/images/portraits/humans/horseman.webp",
+      "campaigns": [
+        {
+          "id": "Heir 2 The Throne",
+          "title": "Heir to the Throne"
+        },
+        {
+          "id": "Heir_To_The_Throne_Classic",
+          "title": "Heir to the Throne (Classic)"
+        }
+      ],
+      "abilities": [
+        "heals +4"
+      ],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/core/images/portraits/humans/horseman.webp",
+        "sha256": "68a9098587c79b9953a35ab81ca574c69a009f6008ebfdeb9cfb80b097c75c53"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Heir_To_The_Throne",
+          "Heir_To_The_Throne_Classic"
+        ],
+        "native_types": [
+          "Grand Knight",
+          "Horseman",
+          "Knight",
+          "Lancer",
+          "Paladin"
+        ]
+      }
+    },
+    {
+      "id": "haldric",
+      "name": "Prince Haldric",
+      "biography": "A young prince leading his people away from the dangers of the Green Isle.",
+      "portrait": "data/campaigns/The_Rise_Of_Wesnoth/images/portraits/haldric.webp",
+      "campaigns": [
+        {
+          "id": "The_Rise_of_Wesnoth",
+          "title": "The Rise Of Wesnoth"
+        }
+      ],
+      "abilities": [
+        "leadership"
+      ],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/campaigns/The_Rise_Of_Wesnoth/images/portraits/haldric.webp",
+        "sha256": "9f75b1a7f1ce9e67ae0a01298560d5c17afdca0046136cddf338c3d674e50de1"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "The_Rise_Of_Wesnoth"
+        ],
+        "native_types": [
+          "Noble Commander",
+          "Noble Fighter",
+          "Noble Lord",
+          "Noble Youth"
+        ]
+      }
+    },
+    {
+      "id": "haldric_ii",
+      "name": "Haldric II",
+      "biography": "Haldric II appears as a King in Sceptre of Fire.",
+      "portrait": "data/campaigns/Sceptre_of_Fire/images/portraits/haldric-ii.webp",
+      "campaigns": [
+        {
+          "id": "Sceptre_of_Fire",
+          "title": "Sceptre of Fire"
+        }
+      ],
+      "abilities": [
+        "leadership"
+      ],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/campaigns/Sceptre_of_Fire/images/portraits/haldric-ii.webp",
+        "sha256": "b43269bbec2437d842b7702499b6cd0b8111344b55cdcf092ac4cd29713188dc"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Sceptre_of_Fire"
+        ],
+        "native_types": [
+          "Haldric II"
+        ]
+      }
+    },
+    {
+      "id": "hamel",
+      "name": "Hamel",
+      "biography": "Hamel appears as a Dwarvish Lord in Northern Rebirth.",
+      "portrait": "data/campaigns/Northern_Rebirth/images/portraits/Hamel.webp",
+      "campaigns": [
+        {
+          "id": "Northern_Rebirth",
+          "title": "Northern Rebirth"
+        }
+      ],
+      "abilities": [],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/campaigns/Northern_Rebirth/images/portraits/Hamel.webp",
+        "sha256": "280d718823b01056d9d0f6fa3fc9ae6e4c159604a171c91b8e3a1bf2e02205f7"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Northern_Rebirth"
+        ],
+        "native_types": [
+          "Dwarvish Lord"
+        ]
+      }
+    },
+    {
+      "id": "harper",
+      "name": "Harper",
+      "biography": "A young member of Baldras’s community who joins the rebellion.",
+      "portrait": "data/campaigns/Liberty/images/portraits/harper.webp",
+      "campaigns": [
+        {
+          "id": "Heir 2 The Throne",
+          "title": "Heir to the Throne"
+        },
+        {
+          "id": "Liberty",
+          "title": "Liberty"
+        }
+      ],
+      "abilities": [
+        "concealment"
+      ],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/campaigns/Liberty/images/portraits/harper.webp",
+        "sha256": "50187c41aa6dab9da103f8c296b84dd64712db9be0c5421e5048d53a064f51a7"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Heir_To_The_Throne",
+          "Liberty"
+        ],
+        "native_types": [
+          "Footpad_Peasant",
+          "Fugitive",
+          "Fugitive_Peasant",
+          "Outlaw_Peasant"
+        ]
+      }
+    },
+    {
+      "id": "helicrom",
+      "name": "Helicrom",
+      "biography": "Helicrom appears as a Shadow Lord in Liberty.",
+      "portrait": "data/campaigns/Liberty/images/portraits/helicrom.webp",
+      "campaigns": [
+        {
+          "id": "Liberty",
+          "title": "Liberty"
+        }
+      ],
+      "abilities": [],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/campaigns/Liberty/images/portraits/helicrom.webp",
+        "sha256": "396a0c240286b9a4980d6343ed78b420400a7bd97b075f0bdfb328f0709fd068"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Liberty"
+        ],
+        "native_types": [
+          "Shadow Lord"
+        ]
+      }
+    },
+    {
+      "id": "huraldur",
+      "name": "Huraldur",
+      "biography": "Huraldur appears as an Elvish Rider in Legend of Wesmere.",
+      "portrait": "data/core/images/portraits/elves/scout.webp",
+      "campaigns": [
+        {
+          "id": "LOW",
+          "title": "Legend of Wesmere"
+        }
+      ],
+      "abilities": [],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/core/images/portraits/elves/scout.webp",
+        "sha256": "8c6d95eddaad835984e0c1d78d4585d996ec78dc94f9f63f403d717e79a65664"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Legend_of_Wesmere"
+        ],
+        "native_types": [
+          "Elvish Outrider",
+          "Elvish Rider",
+          "Elvish Scout"
+        ]
+      }
+    },
+    {
+      "id": "inarix",
+      "name": "Inarix",
+      "biography": "Inarix appears as a Saurian Flanker in Son of the Black Eye.",
+      "portrait": "data/campaigns/Son_Of_The_Black_Eye/images/portraits/inarix.webp",
+      "campaigns": [
+        {
+          "id": "Son_of_the_Black-Eye",
+          "title": "Son of the Black Eye"
+        }
+      ],
+      "abilities": [
+        "skirmisher"
+      ],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/campaigns/Son_Of_The_Black_Eye/images/portraits/inarix.webp",
+        "sha256": "72295babc6011dad82620c2127c00876f84622d9c14d5d28bd81ec01ffb4f45a"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Son_Of_The_Black_Eye"
+        ],
+        "native_types": [
+          "Saurian Ambusher",
+          "Saurian Flanker"
+        ]
+      }
+    },
+    {
+      "id": "isolde",
+      "name": "Isolde",
+      "biography": "Isolde appears as a General in Heir to the Throne.",
+      "portrait": "data/campaigns/Heir_To_The_Throne/images/portraits/isolde-old.png",
+      "campaigns": [
+        {
+          "id": "Heir 2 The Throne",
+          "title": "Heir to the Throne"
+        }
+      ],
+      "abilities": [
+        "leadership"
+      ],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/campaigns/Heir_To_The_Throne/images/portraits/isolde-old.png",
+        "sha256": "e423fea6101a9b7ed3c36667727c9454e58e77002a2a5776f97204802f31160d"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Heir_To_The_Throne"
+        ],
+        "native_types": [
+          "General",
+          "Grand Marshal"
+        ]
+      }
+    },
+    {
+      "id": "jessene",
+      "name": "Lady Jessene",
+      "biography": "A Wesfolk leader whose journey becomes intertwined with Haldric’s.",
+      "portrait": "data/campaigns/The_Rise_Of_Wesnoth/images/portraits/jessica.webp",
+      "campaigns": [
+        {
+          "id": "The_Rise_of_Wesnoth",
+          "title": "The Rise Of Wesnoth"
+        }
+      ],
+      "abilities": [
+        "leadership",
+        "distract"
+      ],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/campaigns/The_Rise_Of_Wesnoth/images/portraits/jessica.webp",
+        "sha256": "79bd1610c2bb5f65eeb9af3445152c01ce2cd2930ec7d8293b8e3330c6e6858d"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "The_Rise_Of_Wesnoth"
+        ],
+        "native_types": [
+          "Wesfolk Lady",
+          "Wesfolk Leader"
+        ]
+      }
+    },
+    {
+      "id": "kai_krellis",
+      "name": "Kai Krellis",
+      "biography": "A young merman king who must defend his people against an invasion.",
+      "portrait": "data/campaigns/Dead_Water/images/portraits/kai_krellis.webp",
+      "campaigns": [
+        {
+          "id": "Dead_Water",
+          "title": "Dead Water"
+        }
+      ],
+      "abilities": [
+        "leadership"
+      ],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/campaigns/Dead_Water/images/portraits/kai_krellis.webp",
+        "sha256": "63b0a864f4461e3f917735136038b08761d401fec5dcf79d8315258527818eeb"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Dead_Water"
+        ],
+        "native_types": [
+          "Merman Child King",
+          "Merman Soldier King",
+          "Merman Warrior King",
+          "Merman Young King"
+        ]
+      }
+    },
+    {
+      "id": "kaleh",
+      "name": "Kaleh",
+      "biography": "A young Quenoth elf leading his people through the trials beneath the burning suns.",
+      "portrait": "data/campaigns/Under_the_Burning_Suns/images/portraits/kaleh.webp",
+      "campaigns": [
+        {
+          "id": "Under_the_Burning_Suns",
+          "title": "Under the Burning Suns"
+        }
+      ],
+      "abilities": [],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/campaigns/Under_the_Burning_Suns/images/portraits/kaleh.webp",
+        "sha256": "8b673050d4670c65fdb06d5438c96a9a170bbc61d7d55861920de30a7775afda"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Under_the_Burning_Suns"
+        ],
+        "native_types": [
+          "Quenoth Youth"
+        ]
+      }
+    },
+    {
+      "id": "kalenz",
+      "name": "Kalenz",
+      "biography": "An elven lord whose long life connects the history of Wesmere with later wars in Wesnoth.",
+      "portrait": "data/campaigns/The_Deceivers_Gambit/images/portraits/kalenz.webp",
+      "campaigns": [
+        {
+          "id": "Heir 2 The Throne",
+          "title": "Heir to the Throne"
+        },
+        {
+          "id": "Heir_To_The_Throne_Classic",
+          "title": "Heir to the Throne (Classic)"
+        },
+        {
+          "id": "LOW",
+          "title": "Legend of Wesmere"
+        },
+        {
+          "id": "The Deceivers Gambit 1",
+          "title": "The Deceiver’s Gambit — Part I"
+        },
+        {
+          "id": "The Deceivers Gambit 2",
+          "title": "The Deceiver’s Gambit — Part II"
+        }
+      ],
+      "abilities": [
+        "leadership"
+      ],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/campaigns/The_Deceivers_Gambit/images/portraits/kalenz.webp",
+        "sha256": "98c5b9cf4fb52b8a075a66300c34b5a68b7dab482dd6d83bea07e01504f7a35c"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Heir_To_The_Throne",
+          "Heir_To_The_Throne_Classic",
+          "Legend_of_Wesmere",
+          "The_Deceivers_Gambit"
+        ],
+        "native_types": [
+          "Elvish Captain",
+          "Elvish Champion",
+          "Elvish Fighter",
+          "Elvish Hero",
+          "Elvish High Lord",
+          "Elvish Lord",
+          "Elvish Marshal"
+        ]
+      }
+    },
+    {
+      "id": "kapoue",
+      "name": "Kapou’e",
+      "biography": "An orcish leader fighting for his people in the Northlands.",
+      "portrait": "data/campaigns/Son_Of_The_Black_Eye/images/portraits/kapoue.webp",
+      "campaigns": [
+        {
+          "id": "Son_of_the_Black-Eye",
+          "title": "Son of the Black Eye"
+        }
+      ],
+      "abilities": [
+        "leadership"
+      ],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/campaigns/Son_Of_The_Black_Eye/images/portraits/kapoue.webp",
+        "sha256": "8faf6a29498177217de8985a30afcd7bff2edd7e4921a03c628db48452f006bf"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Son_Of_The_Black_Eye"
+        ],
+        "native_types": [
+          "Orcish Leader",
+          "Orcish Ruler",
+          "Orcish Sovereign"
+        ]
+      }
+    },
+    {
+      "id": "karron",
+      "name": "Karron",
+      "biography": "Karron appears as a Drake Warrior in Winds of Fate.",
+      "portrait": "data/core/images/portraits/drakes/fighter.webp",
+      "campaigns": [
+        {
+          "id": "Winds_of_Fate",
+          "title": "Winds of Fate"
+        }
+      ],
+      "abilities": [],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/core/images/portraits/drakes/fighter.webp",
+        "sha256": "a9e59d375b01b1950b1bcaa54d465c4c16b207c6d1c8c158d6f7482621da9d64"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Winds_of_Fate"
+        ],
+        "native_types": [
+          "Drake Blademaster",
+          "Drake Warrior"
+        ]
+      }
+    },
+    {
+      "id": "kaylan",
+      "name": "Sir Kaylan",
+      "biography": "Sir Kaylan appears as a Grand Knight in Heir to the Throne.",
+      "portrait": "data/core/images/portraits/humans/grand-knight.webp",
+      "campaigns": [
+        {
+          "id": "Heir 2 The Throne",
+          "title": "Heir to the Throne"
+        }
+      ],
+      "abilities": [],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/core/images/portraits/humans/grand-knight.webp",
+        "sha256": "f0ef82355f0477c3fac6c0ea7aa406bea4ed608baf6f3f83dbcd71411de9d84a"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Heir_To_The_Throne"
+        ],
+        "native_types": [
+          "Grand Knight"
+        ]
+      }
+    },
+    {
+      "id": "keshan",
+      "name": "Keshan",
+      "biography": "Keshan appears as a Drake Burner in Dead Water.",
+      "portrait": "data/core/images/portraits/drakes/burner.webp",
+      "campaigns": [
+        {
+          "id": "Dead_Water",
+          "title": "Dead Water"
+        }
+      ],
+      "abilities": [
+        "leadership"
+      ],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/core/images/portraits/drakes/burner.webp",
+        "sha256": "f3c3f7689827bb0363025461482282b5f54dcaab8412aa296e5a23b42f04c41a"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Dead_Water"
+        ],
+        "native_types": [
+          "Drake Burner",
+          "Drake Flameheart",
+          "Drake Flare",
+          "Fire Drake",
+          "Inferno Drake"
+        ]
+      }
+    },
+    {
+      "id": "kestrel",
+      "name": "Kestrel",
+      "biography": "Kestrel appears as a Royal Guard in The Deceiver’s Gambit — Part I.",
+      "portrait": "data/core/images/portraits/humans/royal-guard.webp",
+      "campaigns": [
+        {
+          "id": "The Deceivers Gambit 1",
+          "title": "The Deceiver’s Gambit — Part I"
+        },
+        {
+          "id": "The Deceivers Gambit 2",
+          "title": "The Deceiver’s Gambit — Part II"
+        }
+      ],
+      "abilities": [],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/core/images/portraits/humans/royal-guard.webp",
+        "sha256": "2cfde7c72fb55545baa1375952249fb5a94cd379c63510b765a18f9a31ccd643"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "The_Deceivers_Gambit"
+        ],
+        "native_types": [
+          "Royal Guard"
+        ]
+      }
+    },
+    {
+      "id": "konrad",
+      "name": "Konrad",
+      "biography": "A young heir guided by Delfador, fighting to reclaim the throne of Wesnoth.",
+      "portrait": "data/campaigns/Heir_To_The_Throne_Classic/images/portraits/konrad-elvish.webp",
+      "campaigns": [
+        {
+          "id": "Heir 2 The Throne",
+          "title": "Heir to the Throne"
+        },
+        {
+          "id": "Heir_To_The_Throne_Classic",
+          "title": "Heir to the Throne (Classic)"
+        }
+      ],
+      "abilities": [
+        "leadership"
+      ],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/campaigns/Heir_To_The_Throne_Classic/images/portraits/konrad-elvish.webp",
+        "sha256": "6579d865edc73a88dcfd13e3f67989d719227c03d857750760fef0770f1a279a"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Heir_To_The_Throne",
+          "Heir_To_The_Throne_Classic"
+        ],
+        "native_types": [
+          "Captain",
+          "Commander",
+          "Fighter",
+          "Lord",
+          "Prince",
+          "Warrior Prince"
+        ]
+      }
+    },
+    {
+      "id": "konrad_ii",
+      "name": "Konrad II",
+      "biography": "Konrad II appears as a King of Wesnoth in Eastern Invasion.",
+      "portrait": "data/campaigns/Eastern_Invasion/images/portraits/konrad_II.webp",
+      "campaigns": [
+        {
+          "id": "Eastern_Invasion",
+          "title": "Eastern Invasion"
+        }
+      ],
+      "abilities": [
+        "leadership"
+      ],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/campaigns/Eastern_Invasion/images/portraits/konrad_II.webp",
+        "sha256": "13644a84334faf951870342b610c49a9821d7a9d055df2aa89efc1b56027f8e4"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Eastern_Invasion"
+        ],
+        "native_types": [
+          "King of Wesnoth"
+        ]
+      }
+    },
+    {
+      "id": "krawg",
+      "name": "Krawg",
+      "biography": "Krawg appears as a Gryphon in Sceptre of Fire.",
+      "portrait": "data/core/images/portraits/monsters/gryphon.webp",
+      "campaigns": [
+        {
+          "id": "Sceptre_of_Fire",
+          "title": "Sceptre of Fire"
+        }
+      ],
+      "abilities": [],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/core/images/portraits/monsters/gryphon.webp",
+        "sha256": "8a932b2139299e9d99e44e5c5ef4b33596634cb0d3207ac54135b974d02ce7dc"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Sceptre_of_Fire"
+        ],
+        "native_types": [
+          "Gryphon"
+        ]
+      }
+    },
+    {
+      "id": "landar",
+      "name": "Landar",
+      "biography": "Landar appears as an Elvish Ranger in Legend of Wesmere.",
+      "portrait": "data/campaigns/Legend_of_Wesmere/images/portraits/landar.webp",
+      "campaigns": [
+        {
+          "id": "LOW",
+          "title": "Legend of Wesmere"
+        }
+      ],
+      "abilities": [
+        "ambush"
+      ],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/campaigns/Legend_of_Wesmere/images/portraits/landar.webp",
+        "sha256": "f249b0ae8aaf3779b4fdb20129b00f2435fb37f0c32e2fb15e77ac5093d20f7b"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Legend_of_Wesmere"
+        ],
+        "native_types": [
+          "Elvish Archer",
+          "Elvish Avenger",
+          "Elvish Marksman",
+          "Elvish Ranger",
+          "Elvish Sharpshooter"
+        ]
+      }
+    },
+    {
+      "id": "laril",
+      "name": "Laril",
+      "biography": "Laril appears as an Elvish Shyde in Legend of Wesmere.",
+      "portrait": "data/core/images/portraits/elves/druid.webp",
+      "campaigns": [
+        {
+          "id": "LOW",
+          "title": "Legend of Wesmere"
+        }
+      ],
+      "abilities": [
+        "heals +8",
+        "cures"
+      ],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/core/images/portraits/elves/druid.webp",
+        "sha256": "5539154066fb76c6e667e3e5484de320120e1d89dddbe603e2e975455146ef2d"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Legend_of_Wesmere"
+        ],
+        "native_types": [
+          "Elvish Druid",
+          "Elvish Shyde"
+        ]
+      }
+    },
+    {
+      "id": "lionel",
+      "name": "Lionel",
+      "biography": "Lionel appears as a Grand Marshal in The Deceiver’s Gambit — Part I.",
+      "portrait": "data/campaigns/The_Deceivers_Gambit/images/portraits/lionel.webp",
+      "campaigns": [
+        {
+          "id": "The Deceivers Gambit 1",
+          "title": "The Deceiver’s Gambit — Part I"
+        },
+        {
+          "id": "The Deceivers Gambit 2",
+          "title": "The Deceiver’s Gambit — Part II"
+        }
+      ],
+      "abilities": [
+        "leadership"
+      ],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/campaigns/The_Deceivers_Gambit/images/portraits/lionel.webp",
+        "sha256": "431b046ab9a14a98ab3e3a69312952cef0d7da32293dfe70d0132b3b2dd6dbe8"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "The_Deceivers_Gambit"
+        ],
+        "native_types": [
+          "General",
+          "Grand Marshal"
+        ]
+      }
+    },
+    {
+      "id": "lisar",
+      "name": "Li’sar",
+      "biography": "A princess of Wesnoth whose path crosses Konrad’s struggle for the throne.",
+      "portrait": "data/campaigns/Heir_To_The_Throne_Classic/images/portraits/lisar.webp",
+      "campaigns": [
+        {
+          "id": "Heir 2 The Throne",
+          "title": "Heir to the Throne"
+        },
+        {
+          "id": "Heir_To_The_Throne_Classic",
+          "title": "Heir to the Throne (Classic)"
+        }
+      ],
+      "abilities": [
+        "leadership",
+        "exacting",
+        "initiative"
+      ],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/campaigns/Heir_To_The_Throne_Classic/images/portraits/lisar.webp",
+        "sha256": "913ac411e948aff8079c39e5c749007d2936c7486c9311b212a2f9e99a4feac4"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Heir_To_The_Throne",
+          "Heir_To_The_Throne_Classic"
+        ],
+        "native_types": [
+          "Battle Princess",
+          "Princess",
+          "Warrior Princess"
+        ]
+      }
+    },
+    {
+      "id": "maddock",
+      "name": "Lord Maddock",
+      "biography": "Lord Maddock appears as a Lord of Elensefar in Heir to the Throne.",
+      "portrait": "data/campaigns/The_Deceivers_Gambit/images/portraits/maddock.webp",
+      "campaigns": [
+        {
+          "id": "Heir 2 The Throne",
+          "title": "Heir to the Throne"
+        },
+        {
+          "id": "The Deceivers Gambit 1",
+          "title": "The Deceiver’s Gambit — Part I"
+        },
+        {
+          "id": "The Deceivers Gambit 2",
+          "title": "The Deceiver’s Gambit — Part II"
+        }
+      ],
+      "abilities": [
+        "leadership"
+      ],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/campaigns/The_Deceivers_Gambit/images/portraits/maddock.webp",
+        "sha256": "dd329c87e5e8fb1b52dc16737a9f340a7dfd88d96eaed98b66eebc29959e7d94"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Heir_To_The_Throne",
+          "The_Deceivers_Gambit"
+        ],
+        "native_types": [
+          "Lord of Elensefar"
+        ]
+      }
+    },
+    {
+      "id": "malin_keshar",
+      "name": "Malin Keshar",
+      "biography": "A young mage from Parthyn whose pursuit of power leads into darkness.",
+      "portrait": "data/campaigns/Descent_Into_Darkness/images/portraits/malin_young.webp",
+      "campaigns": [
+        {
+          "id": "Descent_into_Darkness",
+          "title": "Descent Into Darkness"
+        }
+      ],
+      "abilities": [
+        "submerge"
+      ],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/campaigns/Descent_Into_Darkness/images/portraits/malin_young.webp",
+        "sha256": "34f0a170d047ff7663178392274b5f1eafb9a5ca87fa0915ed44d0687a4119d4"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Descent_Into_Darkness"
+        ],
+        "native_types": [
+          "Dark Mage",
+          "Mal Keshar",
+          "Malin Keshar",
+          "MalinDarkMage",
+          "MalinNecromancer"
+        ]
+      }
+    },
+    {
+      "id": "mari",
+      "name": "Captain Mari",
+      "biography": "Captain Mari appears as a Master Fencer in The South Guard.",
+      "portrait": "data/campaigns/The_South_Guard/images/portraits/mari.webp",
+      "campaigns": [
+        {
+          "id": "The_South_Guard",
+          "title": "The South Guard"
+        }
+      ],
+      "abilities": [
+        "skirmisher"
+      ],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/campaigns/The_South_Guard/images/portraits/mari.webp",
+        "sha256": "0c8ba526773a64340365c02127e6d5f72ddcfb982498e06a732b3946c5bb58e1"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "The_South_Guard"
+        ],
+        "native_types": [
+          "Master Fencer",
+          "Veteran Fencer"
+        ]
+      }
+    },
+    {
+      "id": "methor",
+      "name": "Methor",
+      "biography": "Methor appears as a Mage of Light in The Deceiver’s Gambit — Part I.",
+      "portrait": "data/campaigns/The_Deceivers_Gambit/images/portraits/methor.webp",
+      "campaigns": [
+        {
+          "id": "The Deceivers Gambit 1",
+          "title": "The Deceiver’s Gambit — Part I"
+        },
+        {
+          "id": "The Deceivers Gambit 2",
+          "title": "The Deceiver’s Gambit — Part II"
+        }
+      ],
+      "abilities": [
+        "illuminates",
+        "heals +8",
+        "cures"
+      ],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/campaigns/The_Deceivers_Gambit/images/portraits/methor.webp",
+        "sha256": "e4337424950211c238b016737c1ce1a8bd60b1ea6dacb054cb7b0c9a523ae452"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "The_Deceivers_Gambit"
+        ],
+        "native_types": [
+          "Mage of Light"
+        ]
+      }
+    },
+    {
+      "id": "minister_edren",
+      "name": "Minister Edren",
+      "biography": "Minister Edren appears as a White Mage in The Rise Of Wesnoth.",
+      "portrait": "data/campaigns/The_Rise_Of_Wesnoth/images/portraits/edmond.webp",
+      "campaigns": [
+        {
+          "id": "The_Rise_of_Wesnoth",
+          "title": "The Rise Of Wesnoth"
+        }
+      ],
+      "abilities": [
+        "heals +8",
+        "cures",
+        "illuminates"
+      ],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/campaigns/The_Rise_Of_Wesnoth/images/portraits/edmond.webp",
+        "sha256": "36a2397bd323ddad2b3a847035cfbb2f825e0473c30658ac1b67cd0a2e0614dc"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "The_Rise_Of_Wesnoth"
+        ],
+        "native_types": [
+          "Mage of Light",
+          "White Mage"
+        ]
+      }
+    },
+    {
+      "id": "minister_hylas",
+      "name": "Minister Hylas",
+      "biography": "Minister Hylas appears as a White Mage in The South Guard.",
+      "portrait": "data/campaigns/The_South_Guard/images/portraits/hylas.webp",
+      "campaigns": [
+        {
+          "id": "The_South_Guard",
+          "title": "The South Guard"
+        }
+      ],
+      "abilities": [
+        "heals +8",
+        "cures",
+        "illuminates"
+      ],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/campaigns/The_South_Guard/images/portraits/hylas.webp",
+        "sha256": "94f478a1204b16985023eba912d740403c0ea395cdc9c8b39881aac666669549"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "The_South_Guard"
+        ],
+        "native_types": [
+          "Mage of Light",
+          "White Mage"
+        ]
+      }
+    },
+    {
+      "id": "mirya",
+      "name": "Mirya",
+      "biography": "Mirya appears as a Silver Mage in Heir to the Throne.",
+      "portrait": "data/core/images/portraits/humans/mage-silver.webp",
+      "campaigns": [
+        {
+          "id": "Heir 2 The Throne",
+          "title": "Heir to the Throne"
+        }
+      ],
+      "abilities": [
+        "teleport"
+      ],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/core/images/portraits/humans/mage-silver.webp",
+        "sha256": "c3901265897474ddc8e3eadcd950aab88ccc680563f5ef79407e6f38449848e4"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Heir_To_The_Throne"
+        ],
+        "native_types": [
+          "Silver Mage"
+        ]
+      }
+    },
+    {
+      "id": "moremirmu",
+      "name": "Moremirmu",
+      "biography": "Moremirmu appears as a White Warrior in Heir to the Throne.",
+      "portrait": "data/campaigns/Heir_To_The_Throne_Classic/images/portraits/moremirmu.webp",
+      "campaigns": [
+        {
+          "id": "Heir 2 The Throne",
+          "title": "Heir to the Throne"
+        },
+        {
+          "id": "Heir_To_The_Throne_Classic",
+          "title": "Heir to the Throne (Classic)"
+        }
+      ],
+      "abilities": [
+        "rejuvenates",
+        "illuminates",
+        "heals +8",
+        "cures"
+      ],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/campaigns/Heir_To_The_Throne_Classic/images/portraits/moremirmu.webp",
+        "sha256": "dfaf0b02d658e7eb16afa7229de474c8f6cc462a5d9ab0ad7096456cb859aa71"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Heir_To_The_Throne",
+          "Heir_To_The_Throne_Classic"
+        ],
+        "native_types": [
+          "Mage of Light",
+          "Warrior of Light",
+          "White Mage",
+          "White Warrior"
+        ]
+      }
+    },
+    {
+      "id": "nuum",
+      "name": "Nuum",
+      "biography": "Nuum appears as a Troll Warrior in Dusk of Dawn.",
+      "portrait": "data/core/images/portraits/trolls/whelp.webp",
+      "campaigns": [
+        {
+          "id": "Dusk_of_Dawn",
+          "title": "Dusk of Dawn"
+        }
+      ],
+      "abilities": [
+        "regenerates"
+      ],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/core/images/portraits/trolls/whelp.webp",
+        "sha256": "73240c4cea31edd8e0491c1a3c4d82a3e2e5694b3020b9a256453e69400704f0"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Dusk_of_Dawn"
+        ],
+        "native_types": [
+          "Troll",
+          "Troll Rocklobber",
+          "Troll Warrior",
+          "Troll Whelp"
+        ]
+      }
+    },
+    {
+      "id": "nym",
+      "name": "Nym",
+      "biography": "A Quenoth companion who travels with Kaleh and his people.",
+      "portrait": "data/campaigns/Under_the_Burning_Suns/images/portraits/nym.webp",
+      "campaigns": [
+        {
+          "id": "Under_the_Burning_Suns",
+          "title": "Under the Burning Suns"
+        }
+      ],
+      "abilities": [],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/campaigns/Under_the_Burning_Suns/images/portraits/nym.webp",
+        "sha256": "52f19445ad90f3b51bac147ee867cf661fcb086bcc772bba030bae9975071b24"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Under_the_Burning_Suns"
+        ],
+        "native_types": [
+          "Quenoth Youth"
+        ]
+      }
+    },
+    {
+      "id": "olurf",
+      "name": "Olurf",
+      "biography": "Olurf appears as a Dwarvish Lord in Legend of Wesmere.",
+      "portrait": "data/campaigns/Legend_of_Wesmere/images/portraits/olurf.webp",
+      "campaigns": [
+        {
+          "id": "LOW",
+          "title": "Legend of Wesmere"
+        }
+      ],
+      "abilities": [],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/campaigns/Legend_of_Wesmere/images/portraits/olurf.webp",
+        "sha256": "97f4d8120fc1d10227076e17f0fd6e643f0712893257d582383a52f8ed61a135"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Legend_of_Wesmere"
+        ],
+        "native_types": [
+          "Dwarvish Lord",
+          "Dwarvish Steelclad"
+        ]
+      }
+    },
+    {
+      "id": "omaranth",
+      "name": "Omaranth",
+      "biography": "Omaranth appears as a Necromancer in The Deceiver’s Gambit — Part I.",
+      "portrait": "data/core/images/portraits/drakes/inferno.webp",
+      "campaigns": [
+        {
+          "id": "The Deceivers Gambit 1",
+          "title": "The Deceiver’s Gambit — Part I"
+        },
+        {
+          "id": "The Deceivers Gambit 2",
+          "title": "The Deceiver’s Gambit — Part II"
+        }
+      ],
+      "abilities": [],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/core/images/portraits/drakes/inferno.webp",
+        "sha256": "382ecd0472e1f889c6e62971b6bcd89d9caeae22dee0fa28691a660cc4464108"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "The_Deceivers_Gambit"
+        ],
+        "native_types": [
+          "Armageddon Drake",
+          "Necromancer"
+        ]
+      }
+    },
+    {
+      "id": "ougl",
+      "name": "Ougl Firstborn",
+      "biography": "Ougl Firstborn appears as a Great Troll in Dusk of Dawn.",
+      "portrait": "data/core/images/portraits/trolls/whelp.webp",
+      "campaigns": [
+        {
+          "id": "Dusk_of_Dawn",
+          "title": "Dusk of Dawn"
+        }
+      ],
+      "abilities": [
+        "regenerates"
+      ],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/core/images/portraits/trolls/whelp.webp",
+        "sha256": "73240c4cea31edd8e0491c1a3c4d82a3e2e5694b3020b9a256453e69400704f0"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Dusk_of_Dawn"
+        ],
+        "native_types": [
+          "Great Troll",
+          "Strong Troll Whelp",
+          "Troll Hero"
+        ]
+      }
+    },
+    {
+      "id": "owaec",
+      "name": "Owaec",
+      "biography": "A mounted warrior who joins Gweddry’s campaign in the east.",
+      "portrait": "data/campaigns/Eastern_Invasion/images/portraits/owaec.webp",
+      "campaigns": [
+        {
+          "id": "Eastern_Invasion",
+          "title": "Eastern Invasion"
+        }
+      ],
+      "abilities": [
+        "vanguard"
+      ],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/campaigns/Eastern_Invasion/images/portraits/owaec.webp",
+        "sha256": "d35cb56e455c82ccdc552fdbb9baefb2e933ec1cdff6689a3e974c9b2d65fc07"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Eastern_Invasion"
+        ],
+        "native_types": [
+          "Horse Lord",
+          "Mounted Fighter",
+          "Mounted Warrior"
+        ]
+      }
+    },
+    {
+      "id": "pirk",
+      "name": "Pirk",
+      "biography": "Pirk appears as an Orcish Shaman in Son of the Black Eye.",
+      "portrait": "data/campaigns/Son_Of_The_Black_Eye/images/portraits/orcish_shaman.webp",
+      "campaigns": [
+        {
+          "id": "Son_of_the_Black-Eye",
+          "title": "Son of the Black Eye"
+        }
+      ],
+      "abilities": [],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/campaigns/Son_Of_The_Black_Eye/images/portraits/orcish_shaman.webp",
+        "sha256": "550ca5f9a148b02cd730b9a57b064f9fe35f4660d36181f104adb7f09981c3e2"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Son_Of_The_Black_Eye"
+        ],
+        "native_types": [
+          "Orcish Shaman"
+        ]
+      }
+    },
+    {
+      "id": "rael",
+      "name": "Alderman Rael",
+      "biography": "Alderman Rael appears as a Master Bowman in Of Pearls and Pirates.",
+      "portrait": "data/core/images/portraits/humans/master-bowman.webp",
+      "campaigns": [
+        {
+          "id": "Pearls_and_Pirates",
+          "title": "Of Pearls and Pirates"
+        }
+      ],
+      "abilities": [],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/core/images/portraits/humans/master-bowman.webp",
+        "sha256": "77114278da2e8d31e9a2cfd2516654236fca7e5d56d8d520af9a756e6e66b275"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Of_Pearls_and_Pirates"
+        ],
+        "native_types": [
+          "Master Bowman"
+        ]
+      }
+    },
+    {
+      "id": "ras_tabahn",
+      "name": "Ras-Tabahn",
+      "biography": "Ras-Tabahn appears as a Necromancer in Secrets of the Ancients.",
+      "portrait": "data/core/images/portraits/humans/necromancer.webp",
+      "campaigns": [
+        {
+          "id": "Secrets of the Ancients",
+          "title": "Secrets of the Ancients"
+        }
+      ],
+      "abilities": [],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/core/images/portraits/humans/necromancer.webp",
+        "sha256": "99f664582da8ea30f74a2aab03d203116ea3e3e50903a5570cdd4c7c5494abdd"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Secrets_of_the_Ancients"
+        ],
+        "native_types": [
+          "SotA Dark Sorcerer",
+          "SotA Necromancer"
+        ]
+      }
+    },
+    {
+      "id": "ratheln",
+      "name": "Ratheln",
+      "biography": "Ratheln appears as an Arch Mage in The Hammer of Thursagan.",
+      "portrait": "data/campaigns/The_Hammer_of_Thursagan/images/portraits/ratheln.webp",
+      "campaigns": [
+        {
+          "id": "The_Hammer_of_Thursagan",
+          "title": "The Hammer of Thursagan"
+        }
+      ],
+      "abilities": [
+        "teleport"
+      ],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/campaigns/The_Hammer_of_Thursagan/images/portraits/ratheln.webp",
+        "sha256": "c371156d18e8b0cd194e7e238793c4b64fd7a55a358596e732eee3a108b0f41f"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "The_Hammer_of_Thursagan"
+        ],
+        "native_types": [
+          "Arch Mage",
+          "Great Mage",
+          "Red Mage",
+          "Silver Mage"
+        ]
+      }
+    },
+    {
+      "id": "refumee",
+      "name": "Refumee the Swampling",
+      "biography": "A wild saurian companion in Dusk of Dawn, eager to fight with her sickle and able to heal her wounds.",
+      "portrait": "alliance-ui/hero/refumee.png",
+      "campaigns": [
+        {
+          "id": "Dusk_of_Dawn",
+          "title": "Dusk of Dawn"
+        }
+      ],
+      "abilities": [
+        "regenerates +4"
+      ],
+      "portrait_source": {
+        "kind": "generated",
+        "path": "tools/native-account-game/ui-assets/hero/refumee.png",
+        "sha256": "cb05c9f0da6d16a068355e2b7fb59201ecf1296ebcafdfdb11763f43f30c04f8"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Dusk_of_Dawn"
+        ],
+        "native_types": [
+          "Beast Saurian",
+          "Wild Saurian"
+        ]
+      }
+    },
+    {
+      "id": "reglok",
+      "name": "Reglok",
+      "biography": "Reglok appears as a Rogue in Heir to the Throne.",
+      "portrait": "data/core/images/portraits/humans/thief.webp",
+      "campaigns": [
+        {
+          "id": "Heir 2 The Throne",
+          "title": "Heir to the Throne"
+        }
+      ],
+      "abilities": [
+        "skirmisher"
+      ],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/core/images/portraits/humans/thief.webp",
+        "sha256": "60bce3a7debb98a0d71f5e1db0f5e2933cb2d70dd030450f7601ff056e4294ff"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Heir_To_The_Throne"
+        ],
+        "native_types": [
+          "Assassin",
+          "Rogue"
+        ]
+      }
+    },
+    {
+      "id": "relana",
+      "name": "Relana",
+      "biography": "Relana appears as a Senior Village Elder in Liberty.",
+      "portrait": "data/campaigns/Liberty/images/portraits/relana.webp",
+      "campaigns": [
+        {
+          "id": "Liberty",
+          "title": "Liberty"
+        }
+      ],
+      "abilities": [],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/campaigns/Liberty/images/portraits/relana.webp",
+        "sha256": "419ed95cfb8c4f81093a5b069ee685e213fb65dc7946644454e60daf7c2b9534"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Liberty"
+        ],
+        "native_types": [
+          "Highwayman_Peasant"
+        ]
+      }
+    },
+    {
+      "id": "resha",
+      "name": "Resha",
+      "biography": "Resha appears as a Hurricane Drake in Winds of Fate.",
+      "portrait": "data/core/images/portraits/drakes/glider.webp",
+      "campaigns": [
+        {
+          "id": "Winds_of_Fate",
+          "title": "Winds of Fate"
+        }
+      ],
+      "abilities": [],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/core/images/portraits/drakes/glider.webp",
+        "sha256": "00bc6e51eb7c0192a09a553de068d65f495b3d7899d9a3bc76fe183fedde6b72"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Winds_of_Fate"
+        ],
+        "native_types": [
+          "Drake Glider",
+          "Hurricane Drake",
+          "Sky Drake"
+        ]
+      }
+    },
+    {
+      "id": "ro_arthian",
+      "name": "Ro’Arthian",
+      "biography": "Ro’Arthian appears as an Ancient Lich in Northern Rebirth.",
+      "portrait": "data/campaigns/Northern_Rebirth/images/portraits/Arthian.webp",
+      "campaigns": [
+        {
+          "id": "Northern_Rebirth",
+          "title": "Northern Rebirth"
+        }
+      ],
+      "abilities": [
+        "submerge"
+      ],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/campaigns/Northern_Rebirth/images/portraits/Arthian.webp",
+        "sha256": "7d0f9e51c91972aa4ae419860663d517d8450a33813d8e4b03d8ffa612534a56"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Northern_Rebirth"
+        ],
+        "native_types": [
+          "Ancient Lich"
+        ]
+      }
+    },
+    {
+      "id": "ro_sothian",
+      "name": "Ro’Sothian",
+      "biography": "Ro’Sothian appears as a Lich in Northern Rebirth.",
+      "portrait": "data/campaigns/Northern_Rebirth/images/portraits/Ro_Sothian.webp",
+      "campaigns": [
+        {
+          "id": "Northern_Rebirth",
+          "title": "Northern Rebirth"
+        }
+      ],
+      "abilities": [
+        "submerge"
+      ],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/campaigns/Northern_Rebirth/images/portraits/Ro_Sothian.webp",
+        "sha256": "12adf1cae64c4f838b932a34b073e73c600779e5613c18958d46c1c896796818"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Northern_Rebirth"
+        ],
+        "native_types": [
+          "Lich"
+        ]
+      }
+    },
+    {
+      "id": "rogrimir",
+      "name": "Rogrimir",
+      "biography": "Rogrimir appears as a Dwarvish Sentinel in Under the Burning Suns.",
+      "portrait": "data/core/images/portraits/dwarves/fighter-2.webp",
+      "campaigns": [
+        {
+          "id": "Under_the_Burning_Suns",
+          "title": "Under the Burning Suns"
+        }
+      ],
+      "abilities": [
+        "steadfast"
+      ],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/core/images/portraits/dwarves/fighter-2.webp",
+        "sha256": "722779c9e980dc18c33654abd2d0e211be1e27b61b55ea511bbfcb8111f0a248"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Under_the_Burning_Suns"
+        ],
+        "native_types": [
+          "Dwarvish Sentinel"
+        ]
+      }
+    },
+    {
+      "id": "rudic",
+      "name": "Rudic",
+      "biography": "Rudic appears as a Bone Captain in Secrets of the Ancients.",
+      "portrait": "data/campaigns/Secrets_of_the_Ancients/images/portraits/bone-captain1.webp",
+      "campaigns": [
+        {
+          "id": "Secrets of the Ancients",
+          "title": "Secrets of the Ancients"
+        }
+      ],
+      "abilities": [
+        "submerge",
+        "leadership"
+      ],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/campaigns/Secrets_of_the_Ancients/images/portraits/bone-captain1.webp",
+        "sha256": "bf24dd8f3cb3c86062be25f8d3cda7b9deba62841405b5c2f17868e149bf9a48"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Secrets_of_the_Ancients"
+        ],
+        "native_types": [
+          "Bone Captain"
+        ]
+      }
+    },
+    {
+      "id": "rugnur",
+      "name": "Rugnur",
+      "biography": "A dwarf entrusted with the work that becomes the Sceptre of Fire.",
+      "portrait": "data/campaigns/Sceptre_of_Fire/images/portraits/rugnur.webp",
+      "campaigns": [
+        {
+          "id": "Sceptre_of_Fire",
+          "title": "Sceptre of Fire"
+        }
+      ],
+      "abilities": [],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/campaigns/Sceptre_of_Fire/images/portraits/rugnur.webp",
+        "sha256": "96b32b8ef75e2f69a6b9d60cb0fd7427ab504e6e64576ec6b82e6597b1f577aa"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Sceptre_of_Fire"
+        ],
+        "native_types": [
+          "Dwarvish Fighter",
+          "Dwarvish Lord",
+          "Dwarvish Steelclad"
+        ]
+      }
+    },
+    {
+      "id": "shynal",
+      "name": "Shynal",
+      "biography": "Shynal appears as a Dark Adept in Secrets of the Ancients.",
+      "portrait": "data/core/images/portraits/humans/footpad+female.webp",
+      "campaigns": [
+        {
+          "id": "Secrets of the Ancients",
+          "title": "Secrets of the Ancients"
+        }
+      ],
+      "abilities": [
+        "concealment"
+      ],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/core/images/portraits/humans/footpad+female.webp",
+        "sha256": "1df949866f44aa56080acccf30e44c5a4052fad50044d83a9d6c9e473bd401f3"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Secrets_of_the_Ancients"
+        ],
+        "native_types": [
+          "Delinquent",
+          "Footpad",
+          "Fugitive",
+          "Outlaw",
+          "SotA Dark Adept",
+          "SotA Dark Sorcerer",
+          "SotA Necromancer"
+        ]
+      }
+    },
+    {
+      "id": "sir_gerrick",
+      "name": "Sir Gerrick",
+      "biography": "A veteran infantryman serving with the South Guard.",
+      "portrait": "data/campaigns/The_South_Guard/images/portraits/sir-gerrick.webp",
+      "campaigns": [
+        {
+          "id": "The_South_Guard",
+          "title": "The South Guard"
+        }
+      ],
+      "abilities": [],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/campaigns/The_South_Guard/images/portraits/sir-gerrick.webp",
+        "sha256": "f11ff240e136b3318690d24960fdfcf26572a1a43bb7bc5272d6452aeec2c5f9"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "The_South_Guard"
+        ],
+        "native_types": [
+          "Master Infantryman",
+          "Veteran Infantryman"
+        ]
+      }
+    },
+    {
+      "id": "sir_ladoc",
+      "name": "Sir Ladoc",
+      "biography": "Sir Ladoc appears as a Paladin in The Rise Of Wesnoth.",
+      "portrait": "data/campaigns/The_Rise_Of_Wesnoth/images/portraits/ladoc.webp",
+      "campaigns": [
+        {
+          "id": "The_Rise_of_Wesnoth",
+          "title": "The Rise Of Wesnoth"
+        }
+      ],
+      "abilities": [
+        "heals +4"
+      ],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/campaigns/The_Rise_Of_Wesnoth/images/portraits/ladoc.webp",
+        "sha256": "18c2b2dfa95dbf598f8dfbb11a0b97f87b6776dd13577e53b7b7c170486a2b78"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "The_Rise_Of_Wesnoth"
+        ],
+        "native_types": [
+          "Grand Knight",
+          "Knight",
+          "Paladin"
+        ]
+      }
+    },
+    {
+      "id": "sir_ruddry",
+      "name": "Sir Ruddry",
+      "biography": "Sir Ruddry appears as a Paladin in The Rise Of Wesnoth.",
+      "portrait": "data/campaigns/The_Rise_Of_Wesnoth/images/portraits/ruddry.webp",
+      "campaigns": [
+        {
+          "id": "The_Rise_of_Wesnoth",
+          "title": "The Rise Of Wesnoth"
+        }
+      ],
+      "abilities": [
+        "heals +4"
+      ],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/campaigns/The_Rise_Of_Wesnoth/images/portraits/ruddry.webp",
+        "sha256": "bf343ea10a1ef8b118500088ec2e2c4f12e9e31507ee6142b79fc03416a47fec"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "The_Rise_Of_Wesnoth"
+        ],
+        "native_types": [
+          "Grand Knight",
+          "Knight",
+          "Paladin"
+        ]
+      }
+    },
+    {
+      "id": "sister_thera",
+      "name": "Sister Thera",
+      "biography": "Sister Thera appears as a White Mage in Northern Rebirth.",
+      "portrait": "data/campaigns/Northern_Rebirth/images/portraits/Sister_Thera.webp",
+      "campaigns": [
+        {
+          "id": "Northern_Rebirth",
+          "title": "Northern Rebirth"
+        }
+      ],
+      "abilities": [
+        "heals +8",
+        "cures",
+        "illuminates"
+      ],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/campaigns/Northern_Rebirth/images/portraits/Sister_Thera.webp",
+        "sha256": "aa0343b31a76d1c024567384d5cfbf12e8664ad7490ecb867a01c1b3bc589b66"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Northern_Rebirth"
+        ],
+        "native_types": [
+          "Mage of Light",
+          "White Mage"
+        ]
+      }
+    },
+    {
+      "id": "spark",
+      "name": "Spark",
+      "biography": "Spark appears as a Fire Wraith in Dusk of Dawn.",
+      "portrait": "data/core/images/portraits/monsters/fire_wraith_A.webp",
+      "campaigns": [
+        {
+          "id": "Dusk_of_Dawn",
+          "title": "Dusk of Dawn"
+        }
+      ],
+      "abilities": [],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/core/images/portraits/monsters/fire_wraith_A.webp",
+        "sha256": "07924877726cb42db0808cf29f7d9fff166a888c5242941d9a3ea2c17a2534d9"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Dusk_of_Dawn"
+        ],
+        "native_types": [
+          "Fire Wraith"
+        ]
+      }
+    },
+    {
+      "id": "tallin",
+      "name": "Tallin",
+      "biography": "A peasant who rises to lead the resistance in the Northlands.",
+      "portrait": "data/campaigns/Northern_Rebirth/images/portraits/Tallin.webp",
+      "campaigns": [
+        {
+          "id": "Northern_Rebirth",
+          "title": "Northern Rebirth"
+        }
+      ],
+      "abilities": [
+        "leadership"
+      ],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/campaigns/Northern_Rebirth/images/portraits/Tallin.webp",
+        "sha256": "9f0bd725123fe7d5d47df03291fe06a39027e9bf16a48e27dcda0b3cd5339404"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Northern_Rebirth"
+        ],
+        "native_types": [
+          "Bowman",
+          "General",
+          "Grand Marshal",
+          "Halberdier",
+          "Javelineer",
+          "Lieutenant",
+          "Longbowman",
+          "Master Bowman",
+          "Peasant",
+          "Pikeman",
+          "Royal Guard",
+          "Spearman",
+          "Swordsman"
+        ]
+      }
+    },
+    {
+      "id": "tameril_isimeril",
+      "name": "Tameril-Isimeril",
+      "biography": "Tameril-Isimeril appears as an Elvish Sorceress in Legend of Wesmere.",
+      "portrait": "data/core/images/portraits/elves/sorceress.webp",
+      "campaigns": [
+        {
+          "id": "LOW",
+          "title": "Legend of Wesmere"
+        }
+      ],
+      "abilities": [],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/core/images/portraits/elves/sorceress.webp",
+        "sha256": "3e5a47dd74cae93be2369c1b0caecc22d4276839a33c12e2e3839093930118f1"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Legend_of_Wesmere"
+        ],
+        "native_types": [
+          "Elvish Enchantress",
+          "Elvish Sorceress",
+          "Elvish Sylph"
+        ]
+      }
+    },
+    {
+      "id": "teeloa",
+      "name": "Teelöa",
+      "biography": "Teelöa appears as a Merman Brawler in Dead Water.",
+      "portrait": "data/core/images/portraits/merfolk/brawler.webp",
+      "campaigns": [
+        {
+          "id": "Dead_Water",
+          "title": "Dead Water"
+        }
+      ],
+      "abilities": [],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/core/images/portraits/merfolk/brawler.webp",
+        "sha256": "d3862046b217fa0570f582247044907f72176809df9e4eac345f0d769dd6e57c"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Dead_Water"
+        ],
+        "native_types": [
+          "Merman Brawler"
+        ]
+      }
+    },
+    {
+      "id": "terraent",
+      "name": "Terraent",
+      "biography": "Terraent appears as a Paladin in Eastern Invasion.",
+      "portrait": "data/campaigns/Eastern_Invasion/images/portraits/terraent.webp",
+      "campaigns": [
+        {
+          "id": "Eastern_Invasion",
+          "title": "Eastern Invasion"
+        }
+      ],
+      "abilities": [
+        "heals +4"
+      ],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/campaigns/Eastern_Invasion/images/portraits/terraent.webp",
+        "sha256": "8041b11d32cd101309b7a952f7a8f3fbc478b1e8cf12a51d3d3aa6f32dcdf847"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Eastern_Invasion"
+        ],
+        "native_types": [
+          "Terraent"
+        ]
+      }
+    },
+    {
+      "id": "thea",
+      "name": "Thea",
+      "biography": "An archer and the alderman’s daughter who rallies local farmers against pirates.",
+      "portrait": "alliance-ui/hero/thea.png",
+      "campaigns": [
+        {
+          "id": "Pearls_and_Pirates",
+          "title": "Of Pearls and Pirates"
+        }
+      ],
+      "abilities": [],
+      "portrait_source": {
+        "kind": "generated",
+        "path": "tools/native-account-game/ui-assets/hero/thea.png",
+        "sha256": "1e3fe73953569a247e6055780e84125cf3bbe5148546fe449a3c7057d1a3f7f7"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Of_Pearls_and_Pirates"
+        ],
+        "native_types": [
+          "Bowman Thea",
+          "Longbowman Thea",
+          "Master Bowman Thea"
+        ]
+      }
+    },
+    {
+      "id": "thursagan",
+      "name": "Thursagan",
+      "biography": "Thursagan appears as a Dwarvish Runemaster in Sceptre of Fire.",
+      "portrait": "data/campaigns/Sceptre_of_Fire/images/portraits/thursagan.webp",
+      "campaigns": [
+        {
+          "id": "Sceptre_of_Fire",
+          "title": "Sceptre of Fire"
+        }
+      ],
+      "abilities": [],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/campaigns/Sceptre_of_Fire/images/portraits/thursagan.webp",
+        "sha256": "9b75974ed3b04af894fdb714be4213c180e4a541e5f86c0e164cc02e123827b6"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Sceptre_of_Fire"
+        ],
+        "native_types": [
+          "Dwarvish Runemaster"
+        ]
+      }
+    },
+    {
+      "id": "ulfdain",
+      "name": "Ulfdain",
+      "biography": "Ulfdain appears as a Dwarvish Berserker in Heir to the Throne.",
+      "portrait": "data/core/images/portraits/dwarves/ulfserker.webp",
+      "campaigns": [
+        {
+          "id": "Heir 2 The Throne",
+          "title": "Heir to the Throne"
+        }
+      ],
+      "abilities": [],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/core/images/portraits/dwarves/ulfserker.webp",
+        "sha256": "ef5e99c9235edad5f9ae88c25506e4502139eabc17a01177200c2a5d05b9c3a1"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Heir_To_The_Throne"
+        ],
+        "native_types": [
+          "Dwarvish Berserker",
+          "Dwarvish Ulfserker"
+        ]
+      }
+    },
+    {
+      "id": "ullg",
+      "name": "Ullg the Flameless",
+      "biography": "Ullg the Flameless appears as a Troll Warrior in Dusk of Dawn.",
+      "portrait": "data/core/images/portraits/trolls/whelp.webp",
+      "campaigns": [
+        {
+          "id": "Dusk_of_Dawn",
+          "title": "Dusk of Dawn"
+        }
+      ],
+      "abilities": [
+        "regenerates"
+      ],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/core/images/portraits/trolls/whelp.webp",
+        "sha256": "73240c4cea31edd8e0491c1a3c4d82a3e2e5694b3020b9a256453e69400704f0"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Dusk_of_Dawn"
+        ],
+        "native_types": [
+          "Troll",
+          "Troll Rocklobber",
+          "Troll Warrior",
+          "Troll Whelp"
+        ]
+      }
+    },
+    {
+      "id": "uradredia",
+      "name": "Uradredia",
+      "biography": "Uradredia appears as an Elvish Marshal in Legend of Wesmere.",
+      "portrait": "data/campaigns/Legend_of_Wesmere/images/portraits/uradredia.webp",
+      "campaigns": [
+        {
+          "id": "LOW",
+          "title": "Legend of Wesmere"
+        }
+      ],
+      "abilities": [
+        "leadership"
+      ],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/campaigns/Legend_of_Wesmere/images/portraits/uradredia.webp",
+        "sha256": "8f2512924c078f23a5f8fae6154b2d75e286763c8e91758313d7ac3618bb4c88"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Legend_of_Wesmere"
+        ],
+        "native_types": [
+          "Elvish Marshal"
+        ]
+      }
+    },
+    {
+      "id": "vendraxis",
+      "name": "Vendraxis",
+      "biography": "Vendraxis appears as a Saurian Soothsayer in Secrets of the Ancients.",
+      "portrait": "data/core/images/portraits/saurians/augur.webp",
+      "campaigns": [
+        {
+          "id": "Secrets of the Ancients",
+          "title": "Secrets of the Ancients"
+        }
+      ],
+      "abilities": [
+        "heals +8",
+        "cures"
+      ],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/core/images/portraits/saurians/augur.webp",
+        "sha256": "cb482d7cdefe0bda804ab1a2582d915efd26c8ae93364ea7e401b89b3d4f7354"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Secrets_of_the_Ancients"
+        ],
+        "native_types": [
+          "Saurian Seer",
+          "Saurian Soothsayer"
+        ]
+      }
+    },
+    {
+      "id": "vraurk",
+      "name": "Vraurk",
+      "biography": "Vraurk appears as an Orcish Shaman in Son of the Black Eye.",
+      "portrait": "data/campaigns/Son_Of_The_Black_Eye/images/portraits/young_orcish_shaman.webp",
+      "campaigns": [
+        {
+          "id": "Son_of_the_Black-Eye",
+          "title": "Son of the Black Eye"
+        }
+      ],
+      "abilities": [],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/campaigns/Son_Of_The_Black_Eye/images/portraits/young_orcish_shaman.webp",
+        "sha256": "13b3bdd6de1d885535c0b89c6272930ab73688150990b4b89f6b81bca61f4060"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Son_Of_The_Black_Eye"
+        ],
+        "native_types": [
+          "Orcish Shaman"
+        ]
+      }
+    },
+    {
+      "id": "warven",
+      "name": "Warven",
+      "biography": "Warven appears as a Lieutenant in Heir to the Throne.",
+      "portrait": "data/core/images/portraits/humans/lieutenant.webp",
+      "campaigns": [
+        {
+          "id": "Heir 2 The Throne",
+          "title": "Heir to the Throne"
+        }
+      ],
+      "abilities": [
+        "leadership"
+      ],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/core/images/portraits/humans/lieutenant.webp",
+        "sha256": "22932e644972f29ec9aeae289db8e422086d06d988f5cadc2554e8cb4efc6dd1"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Heir_To_The_Throne"
+        ],
+        "native_types": [
+          "General",
+          "Grand Marshal",
+          "Lieutenant"
+        ]
+      }
+    },
+    {
+      "id": "zedrix",
+      "name": "Zedrix",
+      "biography": "Zedrix appears as a Saurian Soothsayer in Winds of Fate.",
+      "portrait": "data/core/images/portraits/saurians/augur.webp",
+      "campaigns": [
+        {
+          "id": "Winds_of_Fate",
+          "title": "Winds of Fate"
+        }
+      ],
+      "abilities": [
+        "heals +8",
+        "cures"
+      ],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/core/images/portraits/saurians/augur.webp",
+        "sha256": "cb482d7cdefe0bda804ab1a2582d915efd26c8ae93364ea7e401b89b3d4f7354"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Winds_of_Fate"
+        ],
+        "native_types": [
+          "Saurian Seer",
+          "Saurian Soothsayer"
+        ]
+      }
+    },
+    {
+      "id": "zhul",
+      "name": "Zhul",
+      "biography": "A Quenoth shaman who accompanies Kaleh’s people on their journey.",
+      "portrait": "data/campaigns/Under_the_Burning_Suns/images/portraits/zhul.webp",
+      "campaigns": [
+        {
+          "id": "Under_the_Burning_Suns",
+          "title": "Under the Burning Suns"
+        }
+      ],
+      "abilities": [
+        "cures",
+        "heals +8",
+        "tailwind +1",
+        "tailwind +2",
+        "heals +12"
+      ],
+      "portrait_source": {
+        "kind": "pinned-game-artwork",
+        "path": "data/campaigns/Under_the_Burning_Suns/images/portraits/zhul.webp",
+        "sha256": "d3955bb02b68e752e671caaf506e4714bc5cea41d24f561af307762b9325080c"
+      },
+      "provenance": {
+        "campaign_directories": [
+          "Under_the_Burning_Suns"
+        ],
+        "native_types": [
+          "Quenoth Druid",
+          "Quenoth Shaman",
+          "Quenoth Shyde"
+        ]
+      }
+    }
+  ]
+}

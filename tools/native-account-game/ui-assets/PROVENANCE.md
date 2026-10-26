@@ -1,0 +1,13 @@
+# Additional hero portraits
+
+These two original supporting portraits were generated with the built-in imagegen tool on 2026-10-26. The other 115 hero portraits come from the pinned Wesnoth 1.19.26 data. The exact asset inventory is `../ui-assets.json`; character/source provenance is in `alliance_game/hero_presentation.json`. No gameplay identities or statistics were changed.
+
+Thea reference: `data/campaigns/Of_Pearls_and_Pirates/units/Thea1.cfg` and its `units/thea1/bowman.png` sprite. Female human archer, bow and short sword; campaign dialogue establishes the alderman's daughter who rallies farmers.
+
+Refumee reference: `data/campaigns/Dusk_of_Dawn/units/Wild_Saurian.cfg` and its `units/saurians/wild.png` sprite. Female saurian, sickle, green scales and self-healing; no human anatomical characteristics were requested.
+
+## Prompts
+
+Thea: Use case: stylized-concept. Asset type: production portrait for an existing medieval fantasy strategy game's hero card. Create Thea, the human female archer from the campaign Of Pearls and Pirates: an adult woman of humble rural origins, practical blonde hair tied back, alert determined expression, simple ochre-brown leather tunic, restrained crimson cloth belt, quiver and wooden bow, short sword sheathed. Painterly ink-edged fantasy game portrait, realistic anatomy, subtly textured hand-painted shading and warm subdued colours, matching classic Wesnoth character portrait quality. Waist-up three-quarter composition, face and bow clear at small card size. True transparent background, isolated single character with clean edges. No frame, typography, logos, scenery, crown or invented magical effects. Preserve practical archer identity; this is original supporting art, not a new gameplay character.
+
+Refumee: Use case: stylized-concept. Asset type: isolated hero portrait for the medieval fantasy strategy game Wesnoth. Create Refumee the Swampling, a female Wild Saurian from Dusk of Dawn: a small agile reptilian humanoid, entirely reptilian nonhuman anatomy, green pebbled scales, alert yellow eyes, triangular lizard face and a low crest, practical rough red-brown waist sash and simple hide straps, one curved iron sickle held safely beside her. Wild, eager and resilient; no human chest or mammalian features. Painterly ink-edged traditional fantasy game art, realistic lizard anatomy, subtly textured shading, muted moss green and warm leather palette, cohesive with classic Wesnoth portraits. Waist-up three-quarter single-character composition, clear head/shoulders and sickle for small hero card. True transparent background, clean silhouette. No scenery, frame, typography, logos, armour crown, unrelated magic, extra limbs or additional characters.

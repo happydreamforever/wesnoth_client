@@ -1,0 +1,15 @@
+{
+  "format": 1,
+  "files": [
+    {
+      "path": "hero/refumee.png",
+      "bytes": 2092869,
+      "sha256": "cb05c9f0da6d16a068355e2b7fb59201ecf1296ebcafdfdb11763f43f30c04f8"
+    },
+    {
+      "path": "hero/thea.png",
+      "bytes": 2190871,
+      "sha256": "1e3fe73953569a247e6055780e84125cf3bbe5148546fe449a3c7057d1a3f7f7"
+    }
+  ]
+}
