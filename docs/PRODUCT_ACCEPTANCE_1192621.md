@@ -94,7 +94,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass `
 if ($LASTEXITCODE -ne 0) { throw 'Migration stopped. Retain this same backup and both migration journals; send the saved log.' }
 ```
 
-Expect `ALLIANCE SCHEMA 3 MIGRATION COMPLETE`, schema_version 3 and complete/already_complete status. The helper temporarily owns the database process, verifies its identity, updates schema metadata/validators/indexes and stops it. Existing records, database generation, certificate and replay files stay intact. If interrupted, keep every journal and resume E with the **same** BackupPath; do not initialize or restore over the current runtime.
+Expect `ALLIANCE SCHEMA 3 MIGRATION COMPLETE`, schema_version 3 and complete/already_complete status. The helper temporarily owns the database process, verifies its identity, updates schema metadata/validators/indexes and stops it. Existing draft plans become reserved-human plans with their IDs and original snapshots retained; both captain approvals and all Ready flags reset. Accounts, heroes, XP, Teams, database generation, completed/cancelled records, certificate and replay files stay intact. If interrupted, keep every journal and resume E with the **same** BackupPath; do not initialize or restore over the current runtime.
 
 ## F. Rebuild only the changed bridge, native Multiplayer and Android
 
@@ -142,13 +142,13 @@ Expect `ANDROID ACCOUNT GAME INSTALL COMPLETE`, verified version 1192621 and a f
 
 ## I. Branded loading and login entry
 
-Observe a cold app launch after H. Expect the Wesnoth background/logo, a readable preparation phase and percentage/progress bar, then the login entry. Progress may restart for a separately labelled phase; 100% must not claim completion before game-data preparation finishes. There is no profile-import, server-selection or Start game setup page. The bundled endpoint must work with WAN disconnected and local Ethernet connected.
+Observe a cold app launch after H. Expect the Wesnoth background/logo, percentage and measured progress bar, then Login directly. Routine filenames, preparation paragraphs and technical phases must not appear. The percentage can restart as validation moves to installation; 100% appears only after the complete preparation succeeds. There is no profile-import, server-selection or Start game setup page. The bundled endpoint must work with WAN disconnected and local Ethernet connected.
 
-Check the actual emulator resolution for clipped text, overlapping controls and a blank or frozen loading screen. Record the last visible phase if loading fails. Do not reinstall, delete the OBB or clear app data to bypass an unexpected result.
+Check the actual emulator resolution for clipped text, overlapping controls and a blank or frozen loading screen. A failure must show a concise error with Retry and Close. Record that error and the last percentage if loading fails; Close must close the task. Do not deliberately corrupt the only local OBB or private data to manufacture a failure. If no failure occurs, mark that visible failure-path subcheck NOT RUN; VPS interruption/tampering fixtures are recorded separately. Do not reinstall, delete the OBB or clear app data to bypass an unexpected result.
 
 ## J. Authentication and physical keyboard
 
-Open Log in and Sign up in turn, then return from each without submitting. Credential screens must cover the previous view; there must be no usable home behind a signed-out dialog. Check the password visibility controls, including signup confirmation. In a harmless test field type `aAzZ1!` with the physical keyboard, exercise Shift/Caps Lock, turn Caps Lock off, check the exact characters with the eye control, then clear/cancel. Never expose a real password in evidence.
+Login appears first. Choose Sign up, then Back without submitting; Login must replace it. The outer X closes the whole task; reopen to Login before continuing. Credential screens must cover the previous view; there must be no usable home behind a signed-out dialog. Check the password visibility controls, including signup confirmation. In a harmless test field type `aAzZ1!` with the physical keyboard, exercise Shift/Caps Lock, turn Caps Lock off, check the exact characters with the eye control, then clear/cancel. Never expose a real password in evidence.
 
 Make one deliberate wrong-password attempt, then log in privately to an existing runtime-v2 player. The failed attempt must remain an authentication error; successful login opens that player's home. Signup, if an additional owned player is needed, starts with zero collected heroes and no starter choice. Earn that player's heroes through normal story play. Do not seed heroes or load another player's campaign save. Account changes in later tests use Quit, reopen and log in; there is no Logout menu action.
 
@@ -168,17 +168,17 @@ Verify these nine labels and their behavior:
 | Preferences | Opens preferences and returns cleanly. |
 | Quit | Closes the whole app; exercise the complete session/recovery checks in Z. |
 
-Enter the first eight destinations and return with Back. They must retain the same signed-in player, readable native styling and clean screen boundaries. There is no Standard Multiplayer destination, guest network entry, profile-import action or Logout button. Network battles are entered through Room or Team. Record missing or extra destinations as failures.
+Enter the first eight destinations and return with their native exit control: Campaign and Load use Cancel; Achievements and Preferences use Close; the new product screens use Back. They must retain the same signed-in player, readable native styling and clean screen boundaries. There is no Standard Multiplayer destination, guest network entry, profile-import action or Logout button. Network battles are entered through Room or Team. Record missing or extra destinations as failures.
 
 ## L. Hero discovery and owned collection
 
-In My Heroes inspect the All heroes, Owned and Locked filters, search by a known name, try a no-match query, then clear it. Inspect a locked hero and an owned hero where available: portrait/unit art, biography, source campaigns, earned forms, permanent level/XP, HP and attacks must be readable. Locked entries explain how to discover the hero; empty collections give campaign guidance rather than inventing a starter.
+In My Heroes inspect the All heroes, Owned and Locked filters, search by a known name, try a no-match query, then clear it. Inspect a locked hero and an owned hero where available. Both show portrait/unit art, biography and source campaigns. Owned entries additionally expose earned forms, permanent level/XP, HP and attacks; locked entries explain discovery without presenting unearned forms or owned statistics. Empty collections give campaign guidance rather than inventing a starter.
 
 Browsing, changing filters and opening details grant no hero, XP or form. Compare actual owned names/forms and XP with the retained account. Technical account/Team/run IDs belong in the local administrator tools when an operator check needs them; ordinary player screens use names and meaningful status.
 
 ## M. Campaign selection and reward preview
 
-Open Campaign, select several campaigns and inspect their potential hero/form reward preview before starting. Check readable descriptions and native artwork, including a campaign with several eligible heroes. The preview describes possible story rewards and branch dependence; it does not promise every listed form from the first scenario. Back without launching once and verify that the collection is unchanged.
+Open Campaign, select several campaigns and inspect Heroes to discover / View heroes before starting. Check readable descriptions and native artwork, including a campaign with several eligible heroes. The preview describes possible story rewards and branch dependence; it does not promise every listed form from the first scenario. Use Cancel without launching once and verify that the collection is unchanged.
 
 Choose a normal campaign for the signed-in player. Campaign combat keeps the authored story units and statistics; permanent collected-hero bonuses do not rewrite story strength. Starting or previewing the campaign alone grants no unlock or XP.
 
@@ -196,9 +196,9 @@ Back once before creating: no room should appear. Repeat with a two-player map, 
 
 ## P. Live Room dashboard and rules
 
-Inspect the new room's name, map preview, occupancy, Ready count, waiting/running state and rules. Gold, effective base income, turn limit and fog/shroud/observer choices must match O. Exercise map/name and availability filters, then Filters → Players (Any or 2–8), Gold and Turns; clear them afterward; a no-match view must remain usable.
+Creating O opens the host's waiting room. Inspect its name, occupancy, Ready count and rules. Gold, effective base income, turn limit and fog/shroud/observer choices must match O. Choose Hero & Ready → Choose hero, then Hero & Ready → Ready → Set Ready.
 
-Select the visible player's owned hero/form. At 1/2, Ready cannot start the game. Change a permitted waiting-room setting or hero and verify that old Ready consent clears and the live details refresh. Leave a waiting room as host once: it must close. Recreate **1192621 acceptance** with the reviewed settings before Q. Inspect a larger unfilled room if available; no partial room may start.
+Select the visible player's owned hero/form. At 1/2, Ready cannot start the game. Change the hero and verify that old Ready consent clears and the live details refresh. Leave the waiting room as host once: it must close and return to the dashboard. Exercise map/name and availability filters there. For advanced filters select Filters, choose the Players, Starting gold or Turn limit row, choose Change, select a value and choose Apply filters. Players supports Any or 2–8. Clear limits also requires Apply filters. A no-match view must remain usable. Recreate **1192621 acceptance** with the reviewed settings before Q; reopening filters from a hosted waiting room requires leaving and closing that room first. Inspect a larger unfilled room if available; no partial room may start.
 
 ## Q. Full human occupancy and Ready
 
@@ -221,7 +221,9 @@ Play at least two rounds and finish normally. Expect INDIVIDUAL COMPANION STARTE
 
 ## R. Publish an incomplete Team plan
 
-Open Team and verify the retained roster, captain/member roles, applications, orders and area. Use two real Teams in the same approved area. As one captain choose New battle, the real opponent and an approved map. Back before Save once, then publish a plan with empty Open human seats. Publication must succeed without choosing all players or filling the map. Both Teams can see the saved plan.
+Open Team and verify the retained roster, captain/member roles and area. Applications and Captain orders are under More. Use two real Teams in the same approved area. As one captain choose New battle, the real opponent and an approved map. Back before Save plan once, then publish a plan with empty Open human seats. Publication must succeed without choosing all players or filling the map. Both Teams can see the saved plan.
+
+If an old draft existed before E, inspect that retained plan too: original teams, map, named human slots and hero choices remain, but approvals and Ready require fresh confirmation. A departed reserved member must not block their captain from repairing their own slots. Do not treat reset migration consent as lost account progress.
 
 The opponent starts with Open slots and its own captain configures them later. There is no fictitious opponent or automatic creation of players. Ordinary members cannot publish or edit captain settings. Reopen the plan after Back and a clean app restart to verify persistence. Keep existing Teams and accounts; do not replace them merely to obtain a convenient fixture.
 
@@ -271,6 +273,8 @@ Where an extra current member of either Team is available, use Watch on an obser
 
 Publish and reopen a second plan for the same real Teams while the first exists. Multiple saved plans must not replace one another. With enough distinct owned participants, prepare/run two plans concurrently for the same Teams: the Team itself is not locked to one run. Each player may occupy only one prepared or running network battle, across both Team and Room. An attempt to reserve the same player in another battle must fail without cancelling the first or another player's valid room.
 
+Before either plan prepares, mark a shared participant Ready in both drafts. Preparation of one must clear only that participant's competing draft readiness, preserving unrelated players' consent and the other plan's settings. A failed preparation must not clear readiness elsewhere.
+
 Changing/releasing an unstarted preparation and completing/cancelling the intended run must release only its own reservation. Native Individual connection/server loss has bounded lease cleanup; do not claim instant availability after an unconfirmed disconnect. An unfinished story save from N does not reserve a network seat. If the available accounts/one-LDPlayer setup cannot execute concurrent games, mark that subcheck NOT RUN and retain the separate multi-plan observations; computer companions are not multiple-human acceptance.
 
 ## X. Results, XP and ranked eligibility
@@ -283,13 +287,13 @@ The mixed/custom battle changes no rating. Rated eligibility requires the full m
 
 ## Y. All-Team history and completed replays
 
-Open Team → Battle plans as a current teammate who did not participate, if available. Completed history and verified completed replays for that Team must be visible, including other members' matches. Inspect the actual map/rules/result and play a completed recording through its end; it must not upload another result or award XP. An unrelated player must not gain access. Historical participants/recorded captains retain their authorized records.
+Open Team → History as a current teammate who did not participate, if available. Completed history and verified completed replays for that Team must be visible, including other members' matches. Choose Open battle, inspect the actual map/rules/result, then choose Replay. If not cached, confirm Download replay, wait for completion, reopen the battle and choose Replay again. The download message may say Watch replay; the battle button is Replay. Play the completed recording through its end; it must not upload another result or award XP. An unrelated player must not gain access. Historical participants/recorded captains retain their authorized records.
 
 Reopen existing format 1 history and a retained old shared replay where available. Load continues to read retained local saves/replays; it does not recreate a Standard network room or resume a Team battle by uploading a save. Live Team recovery uses the plan's Reconnect action. Unavailable historical fixtures are NOT RUN, not invented successes. Keep old saves and recordings after this check.
 
 ## Z. Quit, service recovery and mandatory isolated schema 2 restore
 
-Finish/leave test games and stop companions. Quit from authenticated home: the whole app closes to the LDPlayer launcher, the local account session is cleared and reopening requires login through I–J. Check signed-out Quit too. No Logout button is needed. Server-side session revocation is only claimed when the request succeeds; loss of the LAN must not prevent local Quit.
+Finish/leave test games and stop companions. Quit from authenticated home: the whole app closes to the LDPlayer launcher, the local account session is cleared and reopening requires login through I–J. Check the signed-out authentication X too. No Logout button is needed. Server-side session revocation is only claimed when the request succeeds; loss of the LAN must not prevent local Quit.
 
 For controlled session recovery, idle signed in and stop only account bridge 15001. Expect local sign-out after the monitor/request timeout, an opaque signed-out view and a connection error while the bridge is unavailable. Restart only that bridge:
 
@@ -313,6 +317,9 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass `
     -Operation Restore -RuntimeRoot (Join-Path $env:LOCALAPPDATA 'WesnothAlliance\runtime-v2') `
     -BackupPath $productBackup -DestinationPath $productRecovery
 if ($LASTEXITCODE -ne 0) { throw 'Recovery verification failed. Preserve both destinations and return its sanitized log.' }
+$productRecoveredSchema = Get-Content -LiteralPath (Join-Path $productRecovery 'restore-verified.json') -Raw | ConvertFrom-Json
+if ($productRecoveredSchema.schema_version -ne 2) { throw 'The recovery receipt is not schema 2. Preserve it and stop.' }
+Write-Host ('Recovered schema version: ' + $productRecoveredSchema.schema_version)
 ```
 
 Expect `ALLIANCE RESTORE VERIFIED`, schema_checked true, recovered schema_version 2 and the temporary verification database stopped. Keep the recovered copy, original backup, retained old bridge/native builds, current schema 3 runtime and journals. This verifies recovery without activating it: no runtime selection change, no new services against the schema 2 copy, no overwrite of runtime-v2 and no copying individual database files between them.
