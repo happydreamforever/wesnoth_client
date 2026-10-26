@@ -150,7 +150,7 @@ class AccountBuildTests(unittest.TestCase):
                 path = repo / name; path.parent.mkdir(parents=True, exist_ok=True); path.write_bytes(b'fixture source')
             header = repo / 'alliance_game/native_touch_layout.hpp'
             self.assertTrue(header.is_file())
-            with patch.object(A.G, 'selected_inputs', return_value=({}, {'project_files': {}}, {})), \
+            with patch.object(A.G, 'selected_inputs', side_effect=lambda repo: ({}, {'project_files': {}}, {})), \
                     patch.object(A.PUBLIC, 'bundle', return_value=({}, {'public_server': {}, 'bundled_assets': {}})):
                 first = A.selected_inputs(repo)[1]
                 stage = repo / 'owned-stage'
