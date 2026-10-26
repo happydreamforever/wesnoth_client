@@ -52,7 +52,9 @@ NEW_INPUTS = ('tools/build_android_account_game.py', 'tools/android_public_bundl
               'tools/validate_android_account_profile.py', 'tools/native-account-game/ui-assets.json',
               'tools/native-account-game/CMakeLists.txt',
               'alliance_game/account_ui.cpp', 'alliance_game/account_ui.hpp', 'alliance_game/product_ui_layout.hpp', 'alliance_game/team_workspace.inc', 'alliance_game/individual_creation.inc',
-              'alliance_game/hero_presentation.hpp', 'alliance_game/hero_presentation_data.inc', 'alliance_game/hero_presentation.json', 'alliance_native/flexible_protocol.hpp', 'alliance_game/title_overlay.py',
+              'alliance_game/hero_presentation.hpp', 'alliance_game/hero_presentation_data.inc', 'alliance_game/hero_presentation.json', 'alliance_game/hero_gallery.inc',
+              'alliance_game/campaign_rewards.hpp', 'alliance_game/campaign_selection_overlay.py',
+              'alliance_native/flexible_protocol.hpp', 'alliance_game/title_overlay.py',
               'alliance_game/engine_overlay.py',
               *(f'alliance_game/{name}.{suffix}' for name in ('session_watch', 'android_lifecycle') for suffix in ('cpp', 'hpp')), 'alliance_game/battle_launch.cpp', 'alliance_game/battle_launch.hpp',
               'alliance_game/practice_plan.cpp', 'alliance_game/practice_plan.hpp',
@@ -80,6 +82,7 @@ TITLE_SOURCE = 'gui/dialogs/title_screen.cpp'
 MAIN_SOURCE = 'wesnoth.cpp'
 LAUNCHER_SOURCE = 'game_launcher.cpp'
 CAMPAIGN_SOURCE = 'game_initialization/playcampaign.cpp'
+CAMPAIGN_SELECTION_SOURCE = 'gui/dialogs/campaign_selection.cpp'
 CONNECTION_SOURCE = 'wesnothd_connection.cpp'
 SYNCED_COMMANDS_SOURCE = 'synced_commands.cpp'
 STORY_OVERLAYS = {'game_config_manager.cpp': 'generate_config_manager_overlay',
@@ -90,7 +93,7 @@ CASUAL_OVERLAYS = ('game_initialization/connect_engine.cpp', 'gui/dialogs/multip
                    'gui/dialogs/multiplayer/mp_join_game.cpp', 'gui/dialogs/multiplayer/mp_create_game.cpp')
 MULTIPLAYER_SOURCE = 'game_initialization/multiplayer.cpp'
 LOBBY_SOURCE = 'gui/dialogs/multiplayer/lobby.cpp'
-REPLACED_SOURCES = frozenset((TITLE_SOURCE, MAIN_SOURCE, LAUNCHER_SOURCE, CAMPAIGN_SOURCE, CONNECTION_SOURCE,
+REPLACED_SOURCES = frozenset((TITLE_SOURCE, MAIN_SOURCE, LAUNCHER_SOURCE, CAMPAIGN_SOURCE, CAMPAIGN_SELECTION_SOURCE, CONNECTION_SOURCE,
                               SYNCED_COMMANDS_SOURCE, MULTIPLAYER_SOURCE, LOBBY_SOURCE, *STORY_OVERLAYS, *CASUAL_OVERLAYS))
 
 
@@ -230,6 +233,9 @@ def unified_overlays(repo):
     result['multiplayer.cpp'] = flatten_includes(repo, MULTIPLAYER_SOURCE, sides.add_auth_side_hooks(auth.generate_multiplayer_auth_overlay(
         regular(repo / 'engine/src' / MULTIPLAYER_SOURCE, 'Pinned multiplayer source').read_bytes())))
     result['lobby.cpp'] = flatten_includes(repo, LOBBY_SOURCE, auth.generate_lobby_overlay(regular(repo / 'engine/src' / LOBBY_SOURCE, 'Pinned lobby source').read_bytes()))
+    rewards = overlay_module(repo, 'campaign_selection_overlay')
+    result['campaign_selection.cpp'] = flatten_includes(repo, CAMPAIGN_SELECTION_SOURCE,
+        rewards.generate_campaign_selection_overlay(regular(repo / 'engine/src' / CAMPAIGN_SELECTION_SOURCE, 'Pinned campaign selector').read_bytes()))
     return result
 
 

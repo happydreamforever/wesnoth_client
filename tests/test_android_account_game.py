@@ -113,7 +113,7 @@ class AccountBuildTests(unittest.TestCase):
         self.assertEqual(len(linked), 568 - len(A.REPLACED_SOURCES))
         self.assertEqual(A.REPLACED_SOURCES, frozenset((
             "gui/dialogs/title_screen.cpp", "wesnoth.cpp", "game_launcher.cpp",
-            "game_initialization/playcampaign.cpp", "wesnothd_connection.cpp", "synced_commands.cpp",
+            "game_initialization/playcampaign.cpp", "gui/dialogs/campaign_selection.cpp", "wesnothd_connection.cpp", "synced_commands.cpp",
             "game_initialization/multiplayer.cpp", "game_config_manager.cpp", "actions/attack.cpp",
             "actions/advancement.cpp", "scripting/lua_unit.cpp", "game_initialization/connect_engine.cpp",
             "gui/dialogs/multiplayer/mp_staging.cpp", "gui/dialogs/multiplayer/mp_join_game.cpp",
@@ -129,6 +129,19 @@ class AccountBuildTests(unittest.TestCase):
         self.assertEqual(generated['wesnothd_connection.cpp'], b'owned shared connection')
         self.assertEqual(generated['wesnothd_connection.hpp'], b'owned shared connection header')
         self.assertEqual(generated['config.h'], b'fixed-config\n')
+
+    def test_campaign_reward_selector_is_generated_and_original_preserved(self):
+        original = ROOT / 'engine/src/gui/dialogs/campaign_selection.cpp'
+        before = original.read_bytes()
+        generated = A.unified_overlays(ROOT)['campaign_selection.cpp']
+        self.assertEqual(original.read_bytes(), before)
+        self.assertIn(b'alliance_game::attach_campaign_rewards(reward_page,campaign["id"].str());', generated)
+        self.assertIn(b'#include "gui/dialogs/campaign_selection.hpp"', generated)
+        overlay = A.overlay_module(ROOT, 'campaign_selection_overlay')
+        with self.assertRaises(ValueError): overlay.generate_campaign_selection_overlay(before + b'\n')
+        with self.assertRaises(ValueError): overlay.generate_campaign_selection_overlay(generated)
+        cmake = (ROOT / 'tools/native-account-game/CMakeLists.txt').read_text()
+        self.assertIn('"${ACCOUNT_STAGE}/campaign_selection.cpp"', cmake)
 
     def test_templates_keep_package_data_and_no_plaintext(self):
         manifest = (ROOT / 'tools/native-account-game/AndroidManifest.xml').read_text()
