@@ -24,7 +24,6 @@ import android.widget.TextView;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.Locale;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -36,6 +35,7 @@ public final class OfflineInitActivity extends Activity {
     private TextView status;
     private ProgressBar progress;
     private Button retry;
+    private Button close;
     private String runId;
     private boolean working;
     private volatile boolean destroyed;
@@ -88,7 +88,7 @@ public final class OfflineInitActivity extends Activity {
         loadArt(title, "startup/logo.png");
         layout.addView(title, new LinearLayout.LayoutParams(-1, padding * 4));
         status = new TextView(this);
-        status.setText("Preparing game data…");
+        status.setText("0%");
         status.setTextSize(18);
         status.setTextColor(Color.rgb(248, 240, 217));
         status.setShadowLayer(3, 0, 1, Color.BLACK);
@@ -101,10 +101,15 @@ public final class OfflineInitActivity extends Activity {
         progress.setProgressBackgroundTintList(android.content.res.ColorStateList.valueOf(0xcc263746));
         layout.addView(progress, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
         retry = new Button(this);
-        retry.setText("Try again");
+        retry.setText("Retry");
         retry.setVisibility(View.GONE);
         retry.setOnClickListener(view -> begin());
         layout.addView(retry);
+        close = new Button(this);
+        close.setText("Close");
+        close.setVisibility(View.GONE);
+        close.setOnClickListener(view -> WesnothGameTask.finish(this));
+        layout.addView(close);
         FrameLayout.LayoutParams panel = new FrameLayout.LayoutParams(
                 Math.min(getResources().getDisplayMetrics().widthPixels, (int) (720 * getResources().getDisplayMetrics().density)), -2, Gravity.CENTER);
         screen.addView(layout, panel);
@@ -126,8 +131,10 @@ public final class OfflineInitActivity extends Activity {
         if (working || destroyed) return;
         working = true;
         retry.setVisibility(View.GONE);
-        status.setText("Checking game data…");
-        progress.setIndeterminate(true);
+        close.setVisibility(View.GONE);
+        status.setText("0%");
+        progress.setIndeterminate(false);
+        progress.setProgress(0);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         lastProgress = 0;
         lastPhase = "";
@@ -153,7 +160,7 @@ public final class OfflineInitActivity extends Activity {
                     working = false;
                     progress.setIndeterminate(false);
                     progress.setProgress(StartupProgress.percent(manifest.bytes, manifest.bytes, true));
-                    status.setText("Starting Wesnoth…");
+                    status.setText("100%");
                     getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
                     Intent game = new Intent(this, OfflineGameActivity.class);
                     game.putExtra("wesnoth_run_id", runId);
@@ -171,9 +178,10 @@ public final class OfflineInitActivity extends Activity {
                     progress.setIndeterminate(false);
                     progress.setProgress(0);
                     status.setText(configurationFailed
-                            ? "This app's server configuration could not be prepared. Ask the server administrator for the current app build. Your saved games have been kept."
-                            : "Game data could not be prepared. Check that the supplied game-data file is installed, then try again. Your saved games have been kept.");
+                            ? "Server configuration is unavailable. Contact the server administrator."
+                            : "Game data is unavailable. Check the supplied data file and retry.");
                     retry.setVisibility(View.VISIBLE);
+                    close.setVisibility(View.VISIBLE);
                     getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
                 });
             }
@@ -190,7 +198,7 @@ public final class OfflineInitActivity extends Activity {
             if (destroyed || isFinishing()) return;
             progress.setIndeterminate(false);
             progress.setProgress(value);
-            status.setText(phase + " — " + value + "%\n" + String.format(Locale.getDefault(), "%,d / %,d files", files, totalFiles));
+            status.setText(value + "%");
         });
     }
     @Override protected void onDestroy() {

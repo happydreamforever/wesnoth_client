@@ -231,6 +231,92 @@ public class BundleHarness {public static void main(String[] args)throws Excepti
 
 
 class ProgressTests(unittest.TestCase):
+    def test_real_installer_interruption_resume_and_tamper_never_report_early_completion(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary); source = directory / 'org/wesnoth/offline'; source.mkdir(parents=True)
+            for name in ('StartupProgress', 'OfflineDataInstaller'):
+                shutil.copyfile(ROOT / ('tools/native-account-game/' + name + '.java'), source / (name + '.java'))
+            payload = {'data/a.bin': b'a' * 100000, 'data/b.bin': b'b' * 200000, 'data/c.bin': b'c' * 300000}
+            manifest = b''.join((json.dumps([name, len(data), hashlib.sha256(data).hexdigest()], separators=(',', ':')) + '\n').encode() for name, data in payload.items())
+            (directory / 'manifest').write_bytes(manifest)
+            with zipfile.ZipFile(directory / 'data.obb', 'w', compression=zipfile.ZIP_STORED) as archive:
+                for name, data in payload.items():
+                    entry = zipfile.ZipInfo(name); entry.create_system = 3; entry.external_attr = 0o100644 << 16
+                    archive.writestr(entry, data)
+            (source / 'InstallerHarness.java').write_text('''package org.wesnoth.offline;
+import java.io.*;import java.nio.file.*;import java.util.*;
+public class InstallerHarness {
+ static final OfflineDataInstaller.FileGuard GUARD=new OfflineDataInstaller.FileGuard(){
+  public boolean exists(File f){return Files.exists(f.toPath(),LinkOption.NOFOLLOW_LINKS);}
+  public void check(File f)throws IOException{if(Files.isSymbolicLink(f.toPath()))throw new IOException("link");}
+ };
+ public static void main(String[] args)throws Exception{
+  Path root=Paths.get(args[0]),base=Files.createDirectory(root.resolve("storage"));
+  OfflineDataInstaller.Manifest manifest=OfflineDataInstaller.readManifest(Files.newInputStream(root.resolve("manifest")),args[1],3,600000L);
+  List<String> phases=new ArrayList<>();List<Integer> values=new ArrayList<>();
+  OfflineDataInstaller.Progress progress=(phase,files,totalFiles,bytes,totalBytes)->{
+   phases.add(phase);int value=StartupProgress.percent(bytes,totalBytes,false);values.add(value);
+   if(value<0||value>99)throw new AssertionError("early completion");
+   if(value!=(int)Math.min(99,bytes*100/totalBytes))throw new AssertionError("unmeasured percent");
+  };
+  try{
+   OfflineDataInstaller.install(base.toFile(),root.resolve("data.obb").toFile(),manifest,GUARD,(phase,files,n,bytes,total)->{
+    progress.update(phase,files,n,bytes,total);
+    if(phase.equals("Installing game data")&&files==1)Thread.currentThread().interrupt();
+   });throw new AssertionError("interruption ignored");
+  }catch(InterruptedIOException expected){Thread.interrupted();}
+  if(Files.exists(base.resolve(".wesnoth-gamedata-ready"))||Files.exists(base.resolve("gamedata")))throw new AssertionError("interrupted publication");
+  Path retained=base.resolve(".wesnoth-gamedata-import/payload/data/a.bin");byte[] saved=Files.readAllBytes(retained);
+  File installed=OfflineDataInstaller.install(base.toFile(),root.resolve("data.obb").toFile(),manifest,GUARD,progress);
+  if(!Arrays.equals(saved,Files.readAllBytes(installed.toPath().resolve("data/a.bin"))))throw new AssertionError("retained data changed");
+  if(!phases.contains("Checking interrupted import")||!Files.isRegularFile(base.resolve(".wesnoth-gamedata-ready")))throw new AssertionError("resume not checked");
+  if(StartupProgress.percent(manifest.bytes,manifest.bytes,true)!=100||values.get(values.size()-1)!=99)throw new AssertionError("publication boundary");
+  OfflineDataInstaller.install(base.toFile(),root.resolve("data.obb").toFile(),manifest,GUARD,progress);
+  byte[] damaged=new byte[200000];Arrays.fill(damaged,(byte)'x');Path target=installed.toPath().resolve("data/b.bin");Files.write(target,damaged);
+  try{OfflineDataInstaller.install(base.toFile(),root.resolve("data.obb").toFile(),manifest,GUARD,progress);throw new AssertionError("tamper accepted");}catch(IOException expected){}
+  if(!Arrays.equals(damaged,Files.readAllBytes(target)))throw new AssertionError("tampered user file replaced");
+  if(values.contains(100))throw new AssertionError("early100");
+  System.out.println("INSTALLER INTERRUPTION RESUME TAMPER PROGRESS PASS");
+ }}''')
+            subprocess.run(['javac', '--release', '8', '-d', str(directory), *map(str, source.glob('*.java'))], check=True, capture_output=True)
+            result = subprocess.run(['java', '-cp', str(directory), 'org.wesnoth.offline.InstallerHarness', str(directory), hashlib.sha256(manifest).hexdigest()], check=True, capture_output=True, text=True)
+            self.assertIn('INSTALLER INTERRUPTION RESUME TAMPER PROGRESS PASS', result.stdout)
+
+    def test_actual_activity_progress_callback_shows_only_measured_percent(self):
+        activity = (ROOT / 'tools/native-account-game/OfflineInitActivity.java').read_text()
+        start = activity.index('    private void showProgress(')
+        end = activity.index('    @Override protected void onDestroy()', start)
+        function = activity[start:end]
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary); source = directory / 'org/wesnoth/offline'; source.mkdir(parents=True)
+            shutil.copyfile(ROOT / 'tools/native-account-game/StartupProgress.java', source / 'StartupProgress.java')
+            (source / 'ActivityProgressHarness.java').write_text('''package org.wesnoth.offline;
+public class ActivityProgressHarness {
+ static class SystemClock {static long tick;static long elapsedRealtime(){return tick+=200;}}
+ static class Log {static String last;static void i(String tag,String text){last=text;}}
+ static class Text {String value;void setText(String text){value=text;}}
+ static class Bar {int value;boolean indeterminate;void setProgress(int v){value=v;}void setIndeterminate(boolean v){indeterminate=v;}}
+ String runId="fixture",lastPhase="";long lastProgress;boolean destroyed,finishing;
+ static final String TAG="fixture";Text status=new Text();Bar progress=new Bar();
+ boolean isFinishing(){return finishing;}void runOnUiThread(Runnable action){action.run();}
+/* @CALLBACK@ */
+ public static void main(String[] args){
+  ActivityProgressHarness a=new ActivityProgressHarness();
+  for(int bytes:new int[]{0,1,50,99,100}){
+   a.showProgress("Checking game data",bytes,100,bytes,100);
+   int expected=Math.min(99,bytes);
+   if(a.progress.indeterminate||a.progress.value!=expected||!a.status.value.equals(expected+"%"))throw new AssertionError("visible processing text or wrong percent");
+  }
+  a.showProgress("Installing game data",0,100,0,100);
+  if(!a.status.value.equals("0%")||!Log.last.contains("phase=Installing game data files=0/100"))throw new AssertionError("phase leaked or lost");
+  a.destroyed=true;a.showProgress("Installing game data",50,100,50,100);
+  if(!a.status.value.equals("0%"))throw new AssertionError("destroyed view updated");
+  System.out.println("ACTIVITY PERCENT ONLY PASS");
+ }}'''.replace('/* @CALLBACK@ */', function))
+            subprocess.run(['javac', '--release', '8', '-d', str(directory), *map(str, source.glob('*.java'))], check=True, capture_output=True)
+            result = subprocess.run(['java', '-cp', str(directory), 'org.wesnoth.offline.ActivityProgressHarness'], check=True, capture_output=True, text=True)
+            self.assertIn('ACTIVITY PERCENT ONLY PASS', result.stdout)
+
     def test_real_java_progress_waits_for_commit_and_handles_large_totals(self):
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary)
