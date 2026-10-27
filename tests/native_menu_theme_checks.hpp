@@ -3,6 +3,18 @@
 #include "alliance_game/native_menu_theme.hpp"
 #include <stdexcept>
 
+inline void verify_native_load_geometry(gui2::window& window) {
+    const auto list=window.find_widget<gui2::listbox>("savegame_list").get_rectangle();
+    const auto name=window.find_widget<gui2::toggle_button>("sort_0").get_rectangle();
+    const auto date=window.find_widget<gui2::toggle_button>("sort_1").get_rectangle();
+    for(const auto& heading:{name,date}) {
+        if(heading.w<48 || heading.h<48 || heading.x<list.x || heading.y<list.y ||
+            heading.x+heading.w>list.x+list.w || heading.y+heading.h>list.y+list.h)
+            throw std::runtime_error("Load sorting heading is undersized or clipped");
+    }
+    if(name.x+name.w>date.x)throw std::runtime_error("Load sorting headings overlap");
+}
+
 inline void verify_native_menu_theme_boundaries() {
     using namespace alliance_game;
     auto require=[](bool value,const char* message){if(!value)throw std::runtime_error(message);};
@@ -20,6 +32,17 @@ inline void verify_native_menu_theme_boundaries() {
         const config button_state=button->state.front().canvas_cfg_;
         const config label_state=label->state.front().canvas_cfg_;
         const auto original_width=button->min_width,original_height=button->min_height;
+        const auto& original_load=gui2::get_window_builder("game_load");
+        const auto original_load_grid=original_load.grid;
+        {
+            MenuThemeScope load("game_load");
+            const auto& scoped=load.builder("game_load");
+            require(&scoped!=&original_load && scoped.grid!=original_load_grid,
+                "Load sizing reused the shared native builder");
+            require(&scoped==&load.builder("game_load"),"Load builder clone is unstable");
+        }
+        require(gui2::get_window_builder("game_load").grid==original_load_grid,
+            "Load sizing changed the shared native builder");
         const auto default_chat_definition=gui2::default_gui->second.widget_types.at("chatbox").at("default");
         prepare_native_touch_window("campaign_selection");
         require(gui2::default_gui->second.widget_types.at("chatbox").at("default")==default_chat_definition,

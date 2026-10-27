@@ -41,6 +41,31 @@ inline bool menu_theme_root(const std::string& id) {
         id=="campaign_selection" || id=="game_load" || id=="achievements_dialog" ||
         id=="preferences" || id=="preferences_dialog";
 }
+inline gui2::builder_grid_ptr menu_load_grid(const gui2::builder_grid_ptr& original) {
+    if(!original)return {};
+    auto copy=std::make_shared<gui2::builder_grid>(*original);
+    for(auto& item:copy->widgets) {
+        if(const auto nested=std::dynamic_pointer_cast<gui2::builder_grid>(item)) {
+            item=menu_load_grid(nested);
+        } else if(item->id=="savegame_list") {
+            // An empty native list measures its content, not its header width.
+            // Retain its native rows/sort callbacks while reserving a readable
+            // column for the two touch-sized Name/Date headings. The stacked
+            // spacer is the engine's standard minimum-size layout technique.
+            config cfg;cfg["definition"]="default";
+            for(int layer=0;layer<2;++layer) {
+                auto& row=cfg.add_child("layer").add_child("row");row["grow_factor"]=1;
+                auto& column=row.add_child("column");column["grow_factor"]=1;
+                column["horizontal_grow"]=true;column["vertical_grow"]=true;
+                auto& spacer=column.add_child("spacer");spacer["definition"]="default";
+                if(layer==0){spacer["width"]=320;spacer["height"]=48;}
+            }
+            auto stack=std::make_shared<gui2::implementation::builder_stacked_widget>(cfg);
+            stack->stack.at(1).widgets.at(0)=item;item=std::move(stack);
+        }
+    }
+    return copy;
+}
 class MenuThemeScope {
     bool enabled_;
 public:
@@ -50,7 +75,13 @@ public:
     MenuThemeScope(const MenuThemeScope&)=delete;
     MenuThemeScope& operator=(const MenuThemeScope&)=delete;
     const gui2::builder_window::window_resolution& builder(const std::string& id) const {
-        return gui2::get_window_builder(id);
+        const auto& original=gui2::get_window_builder(id);
+        if(id!="game_load")return original;
+        using Resolution=gui2::builder_window::window_resolution;
+        static std::map<const Resolution*,Resolution> copies;
+        const auto found=copies.find(&original);if(found!=copies.end())return found->second;
+        auto copy=original;copy.grid=menu_load_grid(original.grid);
+        return copies.emplace(&original,std::move(copy)).first->second;
     }
 };
 
