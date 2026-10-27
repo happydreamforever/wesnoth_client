@@ -31,7 +31,7 @@ import zlib
 
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGE = 'org.wesnoth.offline'
-VERSION = 1192621
+VERSION = 1192622
 WIRE_VERSION = 2
 PLAIN_LIMIT = 256 * 1024
 INT64_MAX = (1 << 63) - 1

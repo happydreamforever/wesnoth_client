@@ -16,14 +16,14 @@ ROOT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location('public_profile_validator', ROOT / 'tools/validate_android_account_profile.py')
 V = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(V)
+spec = importlib.util.spec_from_file_location('product_theme_generator', ROOT / 'tools/generate_product_theme.py')
+THEME = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(THEME)
 CONFIG_PATH = None
 OPENSSL_PATH = None
 PROFILE_ASSET = 'alliance-public-profile.json'
 UI_MANIFEST = 'alliance-ui-manifest.json'
-STARTUP = {
-    'startup/titlescreen.webp': ('data/core/images/maps/titlescreen.webp', 1608774, '482437e8173e837a2ac9d50d8be367685c19815a00c3dcf3d9797104893282cd'),
-    'startup/logo.png': ('images/misc/logo.png', 47379, '48545292b3b2ccfa2d8b83589a87d5f7506793af26514b9152a4e012ec20eef0'),
-}
+UI_ASSET_LIMIT = 8 * 1024 * 1024
 
 
 def record(data):
@@ -117,11 +117,16 @@ def public_profile(repo, config=None, openssl=None):
 
 
 def artwork(repo):
-    """Read pinned startup art from the unchanged OBB and exact optional UI assets."""
+    """Read the pinned title font from the unchanged OBB and exact owned UI assets."""
     repo = Path(repo)
+    # Validate the shared descriptor and both language outputs before packaging.
+    regular_bytes(repo / THEME.SOURCE, 16384)
+    THEME.verify_generated(repo)
+    theme = THEME.load_theme(repo)
     result = {}
     with zipfile.ZipFile(repo / 'build/android-game-data/main.1192600.org.wesnoth.offline.obb') as archive:
-        for name, (source, size, sha) in STARTUP.items():
+        for font in (theme['font'], theme['body_font']):
+            name, source, size, sha = (font[key] for key in ('asset', 'source', 'bytes', 'sha256'))
             entries = [entry for entry in archive.infolist() if entry.filename == source]
             if len(entries) != 1 or entries[0].file_size != size:
                 raise ValueError('Pinned startup artwork is missing or oversized.')
@@ -147,14 +152,16 @@ def artwork(repo):
         if not isinstance(name, str) or not re.fullmatch(r'[a-z0-9_-]+(?:/[a-z0-9_.-]+)+', name) or any(p in ('.', '..') for p in name.split('/')):
             raise ValueError('Unsafe owned UI asset name.')
         asset = 'alliance-ui/' + name
-        if asset in result or type(entry['bytes']) is not int or not 0 < entry['bytes'] <= 16 * 1024 * 1024:
+        if asset in result or type(entry['bytes']) is not int or not 0 < entry['bytes'] <= UI_ASSET_LIMIT:
             raise ValueError('Duplicate or oversized owned UI asset.')
-        data = regular_bytes(repo / 'tools/native-account-game/ui-assets' / name, 16 * 1024 * 1024)
+        data = regular_bytes(repo / 'tools/native-account-game/ui-assets' / name, UI_ASSET_LIMIT)
         if record(data) != {key: entry[key] for key in ('bytes', 'sha256')}:
             raise ValueError('Owned UI asset differs from its pinned manifest.')
         result[asset] = data
         entries.append(entry)
     result[UI_MANIFEST] = json_bytes({'format': 1, 'files': entries})
+    if theme['background'] not in result:
+        raise ValueError('The shared interface background is missing from its exact manifest.')
     return result
 
 

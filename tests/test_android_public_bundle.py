@@ -206,28 +206,37 @@ public class BundleHarness {public static void main(String[] args)throws Excepti
                                 check=True, capture_output=True, text=True, timeout=30)
         self.assertIn('BUNDLED PROFILE JAVA PASS', result.stdout)
 
-    def test_actual_pinned_startup_art_and_empty_ui_manifest(self):
+    def test_actual_pinned_title_font_and_shared_background_manifest(self):
         assets = B.artwork(ROOT)
-        for name, (_, size, sha) in B.STARTUP.items():
-            self.assertEqual(B.record(assets[name]), {'bytes': size, 'sha256': sha})
+        theme = B.THEME.load_theme(ROOT)
+        for font in (theme['font'], theme['body_font']):
+            self.assertEqual(B.record(assets[font['asset']]), {key: font[key] for key in ('bytes', 'sha256')})
+        self.assertIn(theme['background'], assets)
+        self.assertLessEqual(len(assets[theme['background']]), 8 * 1024 * 1024)
         self.assertEqual(json.loads(assets[B.UI_MANIFEST])['format'], 1)
 
     def test_asset_manifest_rejects_path_traversal_and_tampering(self):
         root = self.repo / 'tools/native-account-game'; root.mkdir(parents=True)
+        for name in (B.THEME.SOURCE, *B.THEME.OUTPUTS):
+            target = self.repo / name; target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(ROOT / name, target)
+        theme = B.THEME.load_theme(ROOT)
+        with zipfile.ZipFile(ROOT / 'build/android-game-data/main.1192600.org.wesnoth.offline.obb') as original:
+            fonts = {font['source']: original.read(font['source']) for font in (theme['font'], theme['body_font'])}
         (self.repo / 'build/android-game-data').mkdir(parents=True)
         with zipfile.ZipFile(self.repo / 'build/android-game-data/main.1192600.org.wesnoth.offline.obb', 'w') as archive:
-            archive.writestr('fixture', b'fixture')
-        entry = {'path': 'hero/example.webp', 'bytes': 3, 'sha256': hashlib.sha256(b'art').hexdigest()}
-        asset = root / 'ui-assets/hero/example.webp'; asset.parent.mkdir(parents=True); asset.write_bytes(b'art')
+            for name, data in fonts.items(): archive.writestr(name, data)
+        relative = B.THEME.load_theme(ROOT)['background'].removeprefix('alliance-ui/')
+        entry = {'path': relative, 'bytes': 3, 'sha256': hashlib.sha256(b'art').hexdigest()}
+        asset = root / 'ui-assets' / relative; asset.parent.mkdir(parents=True); asset.write_bytes(b'art')
         manifest = root / 'ui-assets.json'
-        with patch.object(B, 'STARTUP', {}):
-            manifest.write_text(json.dumps({'format': 1, 'files': [entry]}))
-            self.assertEqual(B.artwork(self.repo)['alliance-ui/hero/example.webp'], b'art')
-            asset.write_bytes(b'bad')
+        manifest.write_text(json.dumps({'format': 1, 'files': [entry]}))
+        self.assertEqual(B.artwork(self.repo)['alliance-ui/' + relative], b'art')
+        asset.write_bytes(b'bad')
+        with self.assertRaises(ValueError): B.artwork(self.repo)
+        for path in ('../secret', 'hero/../../secret', '/absolute', 'hero/../secret'):
+            entry['path'] = path; manifest.write_text(json.dumps({'format': 1, 'files': [entry]}))
             with self.assertRaises(ValueError): B.artwork(self.repo)
-            for path in ('../secret', 'hero/../../secret', '/absolute', 'hero/../secret'):
-                entry['path'] = path; manifest.write_text(json.dumps({'format': 1, 'files': [entry]}))
-                with self.assertRaises(ValueError): B.artwork(self.repo)
 
 
 class ProgressTests(unittest.TestCase):
@@ -372,7 +381,7 @@ class ApkBundleTests(unittest.TestCase):
 
     def test_new_apk_inspector_binds_every_public_asset(self):
         result = self.A.inspect_apk(self.apk, self.root)
-        self.assertEqual(result['version_code'], 1192621)
+        self.assertEqual(result['version_code'], 1192622)
         self.assertEqual(result['activity'], 'org.wesnoth.offline.OfflineInitActivity')
         self.assertEqual(result['bundled_assets'], self.marker['inputs']['bundled_assets'])
 
@@ -393,6 +402,12 @@ class ApkBundleTests(unittest.TestCase):
         self.assertEqual(result['activity'], 'org.wesnoth.offline.AccountSetupActivity')
         self.assertNotIn('bundled_assets', result)
         self.assertEqual(result['version_code'], 1192620)
+
+    def test_historical1192621_keeps_its_original_public_assets(self):
+        result = self.A.inspect_apk(self.apk, self.root, 1192621)
+        self.assertEqual(result['version_code'], 1192621)
+        self.assertEqual(result['activity'], 'org.wesnoth.offline.OfflineInitActivity')
+        self.assertEqual(result['bundled_assets'], self.marker['inputs']['bundled_assets'])
 
 
 if __name__ == '__main__': unittest.main()

@@ -25,6 +25,8 @@ add_library(main SHARED ${account_base_objects}
  "${ACCOUNT_STAGE}/game_launcher.cpp"
  "${ACCOUNT_STAGE}/playcampaign.cpp"
  "${ACCOUNT_STAGE}/campaign_selection.cpp"
+ "${ACCOUNT_STAGE}/modal_dialog.cpp"
+ "${ACCOUNT_STAGE}/gui_definition.cpp"
  "${ACCOUNT_STAGE}/wesnothd_connection.cpp"
  "${ACCOUNT_STAGE}/synced_commands.cpp"
  "${ACCOUNT_STAGE}/game_config_manager.cpp"

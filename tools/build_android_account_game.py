@@ -32,9 +32,9 @@ ENGINE_KIND = 'wesnoth-android-account-engine'
 LOCK = '.wesnoth-account-game-operation.json'
 MARKER = '.wesnoth-account-game.json'
 ENGINE_MARKER = '.wesnoth-account-engine.json'
-VERSION_CODE = 1192621
-PREVIOUS_VERSION_CODES = frozenset(range(1192608, 1192621))
-UPDATE_JOURNAL = '.wesnoth-account-game-update-1192621.json'
+VERSION_CODE = 1192622
+PREVIOUS_VERSION_CODES = frozenset(range(1192608, 1192622))
+UPDATE_JOURNAL = '.wesnoth-account-game-update-1192622.json'
 UPDATE_KIND = 'wesnoth-android-account-game-update'
 UPDATE_STAGES = ('android-account-engine', 'android-account-game')
 PACKAGE = G.PACKAGE
@@ -45,10 +45,13 @@ spec.loader.exec_module(PUBLIC)
 APK, JNI_ROOT, LIBRARIES, ARTIFACTS = G.APK, G.JNI_ROOT, G.LIBRARIES, G.ARTIFACTS
 TEMPLATES = dict(G.TEMPLATES)
 TEMPLATES.update({name + '.java': 'app/src/main/java/org/wesnoth/offline/' + name + '.java'
-                  for name in ('AlliancePublicProfile', 'BundledStartup', 'StartupProgress', 'WesnothGameTask')})
+                  for name in ('AlliancePublicProfile', 'BundledStartup', 'StartupProgress', 'WesnothGameTask', 'ProductTheme')})
 TEMPLATES.update({name + '.java': 'app/src/main/java/org/libsdl/app/' + name + '.java'
                   for name in ('WesnothKeyboard', 'WesnothKeyboardState')})
 NEW_INPUTS = ('tools/build_android_account_game.py', 'tools/android_public_bundle.py',
+              'tools/generate_product_theme.py', 'tools/native-account-game/ui-theme.json',
+              'alliance_game/product_theme.hpp', 'alliance_game/home_ui.hpp', 'alliance_game/menu_icons.hpp',
+              'alliance_game/native_menu_theme.hpp', 'alliance_game/menu_theme_overlay.py',
               'tools/validate_android_account_profile.py', 'tools/native-account-game/ui-assets.json',
               'tools/native-account-game/CMakeLists.txt',
               'alliance_game/account_ui.cpp', 'alliance_game/account_ui.hpp', 'alliance_game/product_ui_layout.hpp', 'alliance_game/native_touch_layout.hpp', 'alliance_game/team_workspace.inc', 'alliance_game/individual_creation.inc',
@@ -83,6 +86,8 @@ MAIN_SOURCE = 'wesnoth.cpp'
 LAUNCHER_SOURCE = 'game_launcher.cpp'
 CAMPAIGN_SOURCE = 'game_initialization/playcampaign.cpp'
 CAMPAIGN_SELECTION_SOURCE = 'gui/dialogs/campaign_selection.cpp'
+MENU_THEME_OVERLAYS = {'gui/dialogs/modal_dialog.cpp': 'generate_modal_theme_overlay',
+                       'gui/core/gui_definition.cpp': 'generate_gui_theme_overlay'}
 CONNECTION_SOURCE = 'wesnothd_connection.cpp'
 SYNCED_COMMANDS_SOURCE = 'synced_commands.cpp'
 STORY_OVERLAYS = {'game_config_manager.cpp': 'generate_config_manager_overlay',
@@ -94,7 +99,7 @@ CASUAL_OVERLAYS = ('game_initialization/connect_engine.cpp', 'gui/dialogs/multip
 MULTIPLAYER_SOURCE = 'game_initialization/multiplayer.cpp'
 LOBBY_SOURCE = 'gui/dialogs/multiplayer/lobby.cpp'
 REPLACED_SOURCES = frozenset((TITLE_SOURCE, MAIN_SOURCE, LAUNCHER_SOURCE, CAMPAIGN_SOURCE, CAMPAIGN_SELECTION_SOURCE, CONNECTION_SOURCE,
-                              SYNCED_COMMANDS_SOURCE, MULTIPLAYER_SOURCE, LOBBY_SOURCE, *STORY_OVERLAYS, *CASUAL_OVERLAYS))
+                              SYNCED_COMMANDS_SOURCE, MULTIPLAYER_SOURCE, LOBBY_SOURCE, *STORY_OVERLAYS, *CASUAL_OVERLAYS, *MENU_THEME_OVERLAYS))
 
 
 def call(function, *args, **kwargs):
@@ -236,6 +241,10 @@ def unified_overlays(repo):
     rewards = overlay_module(repo, 'campaign_selection_overlay')
     result['campaign_selection.cpp'] = flatten_includes(repo, CAMPAIGN_SELECTION_SOURCE,
         rewards.generate_campaign_selection_overlay(regular(repo / 'engine/src' / CAMPAIGN_SELECTION_SOURCE, 'Pinned campaign selector').read_bytes()))
+    theme = overlay_module(repo, 'menu_theme_overlay')
+    for name, transform in MENU_THEME_OVERLAYS.items():
+        result[Path(name).name] = flatten_includes(repo, name,
+            getattr(theme, transform)(regular(repo / 'engine/src' / name, 'Pinned menu theme source').read_bytes()))
     return result
 
 
@@ -593,7 +602,7 @@ def previous_version(root, marker, receipt):
     apk = validation.get('apk') if isinstance(validation, dict) else None
     version = apk.get('version_code') if isinstance(apk, dict) else None
     if type(version) is not int or version not in PREVIOUS_VERSION_CODES:
-        raise BuildError('Expected a completed account APK from versions 1192608 through 1192620; nothing was renamed.')
+        raise BuildError('Expected a completed account APK from versions 1192608 through 1192621; nothing was renamed.')
     if 'app/build.gradle' not in marker['files']:
         raise BuildError('The previous account version is not bound to its owned Gradle input.')
     data = call(N.ninja_read, root / 'app/build.gradle', 64 * 1024)
@@ -627,7 +636,7 @@ def completed_previous_stages(repo, profile, current_inputs):
     version = previous_version(game_root, marker, receipt)
     # A pending later transaction can leave older completed source directories
     # in place before its first move. Do not start another upgrade on top of it
-    # or reinterpret its immutable journal as a 1192620 update.
+    # or reinterpret its immutable journal as an older update.
     for later in PREVIOUS_VERSION_CODES:
         if later > version and safe(repo / 'build' / ('.wesnoth-account-game-update-' + str(later) + '.json')).exists():
             raise BuildError('A later account update journal exists beside older completed stages. Preserve it and send the log.')
@@ -656,7 +665,7 @@ def checked_update_journal(record, current_inputs):
         entry = record['stages'][name]
         if not isinstance(entry, dict) or set(entry) != {'backup', 'snapshot'}:
             raise BuildError('Invalid account update stage record.')
-        match = re.fullmatch(re.escape(name) + r'-before-product-ui-(\d{8}T\d{6}Z-[0-9a-f]{32})', str(entry['backup']))
+        match = re.fullmatch(re.escape(name) + r'-before-citadel-ui-(\d{8}T\d{6}Z-[0-9a-f]{32})', str(entry['backup']))
         if not match:
             raise BuildError('Invalid account backup location; no paths were changed.')
         suffixes.add(match.group(1))
@@ -720,7 +729,7 @@ def prepare_update(repo):
             token = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ-') + uuid.uuid4().hex
             record = {'schema_version': 1, 'kind': UPDATE_KIND, 'target_version': VERSION_CODE,
                       'target_inputs': inputs, 'stages': {name: {
-                          'backup': name + '-before-product-ui-' + token, 'snapshot': snapshots[name]}
+                          'backup': name + '-before-citadel-ui-' + token, 'snapshot': snapshots[name]}
                           for name in UPDATE_STAGES}}
             checked_update_journal(record, inputs)
             write_new(journal, B.json_bytes(record))
@@ -827,7 +836,7 @@ def main(argv=None):
     parser.add_argument('--public-config', type=Path, help='Public-only .env file; defaults to the repository .env.')
     parser.add_argument('--openssl', type=Path, help='Existing OpenSSL 3 executable for offline public certificate verification.')
     parser.add_argument('--verify', '--verify-only', action='store_true')
-    parser.add_argument('--prepare-update', action='store_true', help='Preserve completed 1192608 through 1192620 stages before the 1192621 product interface update.')
+    parser.add_argument('--prepare-update', action='store_true', help='Preserve completed 1192608 through 1192621 stages before the 1192622 citadel interface update.')
     args = parser.parse_args(argv)
     try:
         for name, value in vars(args).items():

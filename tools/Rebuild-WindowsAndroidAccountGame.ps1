@@ -1,4 +1,4 @@
-# Windows PowerShell 5.1. Preserve the completed account stages, then build/resume the product interface update.
+# Windows PowerShell 5.1. Preserve the completed account stages, then build/resume the citadel interface update.
 [CmdletBinding()]
 param(
     [string]$SdkRoot = (Join-Path $env:LOCALAPPDATA 'Android\Sdk'),
@@ -29,7 +29,7 @@ try {
     $log = Join-Path $diagnostics ('android-account-rebuild-' + (Get-Date -Format 'yyyyMMdd-HHmmss-fff') + '-' + [guid]::NewGuid().ToString('N') + '.txt')
     Start-Transcript -LiteralPath $log -NoClobber | Out-Null
     $started = $true
-    Write-Host 'Verifying and preserving both completed 1192608, 1192609, 1192610, 1192611, 1192612, 1192613, 1192614, 1192615, 1192616, 1192617, 1192618, 1192619 or 1192620 account stages before the 1192621 product interface update.'
+    Write-Host 'Verifying and preserving both completed 1192608, 1192609, 1192610, 1192611, 1192612, 1192613, 1192614, 1192615, 1192616, 1192617, 1192618, 1192619, 1192620 or 1192621 account stages before the 1192622 citadel interface update.'
     Write-Host 'Recorded preparation reuses its retained backups. If an operation lock remains, stop and send the log.'
     $prepareArguments = @('-I', '-B', '-u', $builder, '--prepare-update', '--openssl', $OpenSslPath)
     if ($PublicConfigPath) { $prepareArguments += @('--public-config', $PublicConfigPath) }

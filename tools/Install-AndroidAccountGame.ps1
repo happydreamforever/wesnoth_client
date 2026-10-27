@@ -143,8 +143,8 @@ try {
     & {
         $packageDetails = Selected-Adb @('shell', 'dumpsys', 'package', $package) 60000 $true
         $versions = [regex]::Matches($packageDetails.Stdout, '(?m)^\s*versionCode=([0-9]+)(?:\s|$)')
-        if ($versions.Count -ne 1 -or $versions[0].Groups[1].Value -notin @('1192608', '1192609', '1192610', '1192611', '1192612', '1192613', '1192614', '1192615', '1192616', '1192617', '1192618', '1192619', '1192620', '1192621')) {
-            throw 'Expected the installed Alliance account game version 1192608, 1192609, 1192610, 1192611, 1192612, 1192613, 1192614, 1192615, 1192616, 1192617, 1192618, 1192619, 1192620 or 1192621. No app update was attempted.'
+        if ($versions.Count -ne 1 -or $versions[0].Groups[1].Value -notin @('1192608', '1192609', '1192610', '1192611', '1192612', '1192613', '1192614', '1192615', '1192616', '1192617', '1192618', '1192619', '1192620', '1192621', '1192622')) {
+            throw 'Expected the installed Alliance account game version 1192608, 1192609, 1192610, 1192611, 1192612, 1192613, 1192614, 1192615, 1192616, 1192617, 1192618, 1192619, 1192620, 1192621 or 1192622. No app update was attempted.'
         }
     }
     $install = Selected-Adb @('install', '-r', $apk) 300000
@@ -152,8 +152,8 @@ try {
     & {
         $packageDetails = Selected-Adb @('shell', 'dumpsys', 'package', $package) 60000 $true
         $versions = [regex]::Matches($packageDetails.Stdout, '(?m)^\s*versionCode=([0-9]+)(?:\s|$)')
-        if ($versions.Count -ne 1 -or $versions[0].Groups[1].Value -cne '1192621') {
-            throw 'Android did not report the expected updated version 1192621. Send this log.'
+        if ($versions.Count -ne 1 -or $versions[0].Groups[1].Value -cne '1192622') {
+            throw 'Android did not report the expected updated version 1192622. Send this log.'
         }
     }
     $null = Selected-Adb @('shell', 'am', 'force-stop', $package)
@@ -170,7 +170,7 @@ try {
     }
     if (-not $ready) { throw 'No fresh startup screen marker was observed. Send the saved log.' }
     Write-Host 'ANDROID ACCOUNT GAME INSTALL COMPLETE'
-    Write-Host 'Version 1192621 and startup screen launch are verified.'
+    Write-Host 'Version 1192622 and startup screen launch are verified.'
     Write-Host 'The signed APK supplies the public server configuration. Its prior imported profile remains untouched.'
     Write-Host 'Confirm the game background, logo and data-check percentage, then log in to your existing player account.'
     Write-Host 'No OBB transfer, app-data deletion, account credential collection or database initialization was performed.'

@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.content.Intent;
 import android.graphics.BitmapFactory;
 import android.graphics.Color;
+import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.os.SystemClock;
@@ -68,44 +69,48 @@ public final class OfflineInitActivity extends Activity {
         super.onCreate(savedInstanceState);
         runId = runId(getIntent());
         FrameLayout screen = new FrameLayout(this);
-        screen.setBackgroundColor(Color.rgb(18, 24, 32));
+        screen.setBackgroundColor(ProductTheme.TEAL_SHADOW);
         ImageView background = new ImageView(this);
         background.setScaleType(ImageView.ScaleType.CENTER_CROP);
-        loadArt(background, "startup/titlescreen.webp");
+        loadArt(background, ProductTheme.BACKGROUND_ASSET);
         screen.addView(background, new FrameLayout.LayoutParams(-1, -1));
         View shade = new View(this);
         shade.setBackground(new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
-                new int[] {0x55202b34, 0xcc101820}));
+                new int[] {withAlpha(ProductTheme.TEAL_SHADOW, 40), withAlpha(ProductTheme.INK, 145)}));
         screen.addView(shade, new FrameLayout.LayoutParams(-1, -1));
         LinearLayout layout = new LinearLayout(this);
         layout.setOrientation(LinearLayout.VERTICAL);
         layout.setGravity(Gravity.CENTER);
         int padding = (int) (32 * getResources().getDisplayMetrics().density);
         layout.setPadding(padding, padding, padding, padding);
-        ImageView title = new ImageView(this);
-        title.setContentDescription("The Battle for Wesnoth");
-        title.setScaleType(ImageView.ScaleType.FIT_CENTER);
-        loadArt(title, "startup/logo.png");
-        layout.addView(title, new LinearLayout.LayoutParams(-1, padding * 4));
+        Typeface script = Typeface.createFromAsset(getAssets(), ProductTheme.TITLE_FONT_ASSET);
+        Typeface body = Typeface.createFromAsset(getAssets(), ProductTheme.BODY_FONT_ASSET);
+        TextView kicker = titleLine(ProductTheme.TITLE_KICKER, 30, script, ProductTheme.IVORY);
+        layout.addView(kicker, new LinearLayout.LayoutParams(-1, -2));
+        TextView title = titleLine(ProductTheme.TITLE_NAME, 68, script, ProductTheme.GOLD);
+        layout.addView(title, new LinearLayout.LayoutParams(-1, -2));
         status = new TextView(this);
+        status.setTypeface(body);
         status.setText("0%");
         status.setTextSize(18);
-        status.setTextColor(Color.rgb(248, 240, 217));
+        status.setTextColor(ProductTheme.IVORY);
         status.setShadowLayer(3, 0, 1, Color.BLACK);
         status.setGravity(Gravity.CENTER);
         status.setPadding(0, padding / 2, 0, padding / 2);
         layout.addView(status);
         progress = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
         progress.setMax(100);
-        progress.setProgressTintList(android.content.res.ColorStateList.valueOf(Color.rgb(222, 187, 111)));
-        progress.setProgressBackgroundTintList(android.content.res.ColorStateList.valueOf(0xcc263746));
+        progress.setProgressTintList(android.content.res.ColorStateList.valueOf(ProductTheme.GOLD));
+        progress.setProgressBackgroundTintList(android.content.res.ColorStateList.valueOf(withAlpha(ProductTheme.STONE, 210)));
         layout.addView(progress, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
         retry = new Button(this);
+        styleAction(retry, body);
         retry.setText("Retry");
         retry.setVisibility(View.GONE);
         retry.setOnClickListener(view -> begin());
         layout.addView(retry);
         close = new Button(this);
+        styleAction(close, body);
         close.setText("Close");
         close.setVisibility(View.GONE);
         close.setOnClickListener(view -> WesnothGameTask.finish(this));
@@ -118,11 +123,39 @@ public final class OfflineInitActivity extends Activity {
         begin();
     }
 
+    private static int withAlpha(int color, int alpha) {
+        return (color & 0x00ffffff) | (alpha << 24);
+    }
+
+    private TextView titleLine(String text, int size, Typeface script, int color) {
+        TextView title = new TextView(this);
+        title.setText(text);
+        title.setTypeface(script);
+        title.setTextSize(size);
+        title.setTextColor(color);
+        title.setShadowLayer(4, 0, 2, ProductTheme.INK);
+        title.setGravity(Gravity.CENTER);
+        title.setIncludeFontPadding(true);
+        return title;
+    }
+
+    private void styleAction(Button button, Typeface body) {
+        float density = getResources().getDisplayMetrics().density;
+        GradientDrawable surface = new GradientDrawable();
+        surface.setColor(ProductTheme.STONE);
+        surface.setStroke(Math.max(1, (int) density), ProductTheme.GOLD);
+        surface.setCornerRadius(4 * density);
+        button.setBackground(surface);
+        button.setTextColor(ProductTheme.IVORY);
+        button.setTypeface(body);
+        button.setTextSize(18);
+        button.setMinHeight((int) (48 * density));
+    }
+
     private void loadArt(ImageView target, String asset) {
         try (InputStream source = getAssets().open(asset)) {
             BitmapFactory.Options options = new BitmapFactory.Options();
-            options.inPreferredConfig = asset.endsWith("logo.png")
-                    ? android.graphics.Bitmap.Config.ARGB_8888 : android.graphics.Bitmap.Config.RGB_565;
+            options.inPreferredConfig = android.graphics.Bitmap.Config.ARGB_8888;
             target.setImageBitmap(BitmapFactory.decodeStream(source, null, options));
         } catch (IOException error) { Log.e(TAG, "WESNOTH_STARTUP_ART_UNAVAILABLE"); }
     }

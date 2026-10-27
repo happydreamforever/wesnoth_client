@@ -77,7 +77,7 @@ final class BundledStartup {
                 if (!path.matches("[a-z0-9_-]+(?:/[a-z0-9_.-]+)+") || path.contains("/../") || path.contains("/./"))
                     throw new IOException("Invalid interface path.");
                 int size = entry.getInt("bytes");
-                if (size <= 0 || size > 16 * 1024 * 1024) throw new IOException("Invalid interface size.");
+                if (size <= 0 || size > 8 * 1024 * 1024) throw new IOException("Invalid interface size.");
                 byte[] data = read(context.getAssets().open("alliance-ui/" + path), size);
                 if (data.length != size || !sha256(data).equals(entry.getString("sha256"))) throw new IOException("Invalid interface asset.");
                 File target = child(directory, path);
