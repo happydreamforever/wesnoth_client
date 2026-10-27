@@ -44,7 +44,13 @@ class InputChecks {
     void key(std::size_t i,SDL_Keycode key){auto& b=button(i);b.fire(gui2::event::SDL_KEY_DOWN,b,key,SDL_KMOD_NONE,"");}
 public:
     explicit InputChecks(gui2::window& window):window_(window){
-        for(std::size_t i=0;i<calls_->size();++i)gui2::event::connect_signal_mouse_left_click(button(i),[counts=calls_,i](auto&&...){++(*counts)[i];});
+        for(std::size_t i=0;i<calls_->size();++i){
+            // The native builder assigns Quit its standard CANCEL retval by
+            // ID. This counter-only fixture must stay open through ordinary
+            // activations; the long-press case restores the native retval.
+            button(i).set_retval(gui2::retval::NONE);
+            gui2::event::connect_signal_mouse_left_click(button(i),[counts=calls_,i](auto&&...){++(*counts)[i];});
+        }
     }
     void short_checks(){
         for(std::size_t i=0;i<calls_->size();++i){
@@ -65,11 +71,13 @@ public:
         window_.fire(gui2::event::SDL_KEY_DOWN,window_,SDLK_TAB,SDL_KMOD_NONE,"");
         require(window_.get_distributor().keyboard_focus()==&button(6),"Tab did not focus Campaign");
     }
-    void begin_long_press(){mouse(0,gui2::event::LEFT_BUTTON_DOWN);}
+    void begin_long_press(){button(0).set_retval(gui2::retval::CANCEL);mouse(0,gui2::event::LEFT_BUTTON_DOWN);}
     // Call after >=600ms of the real modal event loop, without blocking it.
     void finish_long_press(){
         const int before=(*calls_)[0];mouse(0,gui2::event::LEFT_BUTTON_UP);mouse(0,gui2::event::LEFT_BUTTON_CLICK);
         require((*calls_)[0]==before,"Long-press tooltip activated Quit on release");
+        require(window_.get_retval()==gui2::retval::NONE,"Long-press tooltip invoked the native Quit close action");
+        button(0).set_retval(gui2::retval::NONE);
         mouse(0,gui2::event::LEFT_BUTTON_DOWN);mouse(0,gui2::event::LEFT_BUTTON_UP);mouse(0,gui2::event::LEFT_BUTTON_CLICK);
         require((*calls_)[0]==before+1,"A long press disabled the next ordinary press");
     }
