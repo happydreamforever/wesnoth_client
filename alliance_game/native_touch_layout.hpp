@@ -32,7 +32,7 @@ inline gui2::styled_widget_definition_ptr native_control_definition(const std::s
 }
 // Clone native builders and their primary-control resolutions. The
 // immutable data pack, native option values and callbacks are preserved.
-// Leaf styles are isolated; the theme's shared chatbox gets the same touch input.
+// Leaf styles are isolated; no shared default definition is replaced.
 template<class Builder,class Definition>
 inline bool native_touch_control(gui2::builder_widget_ptr& item,const std::string& type) {
     const auto original=std::dynamic_pointer_cast<Builder>(item);if(!original)return false;
@@ -77,15 +77,8 @@ inline gui2::builder_grid_ptr native_touch_grid(const gui2::builder_grid_ptr& na
     return grid;
 }
 inline std::string prepare_native_touch_window(const std::string& source) {
-    // Native chatboxes are wrapped by size_lock, whose child builder is
-    // intentionally private. Give this theme's chatbox an owned copy as well,
-    // so its input remains readable and touchable inside that native wrapper.
-    auto& chat_styles=gui2::current_gui->second.widget_types["chatbox"];
-    if(!chat_styles.count("alliance_touch_chatbox_default")) {
-        config grid;grid.add_child("row").add_child("column").add_child("chatbox")["id"]="chat";
-        native_touch_grid(std::make_shared<gui2::builder_grid>(grid));
-        chat_styles["default"]=chat_styles.at("alliance_touch_chatbox_default");
-    }
+    // The modal theme context styles even private size_lock/chatbox children
+    // during construction, without changing a theme's default chatbox.
     auto& windows=gui2::current_gui->second.window_types;const std::string id="alliance_touch_"+source;
     if(!windows.count(id)){
         const auto found=windows.find(source);

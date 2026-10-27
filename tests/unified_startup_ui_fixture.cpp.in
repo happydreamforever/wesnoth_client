@@ -17,7 +17,7 @@ Session& current_session(){return session;}
 struct Credential{int result;std::string username="Player",password="fixture-password";};
 std::deque<Credential> credentials;std::deque<account::Reply> replies;
 std::vector<std::string> operations,messages;std::vector<bool> signup_modes,switches;
-int dialogs=0,prompts=0,backdrops=0,galleries=0;bool slow_logout=false,retry_revokes=false;
+int dialogs=0,prompts=0,backdrops=0,galleries=0,menu_scopes=0;bool slow_logout=false,retry_revokes=false;
 void message(const std::string& s){need(!dialogs,"dialog overlap");messages.push_back(s);}
 void show_failure(const account::Reply& r){message(r.error_code);}
 bool valid_username(const std::string&s){return s.size()>=3&&s.size()<=24;}
@@ -49,15 +49,17 @@ const char* ProfileReadError::what()const noexcept{return "profile failure";}
 Reply perform_request(const TrustedProfile&,const Request& input,const CancellationToken& cancellation){need(input.operation=="logout"&&session.token.empty(),"local authority retained during quit");need(!dialogs,"logout opened modal");operations.push_back(input.operation);if(slow_logout)while(!cancellation.requested())std::this_thread::sleep_for(std::chrono::milliseconds(5));return {};}
 }
 namespace alliance_game {
+struct MenuThemeScope{explicit MenuThemeScope(const char*){++menu_scopes;}~MenuThemeScope(){--menu_scopes;}};
+namespace product_ui{void draw_backdrop(const rect&) {need(menu_scopes>0,"authentication backdrop lost menu context");}}
 PlayerSession::~PlayerSession(){clear_secret(token);}
 void retry_story_results()noexcept{if(retry_revokes){session.clear();retry_revokes=false;}}
-void heroes_dialog(const alliance::TrustedProfile&){++galleries;}
+void heroes_dialog(const alliance::TrustedProfile&){need(menu_scopes>0,"gallery lost menu context");++galleries;}
 // @FUNCTIONS@
 }
 namespace {
 account::Profile profile(){account::Profile p;p.account_id="actor";p.database_generation="generation";p.username="Player";return p;}
 account::Reply ok(bool token=false){account::Reply r;r.ok=true;r.profile=profile();if(token)r.token="private-fixture-token";return r;}
-void reset(){need(!dialogs&&!backdrops);session.clear();credentials.clear();replies.clear();operations.clear();messages.clear();signup_modes.clear();switches.clear();prompts=galleries=0;slow_logout=retry_revokes=false;setenv("WESNOTH_ALLIANCE_PROFILE","fixture-profile",1);}
+void reset(){need(!dialogs&&!backdrops&&!menu_scopes);session.clear();credentials.clear();replies.clear();operations.clear();messages.clear();signup_modes.clear();switches.clear();prompts=galleries=0;slow_logout=retry_revokes=false;setenv("WESNOTH_ALLIANCE_PROFILE","fixture-profile",1);}
 void ready(){session={"token","127.0.0.1:15001:pin",profile()};}
 void passed(const char* name){std::cout<<"PASS "<<name<<'\n';}
 }

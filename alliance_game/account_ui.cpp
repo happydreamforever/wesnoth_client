@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "alliance_game/account_ui.hpp"
 #include "alliance_game/battle_ui.hpp"
+#include "alliance_game/native_menu_theme.hpp"
 #include "alliance_game/team_views.hpp"
 #include "alliance_game/android_lifecycle.hpp"
 #include "alliance_game/session_watch.hpp"
@@ -355,8 +356,7 @@ public:
     rect screen_location() override { return video::game_canvas(); }
     bool expose(const rect& region) override
     {
-        draw::fill(region, color_t{18, 24, 32, 255});
-        draw::blit(image::get_texture(image::locator("story/landscape-castle.webp~CS(-65,-65,-65)")),video::game_canvas());
+        product_ui::draw_backdrop(region);
         return true;
     }
 };
@@ -2040,6 +2040,7 @@ bool ensure_player_session(const std::string& required_account,
                            const std::string& required_generation,
                            const std::string& notice)
 {
+    MenuThemeScope menu_theme("alliance_authentication");
     AccountNetworkActivity foreground;
     static bool active=false;
     if(active)return false;
@@ -2094,11 +2095,13 @@ bool choose_owned_hero(std::string& hero_id,std::string& form_id)
 
 void show_account_dialog()
 {
+    MenuThemeScope menu_theme("alliance_heroes");
     try {auto session=player_session();if(session)heroes_dialog(session->trusted);}
     catch(...){message("Your heroes could not be loaded. Try again.");}
 }
 void show_campaign_heroes(const std::string& campaign)
 {
+    MenuThemeScope menu_theme("alliance_campaign_heroes");
     try {auto session=player_session();if(session&&reload_player(session->trusted))show_hero_gallery(gallery_entries(current_session().profile.heroes,campaign));}
     catch(...){message("Campaign heroes could not be loaded. Try again.");}
 }
@@ -2142,12 +2145,14 @@ void logout_player()
 }
 void show_teams_dialog()
 {
+    MenuThemeScope menu_theme("alliance_teams");
     if(practice_pending()||progression_pending()||shared_pending()||replay_pending())return;
     try {auto session=player_session();if(session)teams(session->trusted);}
     catch(...){message("The teams screen could not be opened. Return to the title screen and try again.");}
 }
 void show_training_dialog()
 {
+    MenuThemeScope menu_theme("alliance_training");
     try {auto session=player_session();if(session)campaign_progression(session->trusted);}
     catch(...){message("The training campaign could not be opened. Return to Campaigns and try again.");}
 }
