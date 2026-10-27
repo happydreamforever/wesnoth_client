@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "alliance_game/battle_ui.hpp"
 #include "alliance_game/product_ui_layout.hpp"
+#include "alliance_game/home_ui.hpp"
 #include "config.hpp"
 #include "filesystem.hpp"
 #include "game_config_manager.hpp"
@@ -22,21 +23,7 @@
 #include <stdexcept>
 
 namespace alliance_game {
-std::string prepare_home_window()
-{
-    const std::string id="alliance_home";
-    auto& windows=gui2::current_gui->second.window_types;if(windows.count(id))return id;
-    config definition;auto& grid=product_ui::window(definition,id);
-    product_ui::text(grid,"home_title","THE BATTLE FOR WESNOTH","alliance_title");
-    product_ui::text(grid,"home_player","","alliance_caption");
-    const std::array<const char*,9> ids{{"campaign","multiplayer","community","load","addons","achievements","editor","preferences","quit"}};
-    const std::array<const char*,9> names{{"Campaign","Room","Team","Load","My Heroes","Achievements","Map Editor","Preferences","Quit"}};
-    const std::array<const char*,9> art{{"icons/book2.png","icons/crossed_sword_and_hammer.png","icons/shield_tower.png","icons/scroll_red.png","icons/helmet_crested.png","icons/circlet_winged.png","icons/icon-editor.png","icons/action/settings.png~GS()~CS(110,80,30)","icons/action/close_25.png~GS()~CS(110,80,30)"}};
-    auto& menu=product_ui::cell(product_ui::row(grid,1),"grid");
-    for(int y=0;y<3;++y){auto& r=product_ui::row(menu,1);for(int x=0;x<3;++x){const int i=y*3+x;const std::string style="alliance_home_"+std::to_string(i);
-        product_ui::button_style(style,art[i]);auto& b=product_ui::cell(r,"button",ids[i]);b["label"]=names[i];b["definition"]=style;}}
-    windows.emplace(id,gui2::builder_window(definition));return id;
-}
+std::string prepare_home_window() { return home_ui::prepare_window(); }
 std::string prepare_login_window()
 {
     const std::string id="alliance_login";
