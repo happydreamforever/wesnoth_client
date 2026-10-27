@@ -32,7 +32,7 @@ class CitadelHomeTests(unittest.TestCase):
             self.assertIn('PASS', result.stdout)
 
     def test_real_cairo_icons_alpha_variants_and_bounded_cache(self):
-        flags = shlex.split(subprocess.check_output(['pkg-config', '--cflags', '--libs', 'cairo'], text=True))
+        flags = shlex.split(subprocess.check_output(['pkg-config', '--cflags', '--libs', 'cairo', 'libpng'], text=True))
         self.run_cpp(r'''
 #include "alliance_game/menu_icons.hpp"
 #include <cassert>
@@ -50,7 +50,10 @@ int main(){
   auto* surface=cairo_image_surface_create_from_png_stream(read,&reader);assert(cairo_surface_status(surface)==CAIRO_STATUS_SUCCESS);
   assert(cairo_image_surface_get_width(surface)==52&&cairo_image_surface_get_height(surface)==52);
   cairo_surface_flush(surface);const auto* pixels=reinterpret_cast<const std::uint32_t*>(cairo_image_surface_get_data(surface));const int stride=cairo_image_surface_get_stride(surface)/4;
-  unsigned opaque=0,antialiased=0;for(int y=0;y<52;++y)for(int x=0;x<52;++x){const auto alpha=pixels[y*stride+x]>>24;opaque+=alpha>0;antialiased+=alpha>0&&alpha<255;}
+  unsigned opaque=0,antialiased=0;for(int y=0;y<52;++y)for(int x=0;x<52;++x){const auto pixel=pixels[y*stride+x],alpha=pixel>>24;opaque+=alpha>0;antialiased+=alpha>0&&alpha<255;
+   if(alpha>32&&alpha<224)for(unsigned channel=0;channel<3;++channel){const int actual=(pixel>>(16-channel*8))&255,expected=(((0xd6b46eu>>(16-channel*8))&255)*alpha+127)/255;assert(std::abs(actual-expected)<=1);}
+   if(alpha==0)assert((pixel&0xffffff)==0);
+  }
   assert((pixels[0]>>24)==0&&opaque>150&&opaque<1800&&antialiased>50);cairo_surface_destroy(surface);
   assert(uri==image(static_cast<Symbol>(i),26,0xd6b46e,2));
   assert(uri!=image(static_cast<Symbol>(i),39,0xd6b46e,2));
