@@ -381,7 +381,7 @@ class ApkBundleTests(unittest.TestCase):
 
     def test_new_apk_inspector_binds_every_public_asset(self):
         result = self.A.inspect_apk(self.apk, self.root)
-        self.assertEqual(result['version_code'], 1192622)
+        self.assertEqual(result['version_code'], 1192623)
         self.assertEqual(result['activity'], 'org.wesnoth.offline.OfflineInitActivity')
         self.assertEqual(result['bundled_assets'], self.marker['inputs']['bundled_assets'])
 
@@ -408,6 +408,23 @@ class ApkBundleTests(unittest.TestCase):
         self.assertEqual(result['version_code'], 1192621)
         self.assertEqual(result['activity'], 'org.wesnoth.offline.OfflineInitActivity')
         self.assertEqual(result['bundled_assets'], self.marker['inputs']['bundled_assets'])
+
+    def test_historical1192622_accepts_bound_old_font_and_refuses_its_tampering(self):
+        old_font = 'startup/WesScript-Regular.otf'
+        old_bytes = b'retained old font fixture'
+        self.marker['inputs']['bundled_assets'][old_font] = B.record(old_bytes)
+        self.marker['files']['app/src/main/assets/' + old_font] = B.record(old_bytes)
+        path = self.root / 'app/src/main/assets' / old_font
+        path.write_bytes(old_bytes)
+        (self.root / self.A.MARKER).write_text(json.dumps(self.marker))
+        self.content['assets/' + old_font] = old_bytes; self.write_apk()
+        result = self.A.inspect_apk(self.apk, self.root, 1192622)
+        self.assertEqual(result['version_code'], 1192622)
+        self.assertIn(old_font, result['bundled_assets'])
+        self.assertNotIn('startup/Akademie Alte.ttf', result['bundled_assets'])
+        self.content['assets/' + old_font] = b'changed old font'; self.write_apk()
+        with self.assertRaises(self.A.BuildError):
+            self.A.inspect_apk(self.apk, self.root, 1192622)
 
 
 if __name__ == '__main__': unittest.main()

@@ -24,14 +24,17 @@ class ThemeTests(unittest.TestCase):
         T.verify_generated(ROOT)
         theme = T.load_theme(ROOT)
         self.assertEqual(theme['background'], 'alliance-ui/background/citadel-dawn.png')
-        self.assertEqual(theme['font']['source'], 'fonts/WesScript-Regular.otf')
+        self.assertEqual(theme['font']['source'], 'fonts/Akademie Alte.ttf')
         self.assertEqual(theme['body_font']['source'], 'fonts/Lato-Regular.ttf')
+        self.assertEqual(theme['palette']['parchment'], '#EED9A6')
+        self.assertEqual(theme['palette']['light_gold'], '#F6D992')
+        self.assertEqual(theme['palette']['dark_gold'], '#8E682F')
 
     def test_either_language_drift_is_refused_without_rewriting(self):
         for name in T.OUTPUTS:
             with self.subTest(name=name):
                 original = (self.repo / name).read_bytes()
-                changed = original.replace(b'D6B46E', b'FFFFFF')
+                changed = original.replace(b'E1BC6B', b'FFFFFF')
                 self.assertNotEqual(original, changed); (self.repo / name).write_bytes(changed)
                 with self.assertRaisesRegex(ValueError, 'Generated interface theme differs'):
                     T.verify_generated(self.repo)
@@ -55,6 +58,8 @@ class ThemeTests(unittest.TestCase):
             changed = json.loads(original); changed[key] = value; cases.append(json.dumps(changed))
         changed = json.loads(original); changed['palette']['gold'] = '#GGGGGG'; cases.append(json.dumps(changed))
         changed = json.loads(original); changed['font']['source'] = '../secret'; cases.append(json.dumps(changed))
+        for name in ('Akademie-Alte.ttf', 'Akademie Alte.ttf ', '../Akademie Alte.ttf', 'WesScript-Regular.otf'):
+            changed = json.loads(original); changed['font']['source'] = 'fonts/' + name; cases.append(json.dumps(changed))
         cases.append(original.replace('"format": 1,', '"format": 1, "format": 1,'))
         for value in cases:
             with self.subTest(value=value[:45]):
@@ -66,10 +71,13 @@ class ThemeTests(unittest.TestCase):
         shutil.copyfile(ROOT / T.OUTPUTS[1], source / 'ProductTheme.java')
         (source / 'ThemeHarness.java').write_text('''package org.wesnoth.offline;
 public final class ThemeHarness { public static void main(String[] ignored) {
- if(ProductTheme.GOLD!=0xFFD6B46E || ProductTheme.IVORY!=0xFFF3E7CD || ProductTheme.STONE!=0xFF514737)
+ if(ProductTheme.GOLD!=0xFFE1BC6B || ProductTheme.IVORY!=0xFFF6E9C9 || ProductTheme.STONE!=0xFF102D24)
   throw new AssertionError("shared palette");
+ if(ProductTheme.PARCHMENT!=0xFFEED9A6 || ProductTheme.LIGHT_GOLD!=0xFFF6D992 || ProductTheme.DARK_GOLD!=0xFF8E682F)
+  throw new AssertionError("shared ornamental palette");
+ if(!ProductTheme.TITLE_FONT_FAMILY.equals("Akademie Alte")) throw new AssertionError("literal title font family");
  if(!ProductTheme.BACKGROUND_ASSET.equals("alliance-ui/background/citadel-dawn.png") ||
-    !ProductTheme.TITLE_FONT_ASSET.equals("startup/WesScript-Regular.otf") ||
+    !ProductTheme.TITLE_FONT_ASSET.equals("startup/Akademie Alte.ttf") ||
     !ProductTheme.BODY_FONT_ASSET.equals("startup/Lato-Regular.ttf") ||
     !ProductTheme.TITLE_KICKER.equals("THE BATTLE FOR") || !ProductTheme.TITLE_NAME.equals("WESNOTH"))
   throw new AssertionError("shared theme assets");

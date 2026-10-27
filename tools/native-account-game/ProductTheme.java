@@ -6,14 +6,17 @@ final class ProductTheme {
     static final String BACKGROUND_ASSET = "alliance-ui/background/citadel-dawn.png";
     static final String TITLE_KICKER = "THE BATTLE FOR";
     static final String TITLE_NAME = "WESNOTH";
-    static final String TITLE_FONT_ASSET = "startup/WesScript-Regular.otf";
-    static final String TITLE_FONT_FAMILY = "script";
+    static final String TITLE_FONT_ASSET = "startup/Akademie Alte.ttf";
+    static final String TITLE_FONT_FAMILY = "Akademie Alte";
     static final String BODY_FONT_ASSET = "startup/Lato-Regular.ttf";
     static final String BODY_FONT_FAMILY = "sans";
-    static final String DESCRIPTOR_SHA256 = "a5a0c4e309b4a23c54025c678985ba8e5ecbe3ccbb56e86a286490d7e5bc61e0";
-    static final int GOLD = 0xFFD6B46E;
-    static final int IVORY = 0xFFF3E7CD;
-    static final int STONE = 0xFF514737;
-    static final int TEAL_SHADOW = 0xFF182D30;
-    static final int INK = 0xFF2E2921;
+    static final String DESCRIPTOR_SHA256 = "826334dfa755e9cd65493ef053d8479a5b559cc2d2a7ad2dd351ce27760b404a";
+    static final int GOLD = 0xFFE1BC6B;
+    static final int IVORY = 0xFFF6E9C9;
+    static final int STONE = 0xFF102D24;
+    static final int TEAL_SHADOW = 0xFF071B15;
+    static final int INK = 0xFF0A1711;
+    static final int PARCHMENT = 0xFFEED9A6;
+    static final int LIGHT_GOLD = 0xFFF6D992;
+    static final int DARK_GOLD = 0xFF8E682F;
 }

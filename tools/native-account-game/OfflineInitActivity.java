@@ -21,6 +21,7 @@ import android.widget.LinearLayout;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.ProgressBar;
+import android.widget.ScrollView;
 import android.widget.TextView;
 import java.io.File;
 import java.io.IOException;
@@ -81,14 +82,24 @@ public final class OfflineInitActivity extends Activity {
         LinearLayout layout = new LinearLayout(this);
         layout.setOrientation(LinearLayout.VERTICAL);
         layout.setGravity(Gravity.CENTER);
-        int padding = (int) (32 * getResources().getDisplayMetrics().density);
-        layout.setPadding(padding, padding, padding, padding);
+        float density = getResources().getDisplayMetrics().density;
+        int padding = (int) (32 * density);
+        layout.setPadding(padding, padding / 2, padding, padding / 2);
         Typeface script = Typeface.createFromAsset(getAssets(), ProductTheme.TITLE_FONT_ASSET);
         Typeface body = Typeface.createFromAsset(getAssets(), ProductTheme.BODY_FONT_ASSET);
-        TextView kicker = titleLine(ProductTheme.TITLE_KICKER, 30, script, ProductTheme.IVORY);
+        float titleSize = Math.min(68, (getResources().getDisplayMetrics().widthPixels / density - 80) / 7);
+        TextView kicker = titleLine(ProductTheme.TITLE_KICKER, titleSize * .42f, script, ProductTheme.IVORY);
         layout.addView(kicker, new LinearLayout.LayoutParams(-1, -2));
-        TextView title = titleLine(ProductTheme.TITLE_NAME, 68, script, ProductTheme.GOLD);
+        TextView title = titleLine(ProductTheme.TITLE_NAME, titleSize, script, ProductTheme.GOLD);
         layout.addView(title, new LinearLayout.LayoutParams(-1, -2));
+        LinearLayout preparation = new LinearLayout(this);
+        preparation.setOrientation(LinearLayout.VERTICAL);
+        preparation.setGravity(Gravity.CENTER);
+        preparation.setPadding(padding, padding / 2, padding, padding);
+        preparation.setBackground(new StartupFrame(density, false, true, false));
+        LinearLayout.LayoutParams preparationBounds = new LinearLayout.LayoutParams(-1, -2);
+        preparationBounds.topMargin = padding / 2;
+        layout.addView(preparation, preparationBounds);
         status = new TextView(this);
         status.setTypeface(body);
         status.setText("0%");
@@ -97,27 +108,40 @@ public final class OfflineInitActivity extends Activity {
         status.setShadowLayer(3, 0, 1, Color.BLACK);
         status.setGravity(Gravity.CENTER);
         status.setPadding(0, padding / 2, 0, padding / 2);
-        layout.addView(status);
+        preparation.addView(status);
         progress = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
         progress.setMax(100);
-        progress.setProgressTintList(android.content.res.ColorStateList.valueOf(ProductTheme.GOLD));
-        progress.setProgressBackgroundTintList(android.content.res.ColorStateList.valueOf(withAlpha(ProductTheme.STONE, 210)));
-        layout.addView(progress, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+        progress.setProgressDrawable(new StartupFrame(density, false, false, true));
+        preparation.addView(progress, new LinearLayout.LayoutParams(-1, (int) (28 * density)));
+        LinearLayout actions = new LinearLayout(this);
+        actions.setOrientation(LinearLayout.HORIZONTAL);
+        preparation.addView(actions, new LinearLayout.LayoutParams(-1, -2));
         retry = new Button(this);
-        styleAction(retry, body);
+        styleAction(retry, body, true);
         retry.setText("Retry");
         retry.setVisibility(View.GONE);
         retry.setOnClickListener(view -> begin());
-        layout.addView(retry);
+        LinearLayout.LayoutParams retryBounds = new LinearLayout.LayoutParams(0, (int) (52 * density), 1);
+        retryBounds.topMargin = padding / 2; retryBounds.rightMargin = padding / 4;
+        actions.addView(retry, retryBounds);
         close = new Button(this);
-        styleAction(close, body);
+        styleAction(close, body, false);
         close.setText("Close");
         close.setVisibility(View.GONE);
         close.setOnClickListener(view -> WesnothGameTask.finish(this));
-        layout.addView(close);
-        FrameLayout.LayoutParams panel = new FrameLayout.LayoutParams(
-                Math.min(getResources().getDisplayMetrics().widthPixels, (int) (720 * getResources().getDisplayMetrics().density)), -2, Gravity.CENTER);
-        screen.addView(layout, panel);
+        LinearLayout.LayoutParams closeBounds = new LinearLayout.LayoutParams(0, (int) (52 * density), 1);
+        closeBounds.topMargin = padding / 2; closeBounds.leftMargin = padding / 4;
+        actions.addView(close, closeBounds);
+        // A small display or enlarged text may scroll the error actions into view.
+        ScrollView scroll = new ScrollView(this);
+        scroll.setFillViewport(true);
+        LinearLayout centered = new LinearLayout(this);
+        centered.setGravity(Gravity.CENTER);
+        centered.setOrientation(LinearLayout.VERTICAL);
+        centered.addView(layout, new LinearLayout.LayoutParams(
+                Math.min(getResources().getDisplayMetrics().widthPixels, (int) (720 * density)), -2));
+        scroll.addView(centered, new ScrollView.LayoutParams(-1, -2));
+        screen.addView(scroll, new FrameLayout.LayoutParams(-1, -1));
         setContentView(screen);
         Log.i(TAG, "WESNOTH_STARTUP_READY run_id=" + runId);
         begin();
@@ -127,7 +151,7 @@ public final class OfflineInitActivity extends Activity {
         return (color & 0x00ffffff) | (alpha << 24);
     }
 
-    private TextView titleLine(String text, int size, Typeface script, int color) {
+    private TextView titleLine(String text, float size, Typeface script, int color) {
         TextView title = new TextView(this);
         title.setText(text);
         title.setTypeface(script);
@@ -139,14 +163,10 @@ public final class OfflineInitActivity extends Activity {
         return title;
     }
 
-    private void styleAction(Button button, Typeface body) {
+    private void styleAction(Button button, Typeface body, boolean primary) {
         float density = getResources().getDisplayMetrics().density;
-        GradientDrawable surface = new GradientDrawable();
-        surface.setColor(ProductTheme.STONE);
-        surface.setStroke(Math.max(1, (int) density), ProductTheme.GOLD);
-        surface.setCornerRadius(4 * density);
-        button.setBackground(surface);
-        button.setTextColor(ProductTheme.IVORY);
+        button.setBackground(new StartupFrame(density, primary, false, false));
+        button.setTextColor(primary ? ProductTheme.STONE : ProductTheme.IVORY);
         button.setTypeface(body);
         button.setTextSize(18);
         button.setMinHeight((int) (48 * density));

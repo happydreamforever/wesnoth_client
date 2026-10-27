@@ -4,10 +4,10 @@
   "title_kicker": "THE BATTLE FOR",
   "title_name": "WESNOTH",
   "font": {
-    "asset": "startup/WesScript-Regular.otf",
-    "source": "fonts/WesScript-Regular.otf",
-    "bytes": 44156,
-    "sha256": "39fb7d2e5309478d6325cb29defd405ef486bd05dd8f8704bb3cef951c0ce6fb"
+    "asset": "startup/Akademie Alte.ttf",
+    "source": "fonts/Akademie Alte.ttf",
+    "bytes": 61620,
+    "sha256": "3b5c0ac12ccba9a49cdc01348d984d62141309ba23535fa179dd75377e4a79c2"
   },
   "body_font": {
     "asset": "startup/Lato-Regular.ttf",
@@ -16,10 +16,13 @@
     "sha256": "6f6940be0835c3ddec9199e5fc42be4cbc61ebcfd58c623fdf719366253f1780"
   },
   "palette": {
-    "gold": "#D6B46E",
-    "ivory": "#F3E7CD",
-    "stone": "#514737",
-    "teal_shadow": "#182D30",
-    "ink": "#2E2921"
+    "gold": "#E1BC6B",
+    "ivory": "#F6E9C9",
+    "stone": "#102D24",
+    "teal_shadow": "#071B15",
+    "ink": "#0A1711",
+    "parchment": "#EED9A6",
+    "light_gold": "#F6D992",
+    "dark_gold": "#8E682F"
   }
 }

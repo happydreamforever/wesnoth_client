@@ -9,7 +9,7 @@ import re
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = 'tools/native-account-game/ui-theme.json'
 OUTPUTS = ('alliance_game/product_theme.hpp', 'tools/native-account-game/ProductTheme.java')
-COLORS = ('gold', 'ivory', 'stone', 'teal_shadow', 'ink')
+COLORS = ('gold', 'ivory', 'stone', 'teal_shadow', 'ink', 'parchment', 'light_gold', 'dark_gold')
 
 
 def load_theme(repo):
@@ -32,7 +32,7 @@ def load_theme(repo):
     for name in ('title_kicker', 'title_name'):
         if not isinstance(value[name], str) or not re.fullmatch(r'[A-Z][A-Z ]{0,39}', value[name]):
             raise ValueError('Invalid interface title.')
-    for key, filename in (('font', 'WesScript-Regular.otf'), ('body_font', 'Lato-Regular.ttf')):
+    for key, filename in (('font', 'Akademie Alte.ttf'), ('body_font', 'Lato-Regular.ttf')):
         font = value[key]
         if (not isinstance(font, dict) or set(font) != {'asset', 'source', 'bytes', 'sha256'}
                 or font['asset'] != 'startup/' + filename or font['source'] != 'fonts/' + filename
@@ -58,7 +58,7 @@ def generated(repo):
             'final class ProductTheme {', '    private ProductTheme() {}']
     strings = {'background_asset': theme['background'], 'title_kicker': theme['title_kicker'],
                'title_name': theme['title_name'], 'title_font_asset': theme['font']['asset'],
-               'title_font_family': 'script', 'body_font_asset': theme['body_font']['asset'],
+               'title_font_family': 'Akademie Alte', 'body_font_asset': theme['body_font']['asset'],
                'body_font_family': 'sans', 'descriptor_sha256': digest}
     for name, value in strings.items():
         native.append(f'inline constexpr const char* {name} = {json.dumps(value)};')
