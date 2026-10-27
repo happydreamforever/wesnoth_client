@@ -15,6 +15,45 @@ inline void verify_native_load_geometry(gui2::window& window) {
     if(name.x+name.w>date.x)throw std::runtime_error("Load sorting headings overlap");
 }
 
+inline void verify_native_preferences_geometry(gui2::window& window,bool check_tabs_at_top=true) {
+    const auto bounds=window.get_rectangle();
+    const auto close=window.find_widget<gui2::button>("ok").get_rectangle();
+    const auto title=window.find_widget<gui2::label>("title").get_rectangle();
+    const auto pages=window.find_widget<gui2::scrollbar_panel>("alliance_preferences_scroll").get_rectangle();
+    for(const auto& control:{title,pages,close}) {
+        if(control.w<=0 || control.h<=0 || control.x<bounds.x || control.y<bounds.y ||
+            control.x+control.w>bounds.x+bounds.w || control.y+control.h>bounds.y+bounds.h)
+            throw std::runtime_error("Preferences title, pages or Close exceeds its viewport");
+    }
+    if(check_tabs_at_top) {
+        auto& navigation=window.find_widget<gui2::tab_container>("pager").get_grid().find_widget<gui2::listbox>("_tab_list");
+        if(navigation.get_item_count()!=6)throw std::runtime_error("Preferences navigation lost a tab");
+        for(unsigned index=0;index<6;++index) {
+            const auto tab=navigation.get_row_grid(index)->get_rectangle();
+            if(tab.w<48 || tab.h<48 || tab.x<pages.x || tab.y<pages.y ||
+                tab.x+tab.w>pages.x+pages.w || tab.y+tab.h>pages.y+pages.h)
+                throw std::runtime_error("Preferences tab is undersized or outside its initial viewport");
+        }
+    }
+    auto& multiplayer=window.find_widget<gui2::tab_container>("multiplayer_pager");
+    const auto strip=multiplayer.find_widget<gui2::listbox>("_tab_list").get_rectangle();
+    if(window.find_widget<gui2::tab_container>("pager").get_active_tab_index()==4 && strip.h<48)
+        throw std::runtime_error("Preferences nested tabs are clipped below touch height");
+    const auto tab=window.find_widget<gui2::tab_container>("pager").get_active_tab_index();
+    if(tab==5) {
+        auto& advanced=window.find_widget<gui2::listbox>("advanced_prefs");
+        if(advanced.get_item_count()==0 || advanced.get_row_grid(0)->find_widget<gui2::toggle_button>("value_toggle").get_height()<48)
+            throw std::runtime_error("Preferences constructor-built Advanced target is undersized");
+    }
+    if(tab==1) {
+        auto& hotkeys=window.find_widget<gui2::listbox>("list_hotkeys");
+        if(hotkeys.get_item_count()==0 || hotkeys.get_row_grid(0)->get_height()<48)
+            throw std::runtime_error("Preferences constructor-built Hotkey target is undersized");
+    }
+    if(close.w<48 || close.h<48 || pages.y<title.y+title.h || pages.y+pages.h>close.y)
+        throw std::runtime_error("Preferences scroll content covers its fixed title or Close");
+}
+
 inline void verify_native_menu_theme_boundaries() {
     using namespace alliance_game;
     auto require=[](bool value,const char* message){if(!value)throw std::runtime_error(message);};
@@ -29,6 +68,8 @@ inline void verify_native_menu_theme_boundaries() {
         const auto button=gui2::get_control("button","default");
         const auto label=gui2::get_control("label","default");
         const auto chat=gui2::get_control("chatbox","default");
+        const auto tabs=gui2::get_control("tab_container","horizontal_no_image");
+        const auto tabs_grid=std::static_pointer_cast<gui2::tab_container_definition::resolution>(tabs)->grid;
         const config button_state=button->state.front().canvas_cfg_;
         const config label_state=label->state.front().canvas_cfg_;
         const auto original_width=button->min_width,original_height=button->min_height;
@@ -43,6 +84,16 @@ inline void verify_native_menu_theme_boundaries() {
         }
         require(gui2::get_window_builder("game_load").grid==original_load_grid,
             "Load sizing changed the shared native builder");
+        const auto& original_preferences=gui2::get_window_builder("preferences_dialog");
+        const auto original_preferences_grid=original_preferences.grid;
+        {
+            MenuThemeScope preferences("preferences_dialog");
+            const auto& scoped=preferences.builder("preferences_dialog");
+            require(&scoped!=&original_preferences && scoped.grid!=original_preferences_grid,
+                "Preferences scrolling reused the shared native builder");
+        }
+        require(gui2::get_window_builder("preferences_dialog").grid==original_preferences_grid,
+            "Preferences scrolling changed the shared native builder");
         const auto default_chat_definition=gui2::default_gui->second.widget_types.at("chatbox").at("default");
         prepare_native_touch_window("campaign_selection");
         require(gui2::default_gui->second.widget_types.at("chatbox").at("default")==default_chat_definition,
@@ -65,6 +116,14 @@ inline void verify_native_menu_theme_boundaries() {
             require(themed->state.front().canvas_cfg_!=button_state,"Menu action retained its original surface");
             require(gui2::get_control("label","default")!=label,"Native menu label was not cloned");
             require(gui2::get_control("chatbox","default")!=chat,"Private native chatbox was not cloned");
+            const auto scoped_tabs=gui2::get_control("tab_container","horizontal_no_image");
+            require(scoped_tabs!=tabs && std::static_pointer_cast<gui2::tab_container_definition::resolution>(scoped_tabs)->grid!=tabs_grid,
+                "Horizontal menu tabs reused their shared native grid");
+            const auto checkbox=gui2::get_control("toggle_button","no_label");
+            for(const auto& state:checkbox->state)for(const auto& image:state.canvas_cfg_.child_range("image"))
+                if(image["name"].str().compare(0,20,"buttons/modern/check")==0)
+                    require(image["y"].str()=="((height - image_height) / 2)",
+                        "Celes checkmark is not centred within its touch-sized checkbox");
             {
                 MenuThemeScope popup("prompt");
                 require(menu_theme_depth()==2 && gui2::get_control("button","default")==themed,
@@ -77,6 +136,9 @@ inline void verify_native_menu_theme_boundaries() {
             gui2::get_control("chatbox","default")==chat,"Original native controls were not restored after menu exit");
         require(button->state.front().canvas_cfg_==button_state && label->state.front().canvas_cfg_==label_state,
             "Menu styling mutated a shared native canvas");
+        require(gui2::get_control("tab_container","horizontal_no_image")==tabs &&
+            std::static_pointer_cast<gui2::tab_container_definition::resolution>(tabs)->grid==tabs_grid,
+            "Menu tabs changed their shared native grid");
         require(button->min_width==original_width && button->min_height==original_height,
             "Menu touch sizing changed the original gameplay geometry");
         if(previous_native && previous_native!=button)require(previous_themed!=themed,

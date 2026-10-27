@@ -2,6 +2,7 @@
 from hashlib import sha256
 
 MODAL_SHA256 = "f1619b00cac2591e0daa6809e360826b0881352225d38daa494218a2017c21a8"
+PREFERENCES_SHA256 = "084421f293c263e5d02f36c5621a9bf30196172fdc9853295d4eed39f8d39367"
 GUI_SHA256 = "11e25ece783200933e3b2ca370468129c29d2a3b13d84ab9040b462eb1a15917"
 
 
@@ -31,3 +32,13 @@ def generate_gui_theme_overlay(source: bytes) -> bytes:
         b'\tconst auto selected = get_best_resolution(resolutions, [&](const resolution_definition_ptr& ptr) {')
     return once(source, b'\t});\n}\n\nconst builder_window::window_resolution& get_window_builder',
         b'\t});\n\treturn alliance_game::menu_control_resolution(control_type, definition, selected);\n}\n\nconst builder_window::window_resolution& get_window_builder')
+
+
+def generate_preferences_theme_overlay(source: bytes) -> bytes:
+    if sha256(source).hexdigest() != PREFERENCES_SHA256:
+        raise ValueError("Pinned Preferences source differs; original preserved.")
+    source = b'#include "alliance_game/native_menu_theme.hpp"\n' + source
+    # Preferences populates lists in its derived constructor, after the base
+    # window construction context has ended and before modal_dialog::show().
+    return once(source, b'\n{\n\tinitialize_callbacks();\n}',
+        b'\n{\n\talliance_game::MenuThemeScope menu_theme(id());\n\tinitialize_callbacks();\n}')

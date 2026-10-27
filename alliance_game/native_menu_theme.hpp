@@ -66,6 +66,58 @@ inline gui2::builder_grid_ptr menu_load_grid(const gui2::builder_grid_ptr& origi
     }
     return copy;
 }
+inline gui2::builder_grid_ptr menu_tab_grid(const gui2::builder_grid_ptr& original,bool horizontal) {
+    if(!original)return {};
+    auto copy=std::make_shared<gui2::builder_grid>(*original);
+    for(std::size_t index=0;index<copy->widgets.size();++index) {
+        auto& item=copy->widgets[index];
+        if(const auto nested=std::dynamic_pointer_cast<gui2::builder_grid>(item)) {
+            item=menu_tab_grid(nested,horizontal);
+        } else if(item->id=="_tab_list") {
+            if(!horizontal) {
+                // Six 82px native tabs fit the 532px Preferences viewport.
+                // Pin them to its top instead of centring in the taller page.
+                copy->flags[index]=(copy->flags[index]&~gui2::grid::VERTICAL_MASK)|gui2::grid::VERTICAL_ALIGN_TOP;
+                continue;
+            }
+            // Horizontal native lists can shrink below their touch-sized rows.
+            // Keep the tab strip reachable while the surrounding page scrolls.
+            config cfg;cfg["definition"]="default";
+            for(int layer=0;layer<2;++layer) {
+                auto& row=cfg.add_child("layer").add_child("row");row["grow_factor"]=1;
+                auto& column=row.add_child("column");column["grow_factor"]=1;
+                column["horizontal_grow"]=true;column["vertical_grow"]=true;
+                auto& spacer=column.add_child("spacer");spacer["definition"]="default";
+                if(layer==0)spacer["height"]=48;
+            }
+            auto stack=std::make_shared<gui2::implementation::builder_stacked_widget>(cfg);
+            stack->stack.at(1).widgets.at(0)=item;item=std::move(stack);
+        }
+    }
+    return copy;
+}
+inline gui2::builder_grid_ptr menu_preferences_grid(const gui2::builder_grid_ptr& original) {
+    if(!original)return {};
+    auto copy=std::make_shared<gui2::builder_grid>(*original);
+    for(auto& item:copy->widgets) {
+        if(const auto nested=std::dynamic_pointer_cast<gui2::builder_grid>(item)) {
+            item=menu_preferences_grid(nested);
+        } else if(item->id=="pager") {
+            // Touch-sized preferences exceed the native 650px window cap.
+            // Scroll only the existing pager, leaving the native title and
+            // Close footer reachable. All page widgets/callbacks stay native.
+            config cfg;cfg["id"]="alliance_preferences_scroll";cfg["definition"]="default";
+            cfg["horizontal_scrollbar_mode"]="never";cfg["vertical_scrollbar_mode"]="initial_auto";
+            auto& row=cfg.add_child("definition").add_child("row");row["grow_factor"]=1;
+            auto& column=row.add_child("column");column["grow_factor"]=1;
+            column["horizontal_grow"]=true;column["vertical_grow"]=true;
+            column.add_child("spacer")["definition"]="default";
+            auto scroll=std::make_shared<gui2::implementation::builder_scrollbar_panel>(cfg);
+            scroll->grid_->widgets.at(0)=item;item=std::move(scroll);
+        }
+    }
+    return copy;
+}
 class MenuThemeScope {
     bool enabled_;
 public:
@@ -76,11 +128,11 @@ public:
     MenuThemeScope& operator=(const MenuThemeScope&)=delete;
     const gui2::builder_window::window_resolution& builder(const std::string& id) const {
         const auto& original=gui2::get_window_builder(id);
-        if(id!="game_load")return original;
+        if(id!="game_load" && id!="preferences_dialog")return original;
         using Resolution=gui2::builder_window::window_resolution;
         static std::map<const Resolution*,Resolution> copies;
         const auto found=copies.find(&original);if(found!=copies.end())return found->second;
-        auto copy=original;copy.grid=menu_load_grid(original.grid);
+        auto copy=original;copy.grid=id=="game_load"?menu_load_grid(original.grid):menu_preferences_grid(original.grid);
         return copies.emplace(&original,std::move(copy)).first->second;
     }
 };
@@ -95,7 +147,11 @@ inline bool native_menu_surface_image(const std::string& name) {
 }
 inline void native_menu_image_colour(config& shape,bool disabled) {
     const auto name=shape["name"].str();
-    // Keep positioner/checkbox state artwork and all native sizing formulas.
+    // Celes assumes a 20px checkbox and leaves its tick at y=0. Centre that
+    // known image with its box when the scoped touch target is made taller.
+    if(name.compare(0,20,"buttons/modern/check")==0)
+        shape["y"]="((height - image_height) / 2)";
+    // Keep positioner/checkbox state artwork and all other native formulas.
     // Only known chrome is tinted: unit portraits, minimaps and colour-coded
     // faction/side icons must retain their actual colours.
     if(name.compare(0,19,"buttons/scrollbars/")==0 ||
@@ -191,6 +247,10 @@ inline gui2::resolution_definition_ptr menu_control_resolution(const std::string
     }
     copy->text_font_size=gui2::typed_formula<unsigned>(copy->text_font_size.has_formula()?18u:
         std::max(18u,copy->text_font_size()));
+    if(type=="tab_container") {
+        auto tabs=std::static_pointer_cast<gui2::tab_container_definition::resolution>(copy);
+        tabs->grid=menu_tab_grid(tabs->grid,definition=="horizontal" || definition=="horizontal_no_image");
+    }
     if(type=="chatbox") {
         auto chat=std::static_pointer_cast<gui2::chatbox_definition::resolution>(copy);
         chat->grid=native_touch_grid(chat->grid);
