@@ -71,7 +71,15 @@ public:
         window_.fire(gui2::event::SDL_KEY_DOWN,window_,SDLK_TAB,SDL_KMOD_NONE,"");
         require(window_.get_distributor().keyboard_focus()==&button(6),"Tab did not focus Campaign");
     }
-    void begin_long_press(){button(0).set_retval(gui2::retval::CANCEL);mouse(0,gui2::event::LEFT_BUTTON_DOWN);}
+    void begin_long_press(){
+        auto& quit=button(0);quit.set_retval(gui2::retval::CANCEL);
+        // Move SDL's real pointer as well as distributor focus; otherwise a
+        // native MOUSE_LEAVE can cancel the timer after synthetic DOWN.
+        gui2::dialogs::tip::remove();quit.set_wants_mouse_hover(false);
+        const auto box=quit.get_rectangle();
+        SDL_WarpMouseInWindow(video::get_window(),box.x+box.w/2,box.y+box.h/2);
+        mouse(0,gui2::event::LEFT_BUTTON_DOWN);
+    }
     // Call after >=600ms of the real modal event loop, without blocking it.
     void finish_long_press(){
         const int before=(*calls_)[0];mouse(0,gui2::event::LEFT_BUTTON_UP);mouse(0,gui2::event::LEFT_BUTTON_CLICK);
