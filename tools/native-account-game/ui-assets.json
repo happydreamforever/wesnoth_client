@@ -10,6 +10,11 @@
       "path": "hero/thea.png",
       "bytes": 2190871,
       "sha256": "1e3fe73953569a247e6055780e84125cf3bbe5148546fe449a3c7057d1a3f7f7"
+    },
+    {
+      "path": "background/citadel-dawn.png",
+      "bytes": 2739237,
+      "sha256": "ff3271e5ac176041517c42739ab15afbd2d57c69b56fbf290164d793e42b36ce"
     }
   ]
 }
