@@ -87,7 +87,8 @@ LAUNCHER_SOURCE = 'game_launcher.cpp'
 CAMPAIGN_SOURCE = 'game_initialization/playcampaign.cpp'
 CAMPAIGN_SELECTION_SOURCE = 'gui/dialogs/campaign_selection.cpp'
 MENU_THEME_OVERLAYS = {'gui/dialogs/modal_dialog.cpp': 'generate_modal_theme_overlay',
-                       'gui/core/gui_definition.cpp': 'generate_gui_theme_overlay'}
+                       'gui/core/gui_definition.cpp': 'generate_gui_theme_overlay',
+                       'gui/dialogs/preferences_dialog.cpp': 'generate_preferences_theme_overlay'}
 CONNECTION_SOURCE = 'wesnothd_connection.cpp'
 SYNCED_COMMANDS_SOURCE = 'synced_commands.cpp'
 STORY_OVERLAYS = {'game_config_manager.cpp': 'generate_config_manager_overlay',

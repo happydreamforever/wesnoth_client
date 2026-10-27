@@ -118,7 +118,7 @@ class AccountBuildTests(unittest.TestCase):
             "actions/advancement.cpp", "scripting/lua_unit.cpp", "game_initialization/connect_engine.cpp",
             "gui/dialogs/multiplayer/mp_staging.cpp", "gui/dialogs/multiplayer/mp_join_game.cpp",
             "gui/dialogs/multiplayer/mp_create_game.cpp", "gui/dialogs/multiplayer/lobby.cpp",
-            "gui/dialogs/modal_dialog.cpp", "gui/core/gui_definition.cpp")))
+            "gui/dialogs/modal_dialog.cpp", "gui/core/gui_definition.cpp", "gui/dialogs/preferences_dialog.cpp")))
         for name, record in objects.items():
             line = ' ' + A.cmake_literal(self.repo / record['path'])
             self.assertEqual(line in linked, name not in A.REPLACED_SOURCES, name)
@@ -144,7 +144,7 @@ class AccountBuildTests(unittest.TestCase):
         cmake = (ROOT / 'tools/native-account-game/CMakeLists.txt').read_text()
         self.assertIn('"${ACCOUNT_STAGE}/campaign_selection.cpp"', cmake)
 
-    def test_scoped_menu_overlays_bind_and_preserve_both_pinned_sources(self):
+    def test_scoped_menu_overlays_bind_and_preserve_all_pinned_sources(self):
         overlay = A.overlay_module(ROOT, 'menu_theme_overlay')
         generated = A.unified_overlays(ROOT)
         cmake = (ROOT / 'tools/native-account-game/CMakeLists.txt').read_text()
@@ -157,6 +157,19 @@ class AccountBuildTests(unittest.TestCase):
             self.assertIn(name, A.REPLACED_SOURCES)
             with self.assertRaises(ValueError): getattr(overlay, transform)(before + b'\n')
             with self.assertRaises(ValueError): getattr(overlay, transform)(result)
+
+    def test_preferences_overlay_only_scopes_constructor_without_changing_callbacks(self):
+        overlay = A.overlay_module(ROOT, 'menu_theme_overlay')
+        original = (ROOT / 'engine/src/gui/dialogs/preferences_dialog.cpp').read_bytes()
+        generated = overlay.generate_preferences_theme_overlay(original)
+        include = b'#include "alliance_game/native_menu_theme.hpp"\n'
+        scope = b'\talliance_game::MenuThemeScope menu_theme(id());\n'
+        self.assertTrue(generated.startswith(include))
+        self.assertEqual(generated.count(scope), 1)
+        self.assertIn(scope + b'\tinitialize_callbacks();\n}', generated)
+        self.assertEqual(generated.removeprefix(include).replace(scope, b'', 1), original)
+        self.assertIn('alliance_game/menu_theme_overlay.py', A.NEW_INPUTS)
+        self.assertEqual(len(A.REPLACED_SOURCES), 20)
 
     def test_native_touch_header_change_invalidates_owned_stage_without_rewriting_it(self):
         with tempfile.TemporaryDirectory(prefix='native-touch-binding-') as temporary:
