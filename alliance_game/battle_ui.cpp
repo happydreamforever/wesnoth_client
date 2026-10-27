@@ -29,17 +29,30 @@ std::string prepare_login_window()
     const std::string id="alliance_login";
     auto& windows=gui2::current_gui->second.window_types;if(windows.count(id))return id;
     config definition;auto& grid=product_ui::window(definition,id,true);
-    auto& heading_grid=product_ui::cell(product_ui::row(grid),"grid");
+    // Native fields and return values remain the account controller's own.
+    // Only this compact layout and its ornamental presentation are replaced.
+    auto& heading_grid=product_ui::cell(product_ui::row(grid),"grid","",1,0);
     auto& heading=product_ui::row(heading_grid);
-    auto& title=product_ui::cell(heading,"label","auth_title");title["definition"]="alliance_title";title["label"]="Wesnoth";
-    auto& close=product_ui::cell(heading,"button","cancel",0);close["label"]="×";close["definition"]="alliance_close";close["tooltip"]="Quit";close["return_value"]=13;
-    product_ui::text(grid,"login_label","","alliance_caption");
-    product_ui::text(grid,"username_label","Username");product_ui::cell(product_ui::row(grid),"text_box","user_name");
-    product_ui::text(grid,"password_label","Password");auto& password_grid=product_ui::cell(product_ui::row(grid),"grid");auto& password_row=product_ui::row(password_grid);product_ui::cell(password_row,"text_box","password");auto& eye=product_ui::cell(password_row,"toggle_button","remember_password",0);eye["definition"]="alliance_eye";eye["tooltip"]="Show password";
-    product_ui::text(grid,"confirmation_label","Confirm password");product_ui::cell(product_ui::row(grid),"text_box","confirmation");
-    auto& actions_grid=product_ui::cell(product_ui::row(grid),"grid");
-    auto& actions=product_ui::row(actions_grid);product_ui::cell(actions,"button","ok")["label"]="Log in";
-    auto& signup=product_ui::cell(actions,"button","signup");signup["label"]="Sign up";signup["return_value"]=11;
+    auto& balance=product_ui::cell(heading,"spacer","",0,0);balance["width"]=48;balance["height"]=48;
+    auto& crest=product_ui::cell(heading,"drawing","auth_crest",1,0);crest["width"]=48;crest["height"]=38;
+    emerald_chrome::ornament_canvas(crest.add_child("draw"),38,"((width - 38) / 2)","0");
+    auto& close=product_ui::cell(heading,"button","cancel",0,0);close["label"]="×";close["definition"]="alliance_close";close["tooltip"]="Quit";close["return_value"]=13;
+    auto& title=product_ui::text(grid,"auth_title","","alliance_auth_title");title["use_markup"]=true;
+    auto separator=[&](const char* id){
+        auto& art=product_ui::cell(product_ui::row(grid),"drawing",id,1,0);art["width"]=100;art["height"]=24;
+        auto& draw=art.add_child("draw");
+        for(const bool right:{false,true}){auto& line=draw.add_child("line");line["x1"]=right?"((width + 36) / 2)":"(width / 8)";line["x2"]=right?"(width * 7 / 8)":"((width - 36) / 2)";line["y1"]=12;line["y2"]=12;line["color"]=product_theme::dark_gold_rgba;line["thickness"]=1;}
+        emerald_chrome::ornament_canvas(draw,24,"((width - 24) / 2)","0");
+    };
+    separator("auth_heading_separator");
+    auto& notice=product_ui::text(grid,"login_label","","alliance_caption");notice["text_alignment"]="center";
+    auto field_label=[&](const char* id,const char* value){auto& label=product_ui::cell(product_ui::row(grid),"label",id,1,2);label["label"]=value;label["definition"]="alliance_caption";};
+    field_label("username_label","Username");product_ui::cell(product_ui::row(grid),"text_box","user_name",1,3);
+    field_label("password_label","Password");auto& password_grid=product_ui::cell(product_ui::row(grid),"grid","",1,3);auto& password_row=product_ui::row(password_grid);product_ui::cell(password_row,"text_box","password",1,0);auto& eye=product_ui::cell(password_row,"toggle_button","remember_password",0,0);eye["definition"]="alliance_eye";eye["tooltip"]="Show password";
+    field_label("confirmation_label","Confirm password");product_ui::cell(product_ui::row(grid),"text_box","confirmation",1,3);
+    auto& primary=product_ui::cell(product_ui::row(grid),"button","ok",1,4);primary["definition"]="alliance_auth_primary";primary["use_markup"]=true;
+    separator("auth_action_separator");
+    auto& signup=product_ui::cell(product_ui::row(grid),"button","signup",1,4);signup["definition"]="alliance_auth_secondary";signup["use_markup"]=true;signup["return_value"]=11;
     windows.emplace(id,gui2::builder_window(definition));return id;
 }
 namespace {

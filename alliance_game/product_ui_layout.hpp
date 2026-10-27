@@ -3,6 +3,7 @@
 #include "config.hpp"
 #include "alliance_game/product_theme.hpp"
 #include "alliance_game/menu_icons.hpp"
+#include "alliance_game/emerald_chrome.hpp"
 #include "draw.hpp"
 #include "picture.hpp"
 #include "video.hpp"
@@ -42,17 +43,17 @@ inline void background_canvas(config& canvas,bool shaded=false) {
  image["w"]="(ceil(image_original_width * max(width * 1.0 / image_original_width, height * 1.0 / image_original_height)))";
  image["h"]="(ceil(image_original_height * max(width * 1.0 / image_original_width, height * 1.0 / image_original_height)))";
  image["x"]="((width - image_width) / 2)";image["y"]="((height - image_height) / 2)";
- if(shaded){auto& veil=canvas.add_child("rectangle");veil["w"]="(width)";veil["h"]="(height)";veil["fill_color"]="24,45,48,70";}
+ if(shaded){auto& veil=canvas.add_child("rectangle");veil["w"]="(width)";veil["h"]="(height)";veil["fill_color"]="7,27,21,105";}
 }
 inline void draw_backdrop(const rect& region) {
  const auto screen=video::game_canvas();const auto clip=draw::reduce_clip(region);
- draw::fill(region,color_t{81,71,55,255});
+ draw::fill(region,color_t::from_argb_bytes(0xff000000u|product_theme::stone_rgb));
  const auto image=image::get_texture(image::locator(background_art()),image::scale_quality::linear);
  if(!image||image.w()<=0||image.h()<=0)return;
  const double scale=std::max(double(screen.w)/image.w(),double(screen.h)/image.h());
  const int width=static_cast<int>(std::ceil(image.w()*scale)),height=static_cast<int>(std::ceil(image.h()*scale));
  draw::blit(image,rect{screen.x+(screen.w-width)/2,screen.y+(screen.h-height)/2,width,height});
- draw::fill(region,color_t{24,45,48,70});
+ draw::fill(region,color_t{7,27,21,105});
 }
 inline config& row(config& grid, int grow=0) { auto& r=grid.add_child("row");r["grow_factor"]=grow;return r; }
 inline config& cell(config& r,const std::string& type,const std::string& id="",int grow=1,int padding=6) {
@@ -72,28 +73,32 @@ inline void caption(config& draw,int size,const char* color,bool centered=false,
  auto& t=draw.add_child("text");t["x"]=centered?"((width - text_width) / 2)":"0";
  t["y"]=tile?"(height - 42)":centered?"((height - text_height) / 2)":"0";
  t["w"]=centered?"(text_width)":"(width)";t["h"]="(text_height)";t["maximum_width"]="(width)";
- t["font_size"]=size;if(size>=30)t["font_family"]="script";t["color"]=color;t["text"]="(text)";t["text_markup"]="(text_markup)";
+ t["font_size"]=size;t["color"]=color;t["text"]="(text)";t["text_markup"]="(text_markup)";
 }
 inline void button_style(const std::string& id,const char* widget="button") {
  config c;c["id"]=id;c["description"]="Ancient fantasy action";auto& r=c.add_child("resolution");
  r["min_width"]=48;r["default_width"]=id=="alliance_close"?48:160;r["min_height"]=48;
  r["default_height"]=48;r["text_extra_width"]=28;r["text_extra_height"]=20;r["text_font_size"]=20;
+ const bool primary=id=="alliance_auth_primary";const bool auth=primary||id=="alliance_auth_secondary";
+ if(auth){r["text_font_size"]=24;r["default_height"]=52;r["min_height"]=52;}
  const std::array<const char*,4> states{{"state_enabled","state_disabled","state_pressed","state_focused"}};
  for(std::size_t i=0;i<states.size();++i){auto& d=r.add_child(states[i]).add_child("draw");
-  rectangle(d,i==2?teal:i==3?"111,93,61,255":stone,i==3?ivory:gold);
-  caption(d,20,i==1?"166,158,139,255":ivory,true);}
+  emerald_chrome::frame_canvas(d,primary?emerald_chrome::Kind::parchment:emerald_chrome::Kind::button,i==2||i==3,i==1,primary?20:12);
+  if(auth)emerald_chrome::reset_markup_cache(d);
+  caption(d,auth?24:20,i==1?"150,158,139,255":primary?product_theme::ink_rgba:ivory,true);}
  gui2::add_single_widget_definition(widget,id,c);
 }
 inline void prepare_theme() {
  if(gui2::current_gui->second.widget_types["button"].count("alliance_button"))return;
  button_style("alliance_button");button_style("alliance_close");
+ button_style("alliance_auth_primary");button_style("alliance_auth_secondary");
  {
   config field;field["id"]="alliance_input";field["description"]="Readable touch input";auto& r=field.add_child("resolution");
   r["min_width"]=48;r["default_width"]=200;r["min_height"]=48;r["default_height"]=48;r["max_height"]=48;
   r["text_font_size"]=20;r["text_x_offset"]=8;r["text_y_offset"]="((height - text_font_height) / 2)";r["text_extra_width"]=16;
   for(const auto* state:{"state_enabled","state_disabled","state_focused","state_hovered"}) {
-   auto& draw=r.add_child(state).add_child("draw");rectangle(draw,"58,57,47,255",gold);
-   auto& selection=draw.add_child("rectangle");selection["x"]="(text_x_offset + selection_offset)";selection["y"]="(text_y_offset)";selection["w"]="(selection_width)";selection["h"]="(text_font_height)";selection["fill_color"]="91,116,110,255";
+   auto& draw=r.add_child(state).add_child("draw");emerald_chrome::frame_canvas(draw,emerald_chrome::Kind::field,std::string(state)=="state_focused",std::string(state)=="state_disabled",12);
+   auto& selection=draw.add_child("rectangle");selection["x"]="(text_x_offset + selection_offset)";selection["y"]="(text_y_offset)";selection["w"]="(selection_width)";selection["h"]="(text_font_height)";selection["fill_color"]="43,83,62,255";
    auto& text=draw.add_child("text");text["x"]="(text_x_offset)";text["y"]="(text_y_offset)";text["w"]="(text_width)";text["h"]="(text_height)";text["maximum_width"]="(text_maximum_width)";text["font_size"]=20;text["color"]=ivory;text["text"]="(if(text = '' and hint_text != '', hint_text, text))";
    if(std::string(state)=="state_focused"){auto& cursor=draw.add_child("line");cursor["x1"]="(cursor_offset + 8)";cursor["x2"]="(cursor_offset + 8)";cursor["y1"]="(text_y_offset + 2)";cursor["y2"]="(text_y_offset + text_font_height - 2)";cursor["color"]="([255,255,255,cursor_alpha])";cursor["thickness"]=1;}
   }
@@ -112,7 +117,7 @@ inline void prepare_theme() {
  }
  {
   config c;c["id"]="alliance_eye";c["description"]="Show password";auto& r=c.add_child("resolution");r["min_width"]=48;r["default_width"]=48;r["min_height"]=48;r["default_height"]=48;r["max_height"]=48;
-  for(int selected=0;selected<2;++selected){auto& state=r.add_child("state");for(const auto* mode:{"enabled","disabled","focused"}){auto& draw=state.add_child(mode).add_child("draw");rectangle(draw,selected?teal:stone,gold);auto& image=draw.add_child("image");image["x"]="((width - 32) / 2)";image["y"]=8;image["w"]=32;image["h"]=32;image["name"]=menu_icons::image(selected?menu_icons::Symbol::visibility:menu_icons::Symbol::visibility_hidden,32,product_theme::gold_rgb);}}
+  for(int selected=0;selected<2;++selected){auto& state=r.add_child("state");for(const auto* mode:{"enabled","disabled","focused"}){auto& draw=state.add_child(mode).add_child("draw");emerald_chrome::frame_canvas(draw,emerald_chrome::Kind::field,selected||std::string(mode)=="focused",std::string(mode)=="disabled",12);auto& image=draw.add_child("image");image["x"]="((width - 32) / 2)";image["y"]=8;image["w"]=32;image["h"]=32;image["name"]=menu_icons::image(selected?menu_icons::Symbol::visibility:menu_icons::Symbol::visibility_hidden,32,product_theme::gold_rgb);}}
   gui2::add_single_widget_definition("toggle_button","alliance_eye",c);
  }
  {
@@ -120,13 +125,19 @@ inline void prepare_theme() {
  }
  button_style("alliance_menu","menu_button");
  for(const auto& spec:std::array<std::pair<const char*,int>,3>{{{"alliance_text",20},{"alliance_caption",16},{"alliance_title",30}}}){
-  config c;c["id"]=spec.first;c["description"]="Readable fantasy text";auto& r=c.add_child("resolution");r["text_font_size"]=spec.second;if(spec.second>=30)r["text_font_family"]="script";
+  config c;c["id"]=spec.first;c["description"]="Readable fantasy text";auto& r=c.add_child("resolution");r["text_font_size"]=spec.second;
   for(const auto* state:{"state_enabled","state_disabled"})caption(r.add_child(state).add_child("draw"),spec.second,ivory);
   gui2::add_single_widget_definition("label",spec.first,c);
  }
+ {
+  config c;c["id"]="alliance_auth_title";c["description"]="Emerald Court welcome";auto& r=c.add_child("resolution");
+  r["text_font_size"]=42;r["min_height"]=52;r["default_height"]=52;
+  for(const auto* state:{"state_enabled","state_disabled"}){auto& draw=r.add_child(state).add_child("draw");emerald_chrome::reset_markup_cache(draw);caption(draw,42,ivory,true);}
+  gui2::add_single_widget_definition("label","alliance_auth_title",c);
+ }
  config w;w["id"]="alliance_dark";w["description"]="Ancient fantasy workspace";auto& r=w.add_child("resolution");
  r["left_border"]=18;r["right_border"]=18;r["top_border"]=14;r["bottom_border"]=14;
- rectangle(r.add_child("background").add_child("draw"),stone,gold);
+ emerald_chrome::frame_canvas(r.add_child("background").add_child("draw"),emerald_chrome::Kind::panel,false,false,32);
  r.add_child("foreground").add_child("draw");cell(row(r.add_child("grid"),1),"grid","_window_content_grid",1,0);
  // Grid IDs are needed by the window content substitution, unlike ordinary layout grids.
  r.mandatory_child("grid").mandatory_child("row").mandatory_child("column").mandatory_child("grid")["id"]="_window_content_grid";

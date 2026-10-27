@@ -306,7 +306,7 @@ private:
     const std::string& window_id() const override { static const std::string id="alliance_login"; return id; }
     void pre_show() override {
         set_enter_disabled(false);
-        find_widget<gui2::label>("auth_title").set_label(signup_?"Create account":"Welcome back");
+        find_widget<gui2::label>("auth_title").set_label(emerald_chrome::serif_text(signup_?"Create account":"Welcome back"));
         find_widget<gui2::label>("login_label").set_label(notice_);
         auto& username=find_widget<gui2::text_box>("user_name");username.set_max_input_length(24);username.set_value(username_);
         for(const auto* id:{"password","confirmation"}) {
@@ -326,8 +326,8 @@ private:
             find_widget<CredentialPasswordBox>("password").set_password_visible(show);
             find_widget<CredentialPasswordBox>("confirmation").set_password_visible(show);
         });
-        find_widget<gui2::button>("ok").set_label(signup_?"Create account":"Log in");
-        auto& alternate=find_widget<gui2::button>("signup");alternate.set_label(signup_?"Back":"Sign up");
+        find_widget<gui2::button>("ok").set_label(emerald_chrome::serif_text(signup_?"Create account":"Log in"));
+        auto& alternate=find_widget<gui2::button>("signup");alternate.set_label(emerald_chrome::serif_text(signup_?"Back":"Create account"));
         alternate.set_visible(allow_switch_?V::visible:V::invisible);
         add_to_tab_order(&username);keyboard_capture(&username);
     }

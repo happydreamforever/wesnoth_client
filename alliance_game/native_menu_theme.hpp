@@ -147,33 +147,35 @@ inline bool native_menu_surface_image(const std::string& name) {
 }
 inline void native_menu_image_colour(config& shape,bool disabled) {
     const auto name=shape["name"].str();
-    // Celes assumes a 20px checkbox and leaves its tick at y=0. Centre that
-    // known image with its box when the scoped touch target is made taller.
-    if(name.compare(0,20,"buttons/modern/check")==0)
+    // Native checkbox/radio images assume their old small target. Centre
+    // only those known glyphs inside the scoped 48px touch control.
+    if(name.compare(0,20,"buttons/modern/check")==0 ||
+        name.compare(0,16,"buttons/checkbox")==0 || name.compare(0,16,"buttons/radiobox")==0)
         shape["y"]="((height - image_height) / 2)";
     // Keep positioner/checkbox state artwork and all other native formulas.
     // Only known chrome is tinted: unit portraits, minimaps and colour-coded
     // faction/side icons must retain their actual colours.
     if(name.compare(0,19,"buttons/scrollbars/")==0 ||
         name.compare(0,16,"buttons/sliders/")==0 ||
-        name.compare(0,16,"buttons/checkbox")==0 ||
+        name.compare(0,16,"buttons/checkbox")==0 || name.compare(0,16,"buttons/radiobox")==0 ||
         name.compare(0,20,"buttons/modern/check")==0)
         shape["name"]=name+(disabled?"~GS()~CS(12,6,-6)":"~GS()~CS(55,30,-15)");
     else if(name.compare(0,25,"icons/arrows/short_arrow_")==0)
-        shape["name"]=name+(disabled?"~BLEND(179,169,151,1)":"~BLEND(214,180,110,1)");
+        shape["name"]=name+(disabled?"~BLEND(179,169,151,1)":"~BLEND(225,188,107,1)");
 }
 inline void native_menu_colours(config& canvas,bool disabled) {
     for(auto child:canvas.all_children_range()) {
         auto& shape=child.cfg;
         if(child.key=="text") {
+            if(shape["font_family"].str()=="script")shape["font_family"]="sans";
             shape["color"]=disabled?"179,169,151,255":product_ui::ivory;
             shape["font_size"]=std::max(18u,shape["font_size"].to_unsigned(18));
         }
         else if(child.key=="line")shape["color"]=shape["color"].str().find("cursor_alpha")!=std::string::npos?
-            "([214,180,110,cursor_alpha])":product_ui::gold;
+            "([225,188,107,cursor_alpha])":product_ui::gold;
         else if(child.key=="rectangle") {
             if(shape.has_attribute("fill_color"))shape["fill_color"]=
-                shape["w"].str().find("selection_width")!=std::string::npos?"91,116,110,255":product_ui::teal;
+                shape["w"].str().find("selection_width")!=std::string::npos?"43,83,62,255":product_ui::teal;
             if(shape.has_attribute("border_color"))shape["border_color"]=product_ui::gold;
         }
         else if(child.key=="image")native_menu_image_colour(shape,disabled);
@@ -185,8 +187,7 @@ inline config native_menu_action_canvas(const config& original,std::size_t state
     const bool disabled=toggle?(state%3==1):(state==1);
     const bool selected=toggle?(state>=3):(state==2);
     const bool focus=toggle?(state%3==2):(state==3);
-    product_ui::rectangle(draw,selected?"111,87,49,255":disabled?"58,54,46,255":product_ui::stone,
-        focus||selected?product_ui::gold:"140,118,77,255");
+    emerald_chrome::frame_canvas(draw,emerald_chrome::Kind::button,focus||selected,disabled,12);
     // Retain text, arrow/icon identity and geometry. Only the native blue
     // frame/background shapes are replaced; no callback/value is changed.
     for(const auto child:original.all_children_range()) {
@@ -194,11 +195,24 @@ inline config native_menu_action_canvas(const config& original,std::size_t state
             auto copy=child.cfg; native_menu_colours(copy,disabled);
             if(child.key=="image")native_menu_image_colour(copy,disabled);
             if(child.key=="text") {
+                if(copy["font_family"].str()=="script")copy["font_family"]="sans";
                 copy["color"]=disabled?"179,169,151,255":product_ui::ivory;
                 copy["font_size"]=std::max(18u,copy["font_size"].to_unsigned(18));
             }
             draw.add_child(child.key,copy);
         }
+    }
+    return draw;
+}
+inline config native_menu_field_canvas(const config& original,bool disabled,bool focused) {
+    config draw;emerald_chrome::frame_canvas(draw,emerald_chrome::Kind::field,focused,disabled,12);
+    for(const auto child:original.all_children_range()) {
+        // Preserve selection, caret, text and dropdown arrows. Replace only
+        // the stock full-field fill/border with the shared inset frame.
+        if(child.key=="rectangle" && child.cfg["w"].str()=="(width)" && child.cfg["h"].str()=="(height)")continue;
+        if(child.key=="image" && native_menu_surface_image(child.cfg["name"].str()))continue;
+        config shape;shape.add_child(child.key,child.cfg);native_menu_colours(shape,disabled);
+        for(const auto preserved:shape.all_children_range())draw.add_child(preserved.key,preserved.cfg);
     }
     return draw;
 }
@@ -245,6 +259,7 @@ inline gui2::resolution_definition_ptr menu_control_resolution(const std::string
         copy->default_height=std::max(48u,copy->default_height);
         if(copy->max_height)copy->max_height=std::max(48u,copy->max_height);
     }
+    if(copy->text_font_family==font::family_class::script)copy->text_font_family=font::family_class::sans_serif;
     copy->text_font_size=gui2::typed_formula<unsigned>(copy->text_font_size.has_formula()?18u:
         std::max(18u,copy->text_font_size()));
     if(type=="tab_container") {
@@ -258,6 +273,7 @@ inline gui2::resolution_definition_ptr menu_control_resolution(const std::string
     if(type=="rich_label") {
         auto label=std::static_pointer_cast<gui2::rich_label_definition::resolution>(copy);
         label->font_size=std::max(18,label->font_size);
+        if(label->font_family=="script")label->font_family="sans";
         label->text_color_enabled=color_t::from_argb_bytes(0xff000000u|product_theme::ivory_rgb);
         label->text_color_disabled=color_t{179,169,151,255};
         label->link_color=color_t::from_argb_bytes(0xff000000u|product_theme::gold_rgb);
@@ -269,18 +285,32 @@ inline gui2::resolution_definition_ptr menu_control_resolution(const std::string
         const bool disabled=(type=="toggle_button"||type=="toggle_panel")?index%3==1:index==1;
         if(type=="window") {
             canvas.clear();
-            if(index==0)product_ui::background_canvas(canvas,true);
-            product_ui::rectangle(canvas,index==0?"47,43,34,216":"0,0,0,0",product_ui::gold);
+            emerald_chrome::frame_canvas(canvas,emerald_chrome::Kind::panel,false,false,24,index==0);
         } else if(type=="button"||type=="menu_button"||type=="multimenu_button"||type=="repeating_button") {
             canvas=native_menu_action_canvas(canvas,index,false);
+        } else if(type=="toggle_button" && std::any_of(canvas.child_range("image").begin(),canvas.child_range("image").end(),
+            [](const config& image){return native_menu_surface_image(image["name"].str());})) {
+            canvas=native_menu_action_canvas(canvas,index,true);
+        } else if(type=="text_box"||type=="combobox"||type=="multiline_text") {
+            canvas=native_menu_field_canvas(canvas,disabled,index>=2);
         } else if(type=="toggle_panel") {
             canvas.clear();
-            product_ui::rectangle(canvas,disabled?"58,54,46,150":index>=3?"111,87,49,235":"47,43,34,150",
-                index>=3?product_ui::gold:"140,118,77,110");
+            emerald_chrome::frame_canvas(canvas,emerald_chrome::Kind::button,index>=3,disabled,12);
         } else if(type=="panel") {
             canvas.clear();
-            if(index==0)product_ui::rectangle(canvas,"47,43,34,190","140,118,77,120");
+            if(index==0)emerald_chrome::frame_canvas(canvas,emerald_chrome::Kind::field,false,false,12);
         } else native_menu_colours(canvas,disabled);
+        if(type=="toggle_button" && (definition=="radio" || definition=="radio_no_label" ||
+            definition=="alliance_touch_toggle_button_radio" || definition=="alliance_touch_toggle_button_radio_no_label")) {
+            // Celes draws its radio glyph as two small circles rather than
+            // the default theme's PNG; retain state/radii and centre both.
+            for(auto& circle:canvas.child_range("circle")) {
+                circle["y"]="(height / 2)";
+                circle["border_color"]=disabled?"109,113,98,255":product_ui::gold;
+                circle["fill_color"]=circle["radius"].to_unsigned()>5?product_ui::teal:
+                    disabled?"109,113,98,255":product_ui::gold;
+            }
+        }
     }
     copies.emplace(key,copy);return copy;
 }

@@ -3,6 +3,36 @@
 #include "alliance_game/native_menu_theme.hpp"
 #include <stdexcept>
 
+inline void verify_emerald_auth_geometry(gui2::window& window) {
+    const auto bounds=window.get_rectangle();
+    for(const auto* id:{"auth_crest","auth_title","auth_heading_separator","login_label",
+            "username_label","user_name","password_label","password","remember_password",
+            "confirmation_label","confirmation","ok","auth_action_separator","signup","cancel"}) {
+        const auto* widget=window.find(id,false);
+        if(!widget)throw std::runtime_error("Authentication presentation lost a control");
+        if(widget->get_visible()!=gui2::widget::visibility::visible)continue;
+        const auto box=widget->get_rectangle();
+        if(box.x<bounds.x || box.y<bounds.y || box.x+box.w>bounds.x+bounds.w || box.y+box.h>bounds.y+bounds.h)
+            throw std::runtime_error("Authentication presentation exceeds its panel");
+    }
+    const auto title=window.find_widget<gui2::label>("auth_title").get_rectangle();
+    const auto user=window.find_widget<gui2::text_box>("user_name").get_rectangle();
+    const auto password=window.find_widget<gui2::text_box>("password").get_rectangle();
+    const auto eye=window.find_widget<gui2::toggle_button>("remember_password").get_rectangle();
+    const auto primary=window.find_widget<gui2::button>("ok").get_rectangle();
+    const auto& alternate=window.find_widget<gui2::button>("signup");
+    const auto secondary=alternate.get_rectangle();
+    if(title.h<42 || title.y+title.h>user.y || user.y+user.h>password.y ||
+        eye.w<48 || eye.h<48 || eye.y!=password.y || eye.h!=password.h || password.x+password.w>eye.x ||
+        primary.w<400 || primary.h<52 || primary.y<password.y+password.h ||
+        (alternate.get_visible()==gui2::widget::visibility::visible && (secondary.h<52 || primary.w!=secondary.w || primary.y+primary.h>secondary.y)))
+        throw std::runtime_error("Authentication heading, fields or broad actions overlap or are undersized");
+    const auto& confirmation=window.find_widget<gui2::text_box>("confirmation");
+    if(confirmation.get_visible()==gui2::widget::visibility::visible &&
+        (confirmation.get_rectangle().y<password.y+password.h || confirmation.get_rectangle().y+confirmation.get_height()>primary.y))
+        throw std::runtime_error("Signup confirmation overlaps another field or action");
+}
+
 inline void verify_native_load_geometry(gui2::window& window) {
     const auto list=window.find_widget<gui2::listbox>("savegame_list").get_rectangle();
     const auto name=window.find_widget<gui2::toggle_button>("sort_0").get_rectangle();
@@ -67,6 +97,8 @@ inline void verify_native_menu_theme_boundaries() {
         gui2::current_gui=theme;theme->second.activate();
         const auto button=gui2::get_control("button","default");
         const auto label=gui2::get_control("label","default");
+        const auto title=gui2::get_control("label","title");
+        const auto title_family=title->text_font_family;const config title_canvas=title->state.front().canvas_cfg_;
         const auto chat=gui2::get_control("chatbox","default");
         const auto tabs=gui2::get_control("tab_container","horizontal_no_image");
         const auto tabs_grid=std::static_pointer_cast<gui2::tab_container_definition::resolution>(tabs)->grid;
@@ -115,15 +147,27 @@ inline void verify_native_menu_theme_boundaries() {
                 "The scoped menu action is smaller than its touch target");
             require(themed->state.front().canvas_cfg_!=button_state,"Menu action retained its original surface");
             require(gui2::get_control("label","default")!=label,"Native menu label was not cloned");
+            const auto menu_title=gui2::get_control("label","title");
+            require(menu_title!=title && menu_title->text_font_family!=font::family_class::script,
+                "Native menu title retained the old script family");
+            for(const auto& state:menu_title->state)for(const auto& text:state.canvas_cfg_.child_range("text"))
+                require(text["font_family"].str()!="script","Native title canvas retained the old script family");
             require(gui2::get_control("chatbox","default")!=chat,"Private native chatbox was not cloned");
             const auto scoped_tabs=gui2::get_control("tab_container","horizontal_no_image");
             require(scoped_tabs!=tabs && std::static_pointer_cast<gui2::tab_container_definition::resolution>(scoped_tabs)->grid!=tabs_grid,
                 "Horizontal menu tabs reused their shared native grid");
-            const auto checkbox=gui2::get_control("toggle_button","no_label");
-            for(const auto& state:checkbox->state)for(const auto& image:state.canvas_cfg_.child_range("image"))
-                if(image["name"].str().compare(0,20,"buttons/modern/check")==0)
-                    require(image["y"].str()=="((height - image_height) / 2)",
-                        "Celes checkmark is not centred within its touch-sized checkbox");
+            for(const auto* definition:{"no_label","radio_no_label","radio"}) {
+                const auto checkbox=gui2::get_control("toggle_button",definition);
+                for(const auto& state:checkbox->state)for(const auto& image:state.canvas_cfg_.child_range("image"))
+                    if(image["name"].str().compare(0,20,"buttons/modern/check")==0 ||
+                        image["name"].str().compare(0,16,"buttons/checkbox")==0 || image["name"].str().compare(0,16,"buttons/radiobox")==0)
+                        require(image["y"].str()=="((height - image_height) / 2)",
+                            "Menu checkbox/radio is not centred within its touch-sized target");
+                if(std::string(definition)=="radio")for(const auto& state:checkbox->state)
+                    for(const auto& circle:state.canvas_cfg_.child_range("circle"))
+                        require(circle["y"].str()=="(height / 2)" && circle["fill_color"].str()!="28, 45, 64, 255",
+                            "Celes radio retained its small blue native glyph");
+            }
             {
                 MenuThemeScope popup("prompt");
                 require(menu_theme_depth()==2 && gui2::get_control("button","default")==themed,
@@ -139,6 +183,8 @@ inline void verify_native_menu_theme_boundaries() {
         require(gui2::get_control("tab_container","horizontal_no_image")==tabs &&
             std::static_pointer_cast<gui2::tab_container_definition::resolution>(tabs)->grid==tabs_grid,
             "Menu tabs changed their shared native grid");
+        require(gui2::get_control("label","title")==title && title->text_font_family==title_family && title->state.front().canvas_cfg_==title_canvas,
+            "Menu typography changed a shared native title");
         require(button->min_width==original_width && button->min_height==original_height,
             "Menu touch sizing changed the original gameplay geometry");
         if(previous_native && previous_native!=button)require(previous_themed!=themed,
