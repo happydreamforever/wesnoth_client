@@ -4,6 +4,10 @@
 #include "gui/core/event/distributor.hpp"
 #include <stdexcept>
 
+// The actual renderer exposes its native tooltip window without replacing its
+// behavior, so focus/hold assertions inspect what is really displayed.
+namespace gui2::dialogs::tip { gui2::window* citadel_current_tooltip(); }
+
 namespace citadel_home_checks {
 inline void require(bool value,const char* message){if(!value)throw std::runtime_error(message);}
 
@@ -12,11 +16,12 @@ inline void geometry(gui2::window& window,const std::string& username,std::size_
     namespace home=alliance_game::home_ui;
     const auto screen=window.get_rectangle();int previous_right=-1;
     for(std::size_t i=0;i<home::actions.size();++i){const auto& action=home::actions[i];auto& button=window.find_widget<gui2::button>(action.id);const auto box=button.get_rectangle();
-        require(box.w==home::px(action.diameter)&&box.h==home::px(action.diameter),"Home hitbox differs from the visible circle diameter");
+        require(box.w==home::px(action.width)&&box.h==home::px(action.height),"Home hitbox differs from its authored plaque or utility dimensions");
         require(box.x>=screen.x&&box.y>=screen.y&&box.x+box.w<=screen.x+screen.w&&box.y+box.h<=screen.y+screen.h,"Home action leaves the screen");
         require(button.tooltip()==action.name,"Home action lacks its accessible tooltip");
-        if(i>=4){require(std::abs(box.y+box.h/2-(screen.y+screen.h-home::px(96)))<=1,"Home navigation centreline moved");
-            if(previous_right>=0)require(box.x-previous_right==home::px(24),"Home navigation gap moved");previous_right=box.x+box.w;}
+        if(i>=4){require(box.y+box.h==screen.y+screen.h-home::px(24),"Home plaque baseline moved");
+            if(previous_right>=0)require(box.x-previous_right==home::px(12),"Home navigation gap moved");previous_right=box.x+box.w;
+            require(button.get_label()==action.name,"Home plaque lost its product action label");}
     }
     const auto profile=window.find_widget<gui2::widget>("home_profile").get_rectangle();
     require(profile.w==home::px(260)&&profile.h==home::px(76),"Home profile dimensions changed");
@@ -70,6 +75,12 @@ public:
         require((*calls_)[5]==4,"Home directional navigation lost activation");
         window_.fire(gui2::event::SDL_KEY_DOWN,window_,SDLK_TAB,SDL_KMOD_NONE,"");
         require(window_.get_distributor().keyboard_focus()==&button(6),"Tab did not focus Campaign");
+        require(!gui2::dialogs::tip::citadel_current_tooltip(),"Labeled footer focus opened a redundant tooltip");
+        window_.keyboard_capture(&button(0));
+        auto* tip=gui2::dialogs::tip::citadel_current_tooltip();
+        require(tip&&tip->find_widget<gui2::label>("label").get_label()=="Quit","Utility focus lost its action-name tooltip");
+        window_.keyboard_capture(&button(6));
+        require(!gui2::dialogs::tip::citadel_current_tooltip(),"Returning focus to a labeled footer left the utility tooltip visible");
     }
     void begin_long_press(){
         auto& quit=button(0);quit.set_retval(gui2::retval::CANCEL);

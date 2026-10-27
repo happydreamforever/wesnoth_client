@@ -31,6 +31,46 @@ class CitadelHomeTests(unittest.TestCase):
                                     text=True, timeout=30)
             self.assertIn('PASS', result.stdout)
 
+    def test_emerald_ornaments_rectangular_encoding_and_frame_variants(self):
+        flags = shlex.split(subprocess.check_output(['pkg-config', '--cflags', '--libs', 'cairo', 'libpng'], text=True))
+        self.run_cpp(r'''
+#include "alliance_game/emerald_chrome.hpp"
+#include <cassert>
+#include <iostream>
+#include <set>
+using namespace alliance_game;
+struct Pixels {
+ unsigned width=0,height=0;std::vector<unsigned char> bytes;
+ explicit Pixels(const std::string& uri){assert(uri.rfind("data:image/png;base64,",0)==0);const auto encoded=base64::decode(uri.substr(22));png_image png{};png.version=PNG_IMAGE_VERSION;
+  assert(png_image_begin_read_from_memory(&png,encoded.data(),encoded.size()));png.format=PNG_FORMAT_RGBA;width=png.width;height=png.height;bytes.resize(PNG_IMAGE_SIZE(png));
+  assert(png_image_finish_read(&png,nullptr,bytes.data(),0,nullptr));png_image_free(&png);
+ }
+ const unsigned char* at(unsigned x,unsigned y)const{return &bytes[(y*width+x)*4];}
+};
+int main(){
+ using namespace emerald_chrome;
+ for(bool campaign:{false,true}){
+  const int w=campaign?184:164,h=campaign?224:190;const auto normal=plaque(w,h,campaign,false,false);Pixels p(normal);
+  assert(p.width==unsigned(w*2)&&p.height==unsigned(h*2));assert(p.at(0,0)[3]==0);const auto centre=p.at(p.width/2,p.height/2);assert(centre[3]==255);
+  assert(campaign?centre[0]>centre[1]:centre[1]>centre[0]);
+  assert(normal!=plaque(w,h,campaign,true,false));assert(normal!=plaque(w,h,campaign,false,true));assert(normal==plaque(w,h,campaign,false,false));
+ }
+ for(const auto kind:{Kind::panel,Kind::parchment,Kind::button,Kind::field,Kind::profile}){
+  const auto pieces=frame(kind,false,false,32,true),outline=frame(kind,false,false,32,false);assert(pieces.size()==9);
+  for(int i=0;i<9;++i){Pixels p(pieces[i]);assert(p.width==64&&p.height==64);}
+  assert(Pixels(pieces[4]).at(32,32)[3]==255);assert(Pixels(outline[4]).at(32,32)[3]==0);
+  assert(pieces[0]!=pieces[4]&&pieces[0]!=pieces[8]);
+  if(kind==Kind::panel){Pixels top(pieces[1]),left(pieces[3]);for(unsigned y=17;y<64;++y)for(unsigned x=0;x<64;++x)assert(top.at(x,y)[1]>top.at(x,y)[0]);
+   for(unsigned x=17;x<64;++x)for(unsigned y=0;y<64;++y)assert(left.at(x,y)[1]>left.at(x,y)[0]);}
+ }
+ assert(frame(Kind::button,false,false,12,true)[4]!=frame(Kind::button,true,false,12,true)[4]);
+ const auto leaf=ornament(40);Pixels p(leaf);unsigned visible=0,soft=0;for(unsigned i=3;i<p.bytes.size();i+=4){visible+=p.bytes[i]>0;soft+=p.bytes[i]>0&&p.bytes[i]<255;}assert(visible>300&&soft>40);
+ for(int size=16;size<100;++size)ornament(size,size%2);assert(leaf==ornament(40));
+ assert(serif_text("A<&>").find("A&lt;&amp;&gt;")!=std::string::npos);
+ for(const int size:{7,81}){bool refused=false;try{frame(Kind::panel,false,false,size,true);}catch(const std::invalid_argument&){refused=true;}assert(refused);}
+ std::cout<<"EMERALD ORNAMENTAL CHROME PASS\n";
+}''', [str(ROOT / 'engine/src/serialization/base64.cpp'), *flags])
+
     def test_real_cairo_icons_alpha_variants_and_bounded_cache(self):
         flags = shlex.split(subprocess.check_output(['pkg-config', '--cflags', '--libs', 'cairo', 'libpng'], text=True))
         self.run_cpp(r'''
@@ -62,7 +102,7 @@ int main(){
  const auto first=image(Symbol::campaign,64,0xd6b46e);
  for(unsigned i=0;i<300;++i)assert(!image(Symbol::campaign,64,i).empty());
  assert(first==image(Symbol::campaign,64,0xd6b46e));
- for(const int size:{0,15,129}){bool refused=false;try{image(Symbol::quit,size,0xd6b46e);}catch(const std::invalid_argument&){refused=true;}assert(refused);}
+ for(const int size:{0,15,257}){bool refused=false;try{image(Symbol::quit,size,0xd6b46e);}catch(const std::invalid_argument&){refused=true;}assert(refused);}
  std::cout<<"CAIRO HOME ICONS PASS\n";
 }''', [str(ROOT / 'engine/src/serialization/base64.cpp'), *flags])
 

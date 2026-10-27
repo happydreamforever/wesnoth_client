@@ -2,6 +2,7 @@
 #pragma once
 #include "alliance_game/product_ui_layout.hpp"
 #include "alliance_game/menu_icons.hpp"
+#include "alliance_game/emerald_chrome.hpp"
 #include "gui/core/timer.hpp"
 #include "gui/dialogs/tooltip.hpp"
 #include "gui/widgets/button.hpp"
@@ -17,17 +18,17 @@ namespace alliance_game::home_ui {
 inline double scale(){const auto size=video::game_canvas_size();return std::floor(std::clamp(std::min(size.x/1280.,size.y/720.),1.,2.)*8.)/8.;}
 inline int px(int value){return static_cast<int>(std::lround(value*scale()));}
 inline std::string style(const std::string& name){return name+"_"+std::to_string(px(1000));}
-struct Action {const char* id;const char* name;menu_icons::Symbol symbol;int diameter,icon;};
+struct Action {const char* id;const char* name;menu_icons::Symbol symbol;int width,height,icon;};
 inline constexpr std::array<Action,9> actions{{
-    {"quit","Quit",menu_icons::Symbol::quit,52,26},
-    {"preferences","Preferences",menu_icons::Symbol::preferences,52,26},
-    {"addons","My Heroes",menu_icons::Symbol::heroes,52,26},
-    {"achievements","Achievements",menu_icons::Symbol::achievements,52,26},
-    {"load","Load",menu_icons::Symbol::load,72,36},
-    {"multiplayer","Room",menu_icons::Symbol::room,88,48},
-    {"campaign","Campaign",menu_icons::Symbol::campaign,112,64},
-    {"community","Team",menu_icons::Symbol::team,88,48},
-    {"editor","Map Editor",menu_icons::Symbol::editor,72,36}
+    {"quit","Quit",menu_icons::Symbol::quit,52,52,26},
+    {"preferences","Preferences",menu_icons::Symbol::preferences,52,52,26},
+    {"addons","My Heroes",menu_icons::Symbol::heroes,52,52,26},
+    {"achievements","Achievements",menu_icons::Symbol::achievements,52,52,26},
+    {"load","Load",menu_icons::Symbol::load,148,172,60},
+    {"multiplayer","Room",menu_icons::Symbol::room,164,190,76},
+    {"campaign","Campaign",menu_icons::Symbol::campaign,184,224,96},
+    {"community","Team",menu_icons::Symbol::team,164,190,76},
+    {"editor","Map Editor",menu_icons::Symbol::editor,148,172,60}
 }};
 
 inline config& plain_cell(config& row,const char* type,const std::string& id="",int grow=0) {
@@ -38,35 +39,45 @@ inline void spacer(config& row,int width,int height,int grow=0){auto& s=plain_ce
 inline void label_style(const char* id,int width,int height,int font,const char* colour,bool script=false) {
     config definition;definition["id"]=style(id);definition["description"]="Home title and profile";auto& r=definition.add_child("resolution");width=px(width);height=px(height);font=px(font);
     r["min_width"]=width;r["default_width"]=width;r["max_width"]=width;r["min_height"]=height;r["default_height"]=height;r["max_height"]=height;r["text_font_size"]=font;
-    if(script)r["text_font_family"]="script";
+
     for(const char* state:{"state_enabled","state_disabled"}){auto& d=r.add_child(state).add_child("draw");auto& t=d.add_child("text");
         t["x"]=script?"((width - text_width) / 2)":"0";t["y"]="((height - text_height) / 2)";t["w"]="(text_width)";t["h"]="(text_height)";
-        t["maximum_width"]="(width)";t["maximum_height"]="(height)";t["font_size"]=font;if(script)t["font_family"]="script";
-        t["color"]=colour;t["text"]="(text)";t["text_markup"]=false;
-        if(script){config shadow=t;shadow["x"]="((width - text_width) / 2 + "+std::to_string(px(2))+")";shadow["y"]="((height - text_height) / 2 + "+std::to_string(px(2))+")";shadow["color"]="46,41,33,170";d.clear_children("text");d.add_child("text",shadow);shadow["x"]="((width - text_width) / 2)";shadow["y"]="((height - text_height) / 2)";shadow["color"]=colour;d.add_child("text",shadow);}}
+        t["maximum_width"]="(width)";t["maximum_height"]="(height)";t["font_size"]=font;
+        t["color"]=colour;t["text"]="(text)";t["text_markup"]="(text_markup)";
+        if(script){config shadow=t;shadow["x"]="((width - text_width) / 2 + "+std::to_string(px(2))+")";shadow["y"]="((height - text_height) / 2 + "+std::to_string(px(2))+")";shadow["color"]="10,23,17,220";d.clear_children("text");emerald_chrome::reset_markup_cache(d);d.add_child("text",shadow);emerald_chrome::reset_markup_cache(d);shadow["x"]="((width - text_width) / 2)";shadow["y"]="((height - text_height) / 2)";shadow["color"]=colour;d.add_child("text",shadow);}}
     gui2::add_single_widget_definition("label",style(id),definition);
 }
 inline void action_style(const Action& action,bool utility) {
-    const std::string id=style("alliance_home_"+std::string(action.id));const int diameter=px(action.diameter),icon_size=px(action.icon);config definition;definition["id"]=id;definition["description"]=action.name;
-    auto& r=definition.add_child("resolution");r["min_width"]=diameter;r["default_width"]=diameter;r["max_width"]=diameter;
-    const int height=diameter;r["min_height"]=height;r["default_height"]=height;r["max_height"]=height;r["text_font_size"]=20;
-    const int centre=diameter/2;(void)utility;
+    const std::string id=style("alliance_home_"+std::string(action.id));const int width=px(action.width),height=px(action.height),icon_size=px(action.icon);config definition;definition["id"]=id;definition["description"]=action.name;
+    auto& r=definition.add_child("resolution");r["min_width"]=width;r["default_width"]=width;r["max_width"]=width;
+    r["min_height"]=height;r["default_height"]=height;r["max_height"]=height;r["text_font_size"]=px(22);
+    const bool campaign=std::string(action.id)=="campaign";
     const std::array<const char*,4> states{{"state_enabled","state_disabled","state_pressed","state_focused"}};
     for(std::size_t i=0;i<states.size();++i){auto& d=r.add_child(states[i]).add_child("draw");
-        auto& ring=d.add_child("circle");ring["x"]=diameter/2;ring["y"]=centre;ring["radius"]=diameter/2-px(2);ring["border_thickness"]=px(2);
-        ring["border_color"]=i==3?product_ui::ivory:"(if(home_focus, [243,231,205,255], [214,180,110,255]))";
-        ring["fill_color"]=i==2?product_ui::teal:i==3?"108,89,58,245":"81,71,55,238";
-        auto& icon=d.add_child("image");icon["x"]=(diameter-icon_size)/2;icon["y"]=centre-icon_size/2;icon["w"]=icon_size;icon["h"]=icon_size;icon["resize_mode"]="scale";
-        icon["name"]=menu_icons::image(action.symbol,icon_size,i==1?0xA69E8Bu:i==2||i==3?product_theme::ivory_rgb:product_theme::gold_rgb,std::clamp(video::get_pixel_scale(),2,4));
-
+        if(utility){
+            auto& ring=d.add_child("circle");ring["x"]=width/2;ring["y"]=height/2;ring["radius"]=width/2-px(2);ring["border_thickness"]=px(2);
+            ring["border_color"]=i==3?product_ui::ivory:"(if(home_focus, [246,233,201,255], [225,188,107,255]))";
+            ring["fill_color"]=i==2?product_ui::teal:product_ui::stone;
+            auto& inner=d.add_child("circle");inner["x"]=width/2;inner["y"]=height/2;inner["radius"]=width/2-px(5);inner["border_thickness"]=1;inner["border_color"]=product_theme::dark_gold_rgba;inner["fill_color"]="0,0,0,0";
+        } else {
+            auto& plaque=d.add_child("image");plaque["name"]=emerald_chrome::plaque(width,height,campaign,i==2||i==3,i==1);plaque["w"]=width;plaque["h"]=height;plaque["resize_mode"]="scale";
+            auto& focus=d.add_child("image");focus["name"]="(if(home_focus, '"+emerald_chrome::plaque(width,height,campaign,true,i==1)+"', ''))";focus["w"]=width;focus["h"]=height;focus["resize_mode"]="scale";
+        }
+        auto& icon=d.add_child("image");icon["x"]=(width-icon_size)/2;icon["y"]=(utility?(height-icon_size)/2:px(campaign?39:31))+(i==2?px(2):0);icon["w"]=icon_size;icon["h"]=icon_size;icon["resize_mode"]="scale";
+        icon["name"]=utility?menu_icons::image(action.symbol,icon_size,i==1?0x89928Au:i==2||i==3?product_theme::ivory_rgb:product_theme::gold_rgb,std::clamp(video::get_pixel_scale(),2,4)):emerald_chrome::emblem(action.symbol,icon_size,campaign);
+        if(!utility){emerald_chrome::reset_markup_cache(d);auto& caption=d.add_child("text");caption["x"]="((width - text_width) / 2)";caption["y"]=height-px(campaign?75:65)+(i==2?px(2):0);caption["w"]="(text_width)";caption["h"]="(text_height)";caption["maximum_width"]=width-px(16);caption["font_size"]=px(campaign?27:23);caption["color"]=campaign?product_theme::ink_rgba:product_ui::ivory;caption["text"]=emerald_chrome::serif_text(action.name);caption["text_markup"]=true;
+            emerald_chrome::ornament_canvas(d,px(campaign?40:32),"((width - "+std::to_string(px(campaign?40:32))+") / 2)",std::to_string(height-px(campaign?57:45)),campaign);}
     }
     gui2::add_single_widget_definition("button",id,definition);
 }
 inline void prepare_styles() {
     product_ui::prepare_theme();if(gui2::current_gui->second.widget_types["window"].count(style("alliance_home_scene")))return;
     for(std::size_t i=0;i<actions.size();++i)action_style(actions[i],i<4);
-    label_style("alliance_home_kicker",600,48,30,product_ui::ivory,true);
-    label_style("alliance_home_title",600,90,68,product_ui::gold,true);
+    label_style("alliance_home_kicker",760,36,30,product_ui::ivory,true);
+    label_style("alliance_home_title",760,112,96,product_theme::light_gold_rgba,true);
+    {config c;c["id"]=style("alliance_home_crest");c["description"]="Oak crest";auto& cr=c.add_child("resolution");cr["min_width"]=px(260);cr["default_width"]=px(260);cr["max_width"]=px(260);cr["min_height"]=px(30);cr["default_height"]=px(30);cr["max_height"]=px(30);
+      auto& draw=cr.add_child("state_enabled").add_child("draw");emerald_chrome::ornament_canvas(draw,px(40),"((width - "+std::to_string(px(40))+") / 2)",std::to_string(-px(10)));
+      for(int side=0;side<2;++side){auto& line=draw.add_child("line");line["x1"]=px(side?155:5);line["x2"]=px(side?255:105);line["y1"]=px(17);line["y2"]=px(17);line["color"]=product_ui::gold;}cr.add_child("state_disabled").add_child("draw");gui2::add_single_widget_definition("label",style("alliance_home_crest"),c);}
     label_style("alliance_home_name",232,32,22,product_ui::ivory);
     label_style("alliance_home_count",232,26,18,product_ui::gold);
     label_style("alliance_home_tip",240,32,20,product_ui::ivory);
@@ -75,19 +86,19 @@ inline void prepare_styles() {
     const int horizontal_padding=px(260)-px(232),vertical_padding=px(76)-px(32)-px(26);
     p["left_border"]=horizontal_padding/2;p["right_border"]=horizontal_padding-horizontal_padding/2;
     p["top_border"]=vertical_padding/2;p["bottom_border"]=vertical_padding-vertical_padding/2;
-    product_ui::rectangle(p.add_child("background").add_child("draw"),"81,71,55,225",product_ui::gold);p.add_child("foreground").add_child("draw");
+    emerald_chrome::frame_canvas(p.add_child("background").add_child("draw"),emerald_chrome::Kind::profile,false,false,px(24));p.add_child("foreground").add_child("draw");
     gui2::add_single_widget_definition("panel",style("alliance_home_profile"),panel);
     config window;window["id"]=style("alliance_home_scene");window["description"]="Citadel at dawn";auto& r=window.add_child("resolution");
     auto& background=r.add_child("background").add_child("draw");product_ui::background_canvas(background);
     // Quiet the sky and foreground only behind the controls, preserving the
     // painted middle. Alpha layers are native canvas rectangles, not UI art.
-    for(int band=0;band<96;++band){auto& top=background.add_child("rectangle");top["x"]=0;top["y"]=px(band*3);top["w"]="(width)";top["h"]=px((band+1)*3)-px(band*3);top["fill_color"]="24,45,48,"+std::to_string(125-band*125/95);
-        auto& bottom=background.add_child("rectangle");bottom["x"]=0;bottom["y"]="(height - "+std::to_string(px((band+1)*3))+")";bottom["w"]="(width)";bottom["h"]=px((band+1)*3)-px(band*3);bottom["fill_color"]="24,45,48,"+std::to_string(160-band*160/95);}
-    r.add_child("foreground").add_child("draw");auto& column=product_ui::row(r.add_child("grid"),1).add_child("column");column["horizontal_grow"]=true;column["vertical_grow"]=true;column.add_child("grid")["id"]="_window_content_grid";
+    for(int band=0;band<96;++band){auto& top=background.add_child("rectangle");top["x"]=0;top["y"]=px(band*3);top["w"]="(width)";top["h"]=px((band+1)*3)-px(band*3);top["fill_color"]="7,27,21,"+std::to_string(70-band*70/95);
+        auto& bottom=background.add_child("rectangle");bottom["x"]=0;bottom["y"]="(height - "+std::to_string(px((band+1)*3))+")";bottom["w"]="(width)";bottom["h"]=px((band+1)*3)-px(band*3);bottom["fill_color"]="7,27,21,"+std::to_string(105-band*105/95);}
+    emerald_chrome::frame_canvas(r.add_child("foreground").add_child("draw"),emerald_chrome::Kind::panel,false,false,px(32),false);auto& column=product_ui::row(r.add_child("grid"),1).add_child("column");column["horizontal_grow"]=true;column["vertical_grow"]=true;column.add_child("grid")["id"]="_window_content_grid";
     gui2::add_single_widget_definition("window",style("alliance_home_scene"),window);
     config tip_frame;tip_frame["id"]=style("alliance_home_tip_frame");tip_frame["description"]="Action name";auto& frame=tip_frame.add_child("resolution");
     frame["left_border"]=px(10);frame["right_border"]=px(10);frame["top_border"]=px(10);frame["bottom_border"]=px(10);
-    product_ui::rectangle(frame.add_child("background").add_child("draw"),product_ui::stone,product_ui::gold);frame.add_child("foreground").add_child("draw");
+    emerald_chrome::frame_canvas(frame.add_child("background").add_child("draw"),emerald_chrome::Kind::field,false,false,px(12));frame.add_child("foreground").add_child("draw");
     product_ui::cell(product_ui::row(frame.add_child("grid"),1),"grid","",1,0)["id"]="_window_content_grid";
     gui2::add_single_widget_definition("window",style("alliance_home_tip_frame"),tip_frame);
     config tip;tip["id"]=style("alliance_home_tooltip");tip["description"]="Action name";auto& tr=tip.add_child("resolution");tr["definition"]=style("alliance_home_tip_frame");tr["automatic_placement"]=false;
@@ -112,12 +123,13 @@ inline std::string prepare_window() {
     spacer(header,px(16),1);auto& profile=plain_cell(header,"panel","home_profile");profile["definition"]=style("alliance_home_profile");
     auto& profile_grid=profile.add_child("grid");auto& name=plain_cell(product_ui::row(profile_grid),"label","home_player");name["definition"]=style("alliance_home_name");name["wrap"]=false;name["label"]="Player";
     auto& count=plain_cell(product_ui::row(profile_grid),"label","home_heroes");count["definition"]=style("alliance_home_count");count["label"]="Heroes: 0";
-    auto& kicker=plain_cell(product_ui::row(grid),"label","home_kicker");kicker["definition"]=style("alliance_home_kicker");kicker["label"]=product_theme::title_kicker;
-    auto& title=plain_cell(product_ui::row(grid),"label","home_title");title["definition"]=style("alliance_home_title");title["label"]=product_theme::title_name;
+    auto& kicker=plain_cell(product_ui::row(grid),"label","home_kicker");kicker["definition"]=style("alliance_home_kicker");kicker["label"]=emerald_chrome::serif_text(product_theme::title_kicker);kicker["use_markup"]=true;
+    auto& crest=plain_cell(product_ui::row(grid),"label","home_crest");crest["definition"]=style("alliance_home_crest");
+    auto& title=plain_cell(product_ui::row(grid),"label","home_title");title["definition"]=style("alliance_home_title");title["label"]=emerald_chrome::serif_text(product_theme::title_name);title["use_markup"]=true;
     spacer(product_ui::row(grid,1),1,1,1);
-    auto& footer=product_ui::row(plain_cell(product_ui::row(grid),"grid"));spacer(footer,1,px(192),1);
-    for(std::size_t i=4;i<actions.size();++i){if(i>4)spacer(footer,px(24),1);auto& b=plain_cell(footer,"button",actions[i].id);b["definition"]=style("alliance_home_"+std::string(actions[i].id));b["label"]=actions[i].name;b["tooltip"]=actions[i].name;}
-    spacer(footer,1,px(192),1);windows.emplace(id,gui2::builder_window(definition));return id;
+    auto& footer=product_ui::row(plain_cell(product_ui::row(grid),"grid"));spacer(footer,1,px(224),1);
+    for(std::size_t i=4;i<actions.size();++i){if(i>4)spacer(footer,px(12),1);auto& column=footer.add_child("column");column["vertical_alignment"]="bottom";column["horizontal_alignment"]="center";auto& b=column.add_child("button");b["id"]=actions[i].id;b["definition"]=style("alliance_home_"+std::string(actions[i].id));b["label"]=actions[i].name;b["tooltip"]=actions[i].name;}
+    spacer(footer,1,px(224),1);spacer(product_ui::row(grid),1,px(24));windows.emplace(id,gui2::builder_window(definition));return id;
 }
 
 inline void set_profile(gui2::window& window,const std::string& username,std::size_t heroes) {
@@ -140,7 +152,7 @@ class Interaction : public std::enable_shared_from_this<Interaction> {
     void stop(std::size_t i){if(timers_[i])gui2::remove_timer(timers_[i]);timers_[i]=0;}
     void describe(std::size_t i){auto& b=window_.find_widget<gui2::button>(actions[i].id);const auto box=b.get_rectangle();if(box.w&&box.h)gui2::dialogs::tip::show(style("alliance_home_tooltip"),actions[i].name,point{box.x+box.w/2,box.y},box);}
     void describe_profile(){auto& label=window_.find_widget<gui2::label>("home_player");const auto box=window_.find_widget<gui2::widget>("home_profile").get_rectangle();if(box.w&&box.h)gui2::dialogs::tip::show(style("alliance_home_profile_tooltip"),label.get_label(),point{box.x,box.y},box);}
-    void focus(std::size_t i,bool focused){auto& b=window_.find_widget<gui2::button>(actions[i].id);for(int n=0;n<4;++n)b.get_canvas(n).set_variable("home_focus",wfl::variant(focused));b.queue_redraw();if(focused)describe(i);else gui2::dialogs::tip::remove();}
+    void focus(std::size_t i,bool focused){auto& b=window_.find_widget<gui2::button>(actions[i].id);for(int n=0;n<4;++n)b.get_canvas(n).set_variable("home_focus",wfl::variant(focused));b.queue_redraw();if(focused&&i<4)describe(i);else gui2::dialogs::tip::remove();}
 public:
     explicit Interaction(gui2::window& window):window_(window){}
     ~Interaction(){for(std::size_t i=0;i<timers_.size();++i)stop(i);}

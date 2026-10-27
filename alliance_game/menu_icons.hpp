@@ -69,8 +69,37 @@ inline void path(cairo_t* c, Symbol symbol) {
     }
 }
 
+inline std::string png_data_uri(cairo_surface_t* surface) {
+    if(!surface||cairo_surface_status(surface)!=CAIRO_STATUS_SUCCESS)throw std::runtime_error("Invalid interface raster.");
+    const int width=cairo_image_surface_get_width(surface),height=cairo_image_surface_get_height(surface);
+    if(width<1||height<1||width>4096||height>4096)throw std::invalid_argument("Invalid interface raster dimensions.");
+    // The pinned Android Cairo has its optional PNG encoder disabled. Its
+    // ARGB32 raster is native-endian and premultiplied; libpng (already linked
+    // by the engine) takes straight RGBA. Unpremultiply before encoding so
+    // antialiased gold edges retain their colour over any menu background.
+    cairo_surface_flush(surface);
+    const auto* data=cairo_image_surface_get_data(surface);const int stride=cairo_image_surface_get_stride(surface);
+    std::vector<std::uint8_t> rgba(static_cast<std::size_t>(width)*height*4);
+    for(int y=0;y<height;++y)for(int x=0;x<width;++x){std::uint32_t pixel;std::memcpy(&pixel,data+y*stride+x*4,4);const auto alpha=pixel>>24;
+        const auto offset=(static_cast<std::size_t>(y)*width+x)*4;
+        for(unsigned channel=0;channel<3;++channel){const auto premultiplied=(pixel>>(16-channel*8))&255;
+            rgba[offset+channel]=alpha?static_cast<std::uint8_t>(std::min(255u,(premultiplied*255+alpha/2)/alpha)):0;}
+        rgba[offset+3]=static_cast<std::uint8_t>(alpha);
+    }
+    png_image png{};png.version=PNG_IMAGE_VERSION;png.width=width;png.height=height;png.format=PNG_FORMAT_RGBA;
+    struct PngCleanup{png_image& image;~PngCleanup(){png_image_free(&image);}}cleanup{png};
+    png_alloc_size_t encoded_size=0;
+    if(!png_image_write_to_memory(&png,nullptr,&encoded_size,0,rgba.data(),width*4,nullptr)||encoded_size>8*1024*1024)
+        throw std::runtime_error("Menu icon encoding failed.");
+    std::vector<std::uint8_t> bytes(encoded_size);
+    if(!png_image_write_to_memory(&png,bytes.data(),&encoded_size,0,rgba.data(),width*4,nullptr))
+        throw std::runtime_error("Menu icon encoding failed.");
+    bytes.resize(encoded_size);
+    return "data:image/png;base64,"+base64::encode(bytes);
+}
+
 inline std::string image(Symbol symbol,int logical_size,std::uint32_t rgb,int pixel_scale=2) {
-    if(symbol<Symbol::quit||symbol>Symbol::visibility_hidden||logical_size<16||logical_size>128||pixel_scale<1||pixel_scale>4||rgb>0xffffff)
+    if(symbol<Symbol::quit||symbol>Symbol::visibility_hidden||logical_size<16||logical_size>256||pixel_scale<1||pixel_scale>4||rgb>0xffffff)
         throw std::invalid_argument("Invalid menu icon dimensions or colour.");
     using Key=std::tuple<Symbol,int,std::uint32_t,int>;
     static std::map<Key,std::string> cache;
@@ -85,28 +114,6 @@ inline std::string image(Symbol symbol,int logical_size,std::uint32_t rgb,int pi
     cairo_set_line_width(c,220./logical_size);cairo_set_line_join(c,CAIRO_LINE_JOIN_ROUND);cairo_set_line_cap(c,CAIRO_LINE_CAP_ROUND);
     cairo_set_source_rgb(c,((rgb>>16)&255)/255.,((rgb>>8)&255)/255.,(rgb&255)/255.);path(c,symbol);cairo_stroke(c);
     if(cairo_status(c)!=CAIRO_STATUS_SUCCESS)throw std::runtime_error("Menu icon rendering failed.");
-    // The pinned Android Cairo has its optional PNG encoder disabled. Its
-    // ARGB32 raster is native-endian and premultiplied; libpng (already linked
-    // by the engine) takes straight RGBA. Unpremultiply before encoding so
-    // antialiased gold edges retain their colour over any menu background.
-    cairo_surface_flush(surface.get());
-    const auto* data=cairo_image_surface_get_data(surface.get());const int stride=cairo_image_surface_get_stride(surface.get());
-    std::vector<std::uint8_t> rgba(static_cast<std::size_t>(size)*size*4);
-    for(int y=0;y<size;++y)for(int x=0;x<size;++x){std::uint32_t pixel;std::memcpy(&pixel,data+y*stride+x*4,4);const auto alpha=pixel>>24;
-        const auto offset=(static_cast<std::size_t>(y)*size+x)*4;
-        for(unsigned channel=0;channel<3;++channel){const auto premultiplied=(pixel>>(16-channel*8))&255;
-            rgba[offset+channel]=alpha?static_cast<std::uint8_t>(std::min(255u,(premultiplied*255+alpha/2)/alpha)):0;}
-        rgba[offset+3]=static_cast<std::uint8_t>(alpha);
-    }
-    png_image png{};png.version=PNG_IMAGE_VERSION;png.width=size;png.height=size;png.format=PNG_FORMAT_RGBA;
-    struct PngCleanup{png_image& image;~PngCleanup(){png_image_free(&image);}}cleanup{png};
-    png_alloc_size_t encoded_size=0;
-    if(!png_image_write_to_memory(&png,nullptr,&encoded_size,0,rgba.data(),size*4,nullptr)||encoded_size>1024*1024)
-        throw std::runtime_error("Menu icon encoding failed.");
-    std::vector<std::uint8_t> bytes(encoded_size);
-    if(!png_image_write_to_memory(&png,bytes.data(),&encoded_size,0,rgba.data(),size*4,nullptr))
-        throw std::runtime_error("Menu icon encoding failed.");
-    bytes.resize(encoded_size);
-    return cache.emplace(key,"data:image/png;base64,"+base64::encode(bytes)).first->second;
+    return cache.emplace(key,png_data_uri(surface.get())).first->second;
 }
 }
