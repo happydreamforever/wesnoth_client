@@ -1,0 +1,40 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+#include "alliance_game/world_result.hpp"
+#include "alliance_game/world_storage.hpp"
+#include "game_board.hpp"
+#include "map/map.hpp"
+#include "resources.hpp"
+#include "units/unit.hpp"
+#include "units/types.hpp"
+#include "saved_game.hpp"
+#include "savegame.hpp"
+#include "filesystem.hpp"
+#include "video.hpp"
+#include <iostream>
+#include "serialization/parser.hpp"
+#include <boost/json.hpp>
+#include <map>
+#include <set>
+#include <optional>
+#include <sstream>
+#include <stdexcept>
+namespace alliance_game {namespace {
+namespace j=boost::json;
+struct Tracked {WorldUnit original;long long earned=0;std::string type;int xp=0;bool deployed=false,dead=false;};
+struct Active {WorldPlan plan;std::string scenario;bool witness=false,valid=true,combat=false;std::map<std::string,Tracked> units;j::array events;std::string chain=std::string(64,'0');};
+std::optional<Active> active;
+std::string evidence,replay;
+void event(const std::string&id,const char*kind,const std::string&type,int amount){if(!active||active->events.size()>=100000)throw std::runtime_error("World ledger limit reached.");j::object row{{"sequence",static_cast<long long>(active->events.size())},{"run_id",active->plan.run_id},{"generation",active->plan.generation},{"previous",active->chain},{"instance_id",id},{"kind",kind},{"unit_type",type},{"amount",amount}};active->chain=world_sha256(j::serialize(row));row["sha256"]=active->chain;active->events.push_back(row);}
+Tracked* tracked(unit&u){if(!active||!resources::gameboard)return nullptr;const auto id=u.variables()["world_instance_id"].str();auto it=active->units.find(id);if(it==active->units.end())return nullptr;if(u.variables()["world_owner"].str()!=it->second.original.owner||u.variables()["world_kind"].str()!=it->second.original.kind)throw std::runtime_error("World unit owner changed.");return &it->second;}
+}
+WorldActiveLaunch::WorldActiveLaunch(const WorldPlan&p,const std::string&hash,bool witness){if(active||hash.size()!=64)throw std::runtime_error("World execution already active.");active=Active{};active->plan=p;active->scenario=hash;active->witness=witness;evidence.clear();replay.clear();for(const auto&s:p.sides){if(!s.hero.instance_id.empty())active->units.emplace(s.hero.instance_id,Tracked{s.hero,0,s.hero.unit_type,0});for(const auto&u:s.soldiers)active->units.emplace(u.instance_id,Tracked{u,0,u.unit_type,u.xp});}}
+WorldActiveLaunch::~WorldActiveLaunch(){active.reset();}
+void world_sync_error()noexcept{if(active)active->valid=false;}
+void record_world_form(unit&u)noexcept{try{auto*r=tracked(u);if(!r)return;const auto id=r->original.instance_id;const bool on_map=resources::gameboard->map().on_board(u.get_location());if(on_map&&!r->deployed){r->deployed=true;event(id,"deployed",r->original.unit_type,0);}if(r->original.kind=="soldier"&&u.type_id()!=r->type){const auto next=r->original.branches.find(r->type);if(r->original.delegated&&next!=r->original.branches.end()&&next->second!=u.type_id())throw std::runtime_error("Advancement differs from consent.");event(id,"advance",u.type_id(),u.experience());r->type=u.type_id();}if(r->original.kind=="soldier")r->xp=u.experience();if(u.hitpoints()<=0&&!r->dead){r->dead=true;event(id,"fallen",r->type,0);}if(r->original.kind=="soldier"){const auto*base=unit_types.find(u.type_id());if(base&&base->advances_to().empty()){u.set_max_experience(1000000000);r->xp=std::min(r->xp,base->experience_needed(false)-1);}auto next=r->original.branches.find(u.type_id());if(r->original.delegated&&next!=r->original.branches.end())u.set_advances_to({next->second});}}catch(...){world_sync_error();}}
+void record_world_experience(unit&u,int earned)noexcept{try{if(active&&earned>0)active->combat=true;record_world_form(u);auto*r=tracked(u);if(!r||earned==0||r->original.kind=="hero")return;if(earned<0||earned>1000000||r->earned>1000000-earned)throw std::runtime_error("World XP overflow.");r->earned+=earned;event(r->original.instance_id,"experience",u.type_id(),earned);}catch(...){world_sync_error();}}
+void capture_world_units()noexcept{try{if(active&&resources::gameboard)for(auto&u:resources::gameboard->units())record_world_form(u);}catch(...){world_sync_error();}}
+bool world_save(const saved_game&s)noexcept{try{return s.get_starting_point().child_or_empty("variables")["alliance_world"].to_bool()||s.replay_start().child_or_empty("variables")["alliance_world"].to_bool();}catch(...){return false;}}
+void observe_world_completion(saved_game&state,level_result::type result)noexcept{if(active&&active->witness&&video::headless())std::cerr<<"WORLD NATIVE END: kind="<<static_cast<int>(result)<<" synchronized="<<active->valid<<" troop_events="<<active->events.size()<<std::endl;if(!active||!active->witness||(result!=level_result::type::victory&&result!=level_result::type::defeat&&result!=level_result::type::observer_end))return;const char*stage="synchronization";try{if(!active->valid)throw std::runtime_error("World synchronization was not verified.");stage="snapshot";const auto&cfg=state.get_starting_point();const auto&v=cfg.child_or_empty("variables");if(!v["alliance_world"].to_bool()||v["world_run_id"].str()!=active->plan.run_id||v["world_generation"].str()!=active->plan.generation)throw std::runtime_error("World result binding differs.");std::set<std::string>alive;std::set<std::string>seen;for(const auto&side:cfg.child_range("side"))for(const auto&u:side.child_range("unit")){if(u["canrecruit"].to_bool()&&u["hitpoints"].to_int()>0)alive.insert(side["team_name"].str());const auto id=u.child_or_empty("variables")["world_instance_id"].str();auto it=active->units.find(id);if(it!=active->units.end()){seen.insert(id);if(it->second.original.kind=="soldier"){it->second.xp=u["experience"].to_int();const auto*base=unit_types.find(it->second.type);if(base&&base->advances_to().empty())it->second.xp=std::min(it->second.xp,base->experience_needed(false)-1);}}}stage="terminal";const bool timeout=v["world_terminal"].str()=="turn_limit";if(alive.size()>1&&!timeout)throw std::runtime_error("Both allegiances still have native leaders.");const bool company_timeout=timeout&&active->plan.mode=="company";const bool draw=!company_timeout&&(alive.empty()||timeout);const auto winner=company_timeout?std::string{"npc"}:draw?std::string{}:*alive.begin();j::array units;for(auto&[id,u]:active->units){if(u.deployed&&!seen.count(id)&&!u.dead){u.dead=true;event(id,"fallen",u.type,0);}units.push_back(j::object{{"instance_id",id},{"earned_xp",u.earned},{"final_type",u.type},{"final_xp",u.original.kind=="hero"?0:u.xp},{"dead",u.dead},{"deployed",u.deployed}});}stage="replay";const auto name="World-"+active->plan.run_id+"-"+active->plan.generation;const auto path=std::filesystem::path(filesystem::get_saves_dir())/(name+".gz");if(std::filesystem::exists(path))throw std::runtime_error("World replay already retained.");savegame::replay_savegame save(state,compression::format::gzip);if(!save.save_game_automatic(false,name))throw std::runtime_error("World replay save failed.");replay=world_read_file(path,32*1024*1024);if(replay.empty())throw std::runtime_error("World replay empty.");j::object proof{{"format",1},{"run_id",active->plan.run_id},{"generation",active->plan.generation},{"scenario_sha256",active->scenario},{"replay_sha256",world_sha256(replay)},{"ledger_sha256",world_sha256(j::serialize(active->events))},{"ledger",active->events},{"event_count",static_cast<long long>(active->events.size())},{"terminal",timeout?"turn_limit":"leaders_defeated"},{"outcome",draw?"draw":"win"},{"winner_team_id",winner},{"units",units},{"sync_valid",true},{"combat_verified",active->combat},{"native_end",result==level_result::type::observer_end?"observer_end":result==level_result::type::victory?"victory":"defeat"}};evidence=j::serialize(proof);}catch(...){if(video::headless())std::cerr<<"WORLD NATIVE EVIDENCE REJECTED: stage="<<stage<<std::endl;world_sync_error();evidence.clear();replay.clear();}}
+std::string pending_world_evidence(){return evidence;}
+std::string pending_world_replay(){return replay;}
+}

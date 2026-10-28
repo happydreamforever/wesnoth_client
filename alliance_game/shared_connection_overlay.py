@@ -91,7 +91,8 @@ def transform_source(text):
         std::ostringstream plain; io::write(plain, request);
         const config packet=io::read(plain.str());
         if(packet.attribute_count()!=0 || packet.all_children_count()!=1 ||
-           (!packet.has_child("leave_game") && !packet.has_child("stop_updates"))) return;
+           (!packet.has_child("leave_game") && !packet.has_child("stop_updates") &&
+            !packet.has_child("world_native_terminal"))) return;
     }
     if(alliance_socket_lookup(this)) {
         std::ostringstream plain; io::write(plain, request);
