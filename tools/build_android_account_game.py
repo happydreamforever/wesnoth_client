@@ -32,9 +32,9 @@ ENGINE_KIND = 'wesnoth-android-account-engine'
 LOCK = '.wesnoth-account-game-operation.json'
 MARKER = '.wesnoth-account-game.json'
 ENGINE_MARKER = '.wesnoth-account-engine.json'
-VERSION_CODE = 1192623
-PREVIOUS_VERSION_CODES = frozenset(range(1192608, 1192623))
-UPDATE_JOURNAL = '.wesnoth-account-game-update-1192623.json'
+VERSION_CODE = 1192624
+PREVIOUS_VERSION_CODES = frozenset(range(1192608, 1192624))
+UPDATE_JOURNAL = '.wesnoth-account-game-update-1192624.json'
 UPDATE_KIND = 'wesnoth-android-account-game-update'
 UPDATE_STAGES = ('android-account-engine', 'android-account-game')
 PACKAGE = G.PACKAGE
@@ -57,6 +57,8 @@ NEW_INPUTS = ('tools/build_android_account_game.py', 'tools/android_public_bundl
               'alliance_game/account_ui.cpp', 'alliance_game/account_ui.hpp', 'alliance_game/product_ui_layout.hpp', 'alliance_game/native_touch_layout.hpp', 'alliance_game/team_workspace.inc', 'alliance_game/individual_creation.inc',
               'alliance_game/hero_presentation.hpp', 'alliance_game/hero_presentation_data.inc', 'alliance_game/hero_presentation.json', 'alliance_game/hero_gallery.inc',
               'alliance_game/campaign_rewards.hpp', 'alliance_game/campaign_selection_overlay.py',
+              'alliance_native/world_protocol.hpp', 'alliance_game/world_ui.hpp', 'alliance_game/world_command_record.hpp',
+              *(f'alliance_game/world_{name}.{suffix}' for name in ('launch','scenario','result','storage','worker') for suffix in ('hpp','cpp')),
               'alliance_native/flexible_protocol.hpp', 'alliance_game/title_overlay.py',
               'alliance_game/engine_overlay.py',
               *(f'alliance_game/{name}.{suffix}' for name in ('session_watch', 'android_lifecycle') for suffix in ('cpp', 'hpp')), 'alliance_game/battle_launch.cpp', 'alliance_game/battle_launch.hpp',
@@ -94,7 +96,8 @@ SYNCED_COMMANDS_SOURCE = 'synced_commands.cpp'
 STORY_OVERLAYS = {'game_config_manager.cpp': 'generate_config_manager_overlay',
                   'actions/attack.cpp': 'generate_attack_overlay',
                   'actions/advancement.cpp': 'generate_advancement_overlay',
-                  'scripting/lua_unit.cpp': 'generate_lua_unit_overlay'}
+                  'scripting/lua_unit.cpp': 'generate_lua_unit_overlay',
+                  'playmp_controller.cpp': 'generate_world_oos_overlay'}
 CASUAL_OVERLAYS = ('game_initialization/connect_engine.cpp', 'gui/dialogs/multiplayer/mp_staging.cpp',
                    'gui/dialogs/multiplayer/mp_join_game.cpp', 'gui/dialogs/multiplayer/mp_create_game.cpp')
 MULTIPLAYER_SOURCE = 'game_initialization/multiplayer.cpp'
@@ -603,7 +606,7 @@ def previous_version(root, marker, receipt):
     apk = validation.get('apk') if isinstance(validation, dict) else None
     version = apk.get('version_code') if isinstance(apk, dict) else None
     if type(version) is not int or version not in PREVIOUS_VERSION_CODES:
-        raise BuildError('Expected a completed account APK from versions 1192608 through 1192622; nothing was renamed.')
+        raise BuildError('Expected a completed account APK from versions 1192608 through 1192623; nothing was renamed.')
     if 'app/build.gradle' not in marker['files']:
         raise BuildError('The previous account version is not bound to its owned Gradle input.')
     data = call(N.ninja_read, root / 'app/build.gradle', 64 * 1024)
@@ -666,7 +669,7 @@ def checked_update_journal(record, current_inputs):
         entry = record['stages'][name]
         if not isinstance(entry, dict) or set(entry) != {'backup', 'snapshot'}:
             raise BuildError('Invalid account update stage record.')
-        match = re.fullmatch(re.escape(name) + r'-before-emerald-ui-(\d{8}T\d{6}Z-[0-9a-f]{32})', str(entry['backup']))
+        match = re.fullmatch(re.escape(name) + r'-before-world-companies-(\d{8}T\d{6}Z-[0-9a-f]{32})', str(entry['backup']))
         if not match:
             raise BuildError('Invalid account backup location; no paths were changed.')
         suffixes.add(match.group(1))
@@ -730,7 +733,7 @@ def prepare_update(repo):
             token = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ-') + uuid.uuid4().hex
             record = {'schema_version': 1, 'kind': UPDATE_KIND, 'target_version': VERSION_CODE,
                       'target_inputs': inputs, 'stages': {name: {
-                          'backup': name + '-before-emerald-ui-' + token, 'snapshot': snapshots[name]}
+                          'backup': name + '-before-world-companies-' + token, 'snapshot': snapshots[name]}
                           for name in UPDATE_STAGES}}
             checked_update_journal(record, inputs)
             write_new(journal, B.json_bytes(record))
@@ -837,7 +840,7 @@ def main(argv=None):
     parser.add_argument('--public-config', type=Path, help='Public-only .env file; defaults to the repository .env.')
     parser.add_argument('--openssl', type=Path, help='Existing OpenSSL 3 executable for offline public certificate verification.')
     parser.add_argument('--verify', '--verify-only', action='store_true')
-    parser.add_argument('--prepare-update', action='store_true', help='Preserve completed 1192608 through 1192622 stages before the 1192623 emerald interface update.')
+    parser.add_argument('--prepare-update', action='store_true', help='Preserve completed 1192608 through 1192623 stages before the 1192624 Companies and territorial world update.')
     args = parser.parse_args(argv)
     try:
         for name, value in vars(args).items():

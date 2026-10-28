@@ -6,7 +6,7 @@ def generate_title_overlay(source: bytes) -> bytes:
     if sha256(source).hexdigest() != SOURCE_SHA256:
         raise ValueError("Pinned title-screen source differs; original preserved.")
     include = b'#include "gui/dialogs/title_screen.hpp"\n'
-    result = source.replace(include, include + b'#include "alliance_game/account_ui.hpp"\n#include "alliance_game/battle_ui.hpp"\n#include "alliance_game/home_ui.hpp"\n#include "alliance_game/battle_launch.hpp"\n#include "alliance_game/progression_plan.hpp"\n#include "alliance_game/shared_launch.hpp"\n#include "alliance_game/replay_launch.hpp"\n')
+    result = source.replace(include, include + b'#include "alliance_game/world_launch.hpp"\n#include "alliance_game/account_ui.hpp"\n#include "alliance_game/battle_ui.hpp"\n#include "alliance_game/home_ui.hpp"\n#include "alliance_game/battle_launch.hpp"\n#include "alliance_game/progression_plan.hpp"\n#include "alliance_game/shared_launch.hpp"\n#include "alliance_game/replay_launch.hpp"\n')
     result = result.replace(b': modal_dialog(window_id())', b': modal_dialog(alliance_game::prepare_home_window())')
     start = result.index(b'void title_screen::init_callbacks()\n{')
     end = result.index(b'\nvoid title_screen::update_static_labels()', start)
@@ -31,7 +31,13 @@ def generate_title_overlay(source: bytes) -> bytes:
     register_button("community", hotkey::HOTKEY_NULL, [this,refresh_profile]() {
         alliance_game::show_teams_dialog();
         if(!alliance_game::player_session()) { set_retval(RELOAD_UI); return; }
-        if(alliance_game::shared_pending()) set_retval(alliance_game::shared_title_result);
+        if(alliance_game::take_world_campaign_request()) {
+            try { if(game_.new_campaign()) { hide(); set_retval(LAUNCH_GAME); return; } }
+            catch(const config::error& e) { gui2::show_error_message(e.what()); }
+            refresh_profile();
+        }
+        else if(alliance_game::world_pending()) set_retval(alliance_game::world_title_result);
+        else if(alliance_game::shared_pending()) set_retval(alliance_game::shared_title_result);
         else if(alliance_game::replay_pending()) set_retval(alliance_game::replay_title_result);
         else refresh_profile();
     });

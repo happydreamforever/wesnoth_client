@@ -1028,6 +1028,15 @@ class AccountClientResponseTests(unittest.TestCase):
         output,received=self.exercise(self.team_reply(response),self.team_request('world_command',world_json=json.dumps(body)))
         self.assertTrue(output['ok']);self.assertEqual(received['body'],body)
 
+    def test_world_war_proposal_cancellation_keeps_actor_and_nonce(self):
+        actor=self.account();body={'operation':'war_cancel','payload':{
+            'command_id':'22345678-1234-4321-8765-0123456789ab',
+            'war_id':'32345678-1234-4321-8765-0123456789ab'}}
+        response={'version':1,'balance_revision':'world-company-1',
+            'database_generation':actor['database_generation'],'actor_id':actor['id'],'data':{'war':{'state':'cancelled'}}}
+        output,received=self.exercise(self.team_reply(response),self.team_request('world_command',world_json=json.dumps(body)))
+        self.assertTrue(output['ok']);self.assertEqual(received['body'],body)
+
     def test_world_forbidden_mutations_and_oversized_arrays_never_connect(self):
         nonce='22345678-1234-4321-8765-0123456789ab'
         bad=[{'operation':'bootstrap','payload':{'command_id':nonce}},

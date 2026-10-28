@@ -10,7 +10,7 @@ def _replace(source, expected, include, before, after):
         raise ValueError("Pinned engine source differs; original preserved.")
     if source.count(include) != 1 or source.count(before) != 1:
         raise ValueError("Pinned practice dispatch anchors differ; original preserved.")
-    return source.replace(include, include + b'#include "alliance_game/battle_launch.hpp"\n#include "alliance_game/progression_plan.hpp"\n#include "alliance_game/progression_result.hpp"\n#include "alliance_game/shared_launch.hpp"\n#include "alliance_game/shared_result.hpp"\n#include "alliance_game/replay_launch.hpp"\n').replace(before, after)
+    return source.replace(include, include + b'#include "alliance_game/world_launch.hpp"\n#include "alliance_game/world_result.hpp"\n#include "alliance_game/battle_launch.hpp"\n#include "alliance_game/progression_plan.hpp"\n#include "alliance_game/progression_result.hpp"\n#include "alliance_game/shared_launch.hpp"\n#include "alliance_game/shared_result.hpp"\n#include "alliance_game/replay_launch.hpp"\n').replace(before, after)
 
 
 def generate_engine_overlay(source: bytes) -> bytes:
@@ -18,7 +18,8 @@ def generate_engine_overlay(source: bytes) -> bytes:
 \t\t\tgame->play_multiplayer(game_launcher::mp_mode::LOCAL);
 \t\t\tbreak;
 '''
-    after = before + b'''\t\tcase alliance_game::shared_title_result:
+    after = before + b'''\t\tcase alliance_game::world_title_result:
+\t\tcase alliance_game::shared_title_result:
 \t\tcase alliance_game::replay_title_result:
 \t\tcase alliance_game::progression_title_result:
 \t\tcase alliance_game::practice_title_result:
@@ -32,15 +33,15 @@ def generate_engine_overlay(source: bytes) -> bytes:
     anchor = b'\t\tif(game->play_test() == false) {\n'
     if result.count(anchor) != 1:
         raise ValueError("Pinned initialized companion dispatch differs.")
-    result = result.replace(b'#include "alliance_game/shared_launch.hpp"\n', b'#include "alliance_game/shared_launch.hpp"\n#include "alliance_game/companion.hpp"\n')
-    result = result.replace(anchor, b'\t\tif(alliance_game::companion_requested()) return alliance_game::run_companion();\n'+anchor)
+    result = result.replace(b'#include "alliance_game/shared_launch.hpp"\n', b'#include "alliance_game/shared_launch.hpp"\n#include "alliance_game/companion.hpp"\n#include "alliance_game/world_worker.hpp"\n')
+    result = result.replace(anchor, b'\t\tif(alliance_game::world_worker_requested()) return alliance_game::run_world_worker();\n\t\tif(alliance_game::companion_requested()) return alliance_game::run_companion();\n'+anchor)
     result = b'#include "alliance_game/session_watch.hpp"\n#include "alliance_game/android_lifecycle.hpp"\n' + result
     exit_anchor = b'static void safe_exit(int res)\n{\n'
     if result.count(exit_anchor) != 1: raise ValueError('Pinned Android task exit differs.')
     result = result.replace(exit_anchor, exit_anchor + b'\talliance_game::logout_player();\n\talliance_game::finish_game_task();\n')
     loop = b'\twhile(true) {\n\t\tif(!game->has_load_data()) {'
     if result.count(loop) != 1: raise ValueError('Pinned session monitor lifetime differs.')
-    return result.replace(loop, b'\tstd::unique_ptr<alliance_game::SessionWatch> account_connection_watch;\n\tif(!alliance_game::companion_requested()) account_connection_watch = std::make_unique<alliance_game::SessionWatch>();\n' + loop)
+    return result.replace(loop, b'\tstd::unique_ptr<alliance_game::SessionWatch> account_connection_watch;\n\tif(!alliance_game::companion_requested() && !alliance_game::world_worker_requested()) account_connection_watch = std::make_unique<alliance_game::SessionWatch>();\n' + loop)
 
 
 
@@ -50,7 +51,11 @@ def generate_launcher_overlay(source: bytes) -> bytes:
 \tgame_config::set_debug(game_config::mp_debug);
 \ttry {
 '''
-    after = before + b'''\t\tif(mode == mp_mode::LOCAL && alliance_game::practice_pending()) {
+    after = before + b'''\t\tif(mode == mp_mode::LOCAL && alliance_game::world_pending()) {
+\t\t\talliance_game::run_pending_world();
+\t\t\treturn true;
+\t\t}
+\t\tif(mode == mp_mode::LOCAL && alliance_game::practice_pending()) {
 \t\t\talliance_game::run_pending_practice();
 \t\t\treturn true;
 \t\t}
@@ -77,7 +82,7 @@ def generate_launcher_overlay(source: bytes) -> bytes:
     anchor = b'void game_launcher::launch_game(reload_mode reload)\n{\n'
     if result.count(anchor) != 1:
         raise ValueError("Pinned saved-game launch anchor differs.")
-    return result.replace(anchor, anchor + b'\tif(!play_replay_ && (alliance_game::progression_save(state_) || alliance_game::shared_save(state_))) {\n\t\tgui2::show_error_message("Hero training saves cannot resume for account rewards. Shared battles must reconnect through Teams > Battle plans. Use the completed replay action for recorded games.");\n\t\treturn;\n\t}\n')
+    return result.replace(anchor, anchor + b'\tif(!play_replay_ && (alliance_game::progression_save(state_) || alliance_game::shared_save(state_) || alliance_game::world_save(state_))) {\n\t\tgui2::show_error_message("This battle must resume from Team > Battles. Open History to watch its completed replay.");\n\t\treturn;\n\t}\n')
 
 
 CAMPAIGN_SHA256 = "8d4443cad710e20489d18684d23c4e56e316858c7bc96877fe4d4828c64fea43"
@@ -114,17 +119,17 @@ def generate_campaign_overlay(source: bytes) -> bytes:
     entry=b'level_result::type campaign_controller::play_game()\n{\n\tif(is_replay_) {'
     if source.count(entry)!=1:
         raise ValueError("Pinned shared reconnect replay cursor differs.")
-    result=source.replace(entry,b'level_result::type campaign_controller::play_game()\n{\n\tif(alliance_game::shared_pending()) {\n\t\talliance_game::run_pending_shared();\n\t\treturn level_result::type::quit;\n\t}\n\tif(is_replay_ || (mp_info_ && mp_info_->skip_replay && alliance_game::shared_save(state_))) {')
+    result=source.replace(entry,b'level_result::type campaign_controller::play_game()\n{\n\tif(alliance_game::shared_pending()) {\n\t\talliance_game::run_pending_shared();\n\t\treturn level_result::type::quit;\n\t}\n\tif(is_replay_ || (mp_info_ && mp_info_->skip_replay && (alliance_game::shared_save(state_) || alliance_game::world_save(state_)))) {')
     snapshot=b'\tstate_.set_snapshot(playcontroller.to_config());'
     if result.count(snapshot)!=1: raise ValueError('Pinned story snapshot boundary differs.')
-    result=result.replace(snapshot,b'\talliance_game::capture_story_participants();\n'+snapshot)
+    result=result.replace(snapshot,b'\talliance_game::capture_world_units();\n\talliance_game::capture_story_participants();\n'+snapshot)
     mp_snapshot=b'\tplaycontroller.update_savegame_snapshot();'
     if result.count(mp_snapshot)!=1: raise ValueError('Pinned multiplayer snapshot boundary differs.')
-    result=result.replace(mp_snapshot,b'\talliance_game::capture_story_participants();\n'+mp_snapshot)
+    result=result.replace(mp_snapshot,b'\talliance_game::capture_world_units();\n\talliance_game::capture_story_participants();\n'+mp_snapshot)
     controller=b'\tplaymp_controller playcontroller(state_.get_starting_point(), state_, mp_info_);\n'
     if result.count(controller)!=1:
         raise ValueError("Pinned shared reconnect controller differs.")
-    result=result.replace(controller,controller+b'\tif(mp_info_ && mp_info_->skip_replay && alliance_game::shared_save(state_)) playcontroller.enable_replay(true);\n')
+    result=result.replace(controller,controller+b'\tif(mp_info_ && mp_info_->skip_replay && (alliance_game::shared_save(state_) || alliance_game::world_save(state_))) playcontroller.enable_replay(true);\n')
     prep = b'\t\t\tstate_.expand_mp_options();'
     if result.count(prep) != 1: raise ValueError('Pinned scenario account boundary differs.')
     result = result.replace(prep, prep + b'\n\t\t\tif(!alliance_game::prepare_story_scenario(state_, is_replay_)) return level_result::type::quit;')
@@ -132,8 +137,8 @@ def generate_campaign_overlay(source: bytes) -> bytes:
     if result.count(transition) != 1: raise ValueError('Pinned story transition boundary differs.')
     result = result.replace(transition, transition + b'\n\t\tif(!alliance_game::advance_story_scenario(state_)) {\n\t\t\tgui2::show_error_message("The next campaign checkpoint could not be saved. Resume the latest campaign save and keep its private game records. [story-transition]");\n\t\t\treturn level_result::type::quit;\n\t\t}')
     result = b'#include "alliance_game/story_progression.hpp"\n' + result
-    return result.replace(include,include+b'#include "alliance_game/progression_result.hpp"\n#include "alliance_game/shared_launch.hpp"\n#include "alliance_game/shared_result.hpp"\n#include "alliance_game/replay_launch.hpp"\n').replace(
-        anchor,b'\t\talliance_game::observe_story_completion(state_, res);\n\t\talliance_game::observe_progression_completion(state_, res);\n\t\talliance_game::observe_shared_completion(state_, res);\n\n'+anchor)
+    return result.replace(include,include+b'#include "alliance_game/world_result.hpp"\n#include "alliance_game/world_launch.hpp"\n#include "alliance_game/progression_result.hpp"\n#include "alliance_game/shared_launch.hpp"\n#include "alliance_game/shared_result.hpp"\n#include "alliance_game/replay_launch.hpp"\n').replace(
+        anchor,b'\t\talliance_game::observe_world_completion(state_, res);\n\t\talliance_game::observe_story_completion(state_, res);\n\t\talliance_game::observe_progression_completion(state_, res);\n\t\talliance_game::observe_shared_completion(state_, res);\n\n'+anchor)
 
 CONFIG_MANAGER_SHA256 = "e04dded36b2aa3c313861b4c441d51b0ffccaae4e0e2bd0f6ff63f3c52bc3f8a"
 ATTACK_SHA256 = "336bf909f7426915cb66df6bb96ee3fbc5acec58a6fd78649ecf0c06aab68878"
@@ -143,7 +148,7 @@ LUA_UNIT_SHA256 = "cb76a18ef7db9064e9ac6c5e8284a851b5af49942658b9c8e87415e3ac951
 def _hero_overlay(source, expected, anchor, replacement, include):
     if sha256(source).hexdigest() != expected or source.count(anchor) != 1:
         raise ValueError("Pinned hero engine boundary differs; original preserved.")
-    return b'#include "alliance_game/' + include + b'"\n' + source.replace(anchor, replacement)
+    return b'#include "alliance_game/world_result.hpp"\n#include "alliance_game/' + include + b'"\n' + source.replace(anchor, replacement)
 
 def generate_config_manager_overlay(source: bytes) -> bytes:
     anchor=b'unit_types.set_config(game_config().merged_children_view("units"));'
@@ -156,15 +161,21 @@ def generate_attack_overlay(source: bytes) -> bytes:
     for who in (b'a_',b'd_'):
         anchor=b'\t\tu.set_experience(u.experience() + '+who+b'.xp_);'
         if source.count(anchor)!=1:raise ValueError("Pinned earned combat XP boundary differs.")
-        source=source.replace(anchor,b'\t\talliance_game::record_story_experience(u, '+who+b'.xp_);\n'+anchor)
-    return b'#include "alliance_game/story_progression.hpp"\n'+source
+        source=source.replace(anchor,b'\t\talliance_game::record_world_experience(u, '+who+b'.xp_);\n\t\talliance_game::record_story_experience(u, '+who+b'.xp_);\n'+anchor)
+    return b'#include "alliance_game/story_progression.hpp"\n#include "alliance_game/world_result.hpp"\n'+source
 
 def generate_advancement_overlay(source: bytes) -> bytes:
     anchor=b'\tu = resources::gameboard->units().insert(new_unit).first;'
     return _hero_overlay(source, ADVANCEMENT_SHA256, anchor,
-        anchor+b'\n\talliance_game::record_story_form(*u);', b'story_progression.hpp')
+        anchor+b'\n\talliance_game::record_world_form(*u);\n\talliance_game::record_story_form(*u);', b'story_progression.hpp')
 
 def generate_lua_unit_overlay(source: bytes) -> bytes:
     anchor=b'UNIT_SETTER("experience", int) {\n\tu.set_experience(value);\n}'
     return _hero_overlay(source,LUA_UNIT_SHA256,anchor,
-        anchor+b'\nUNIT_SETTER("unified_story_credit", int) {\n\talliance_game::record_story_experience(u, value);\n}',b'story_progression.hpp')
+        anchor+b'\nUNIT_SETTER("unified_world_credit", int) {\n\talliance_game::record_world_experience(u, value);\n}\nUNIT_SETTER("unified_story_credit", int) {\n\talliance_game::record_story_experience(u, value);\n}',b'story_progression.hpp')
+
+
+def generate_world_oos_overlay(source: bytes) -> bytes:
+    anchor=b'void playmp_controller::process_oos(const std::string& err_msg) const\n{'
+    return _hero_overlay(source, "f87c52f1b8e86d565ef33246dadf3fe42a3c64201e8df713f65a7a88872c804e", anchor,
+        anchor+b'\n\talliance_game::world_sync_error();', b'world_result.hpp')
