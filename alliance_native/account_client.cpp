@@ -15,10 +15,79 @@
 #include <stdexcept>
 #include <set>
 #include <sys/stat.h>
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#include <memory>
+#endif
 
 namespace alliance::account {
 namespace {
 namespace json = boost::json;
+#ifdef _WIN32
+struct ProfileHandleCloser {
+    void operator()(void* handle) const noexcept { CloseHandle(handle); }
+};
+
+std::string read_windows_profile(const std::string& path) {
+    // Preserve the Windows narrow-path convention used by getenv/ifstream:
+    // interpret paths with the active ANSI code page, never truncate at NUL.
+    if(path.empty() || path.size() > 4096 || path.find('\0') != std::string::npos)
+        throw ProfileReadError(ProfileReadFailure::file_unavailable);
+    const auto length = MultiByteToWideChar(CP_ACP, MB_ERR_INVALID_CHARS,
+                                          path.data(), static_cast<int>(path.size()), nullptr, 0);
+    if(length == 0) throw ProfileReadError(ProfileReadFailure::file_unavailable);
+    std::wstring filename(static_cast<std::size_t>(length), L'\0');
+    if(MultiByteToWideChar(CP_ACP, MB_ERR_INVALID_CHARS, path.data(),
+                         static_cast<int>(path.size()), filename.data(), length) != length)
+        throw ProfileReadError(ProfileReadFailure::file_unavailable);
+
+    // Match the POSIX reader's final-component link/type/size policy. Checking
+    // attributes first also avoids opening devices and named pipes as streams.
+    WIN32_FILE_ATTRIBUTE_DATA attributes{};
+    constexpr DWORD rejected = FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT | FILE_ATTRIBUTE_DEVICE;
+    if(!GetFileAttributesExW(filename.c_str(), GetFileExInfoStandard, &attributes)
+       || (attributes.dwFileAttributes & rejected) || attributes.nFileSizeHigh != 0
+       || attributes.nFileSizeLow == 0 || attributes.nFileSizeLow > max_json_bytes)
+        throw ProfileReadError(ProfileReadFailure::file_unavailable);
+    const auto opened = CreateFileW(filename.c_str(), GENERIC_READ, FILE_SHARE_READ,
+                                   nullptr, OPEN_EXISTING, FILE_FLAG_OPEN_REPARSE_POINT, nullptr);
+    if(opened == INVALID_HANDLE_VALUE)
+        throw ProfileReadError(ProfileReadFailure::file_read);
+    const std::unique_ptr<void, ProfileHandleCloser> handle(opened);
+    BY_HANDLE_FILE_INFORMATION before{};
+    if(GetFileType(handle.get()) != FILE_TYPE_DISK
+       || !GetFileInformationByHandle(handle.get(), &before)
+       || (before.dwFileAttributes & rejected) || before.nFileSizeHigh != 0
+       || before.nFileSizeLow == 0 || before.nFileSizeLow > max_json_bytes)
+        throw ProfileReadError(ProfileReadFailure::file_unavailable);
+
+    // Read and validate the same handle, denying concurrent writers/renames.
+    // The extra byte detects growth even on filesystems with weak timestamps.
+    std::string raw(max_json_bytes + 1, '\0');
+    std::size_t used = 0;
+    while(used < raw.size()) {
+        DWORD count = 0;
+        if(!ReadFile(handle.get(), raw.data() + used,
+                     static_cast<DWORD>(raw.size() - used), &count, nullptr))
+            throw ProfileReadError(ProfileReadFailure::file_read);
+        if(count == 0) break;
+        used += count;
+    }
+    BY_HANDLE_FILE_INFORMATION after{};
+    if(!GetFileInformationByHandle(handle.get(), &after) || used != before.nFileSizeLow
+       || used > max_json_bytes || before.dwVolumeSerialNumber != after.dwVolumeSerialNumber
+       || before.nFileIndexHigh != after.nFileIndexHigh || before.nFileIndexLow != after.nFileIndexLow
+       || before.nFileSizeHigh != after.nFileSizeHigh || before.nFileSizeLow != after.nFileSizeLow
+       || before.dwFileAttributes != after.dwFileAttributes || before.nNumberOfLinks != after.nNumberOfLinks
+       || CompareFileTime(&before.ftLastWriteTime, &after.ftLastWriteTime) != 0)
+        throw ProfileReadError(ProfileReadFailure::file_read);
+    raw.resize(used);
+    return raw;
+}
+#endif
 [[noreturn]] void invalid() { throw std::runtime_error("Invalid Alliance account response."); }
 void keys(const json::object& obj, std::initializer_list<const char*> expected) {
     if(obj.size() != expected.size()) invalid();
@@ -629,6 +698,9 @@ const char* ProfileReadError::what() const noexcept {
 }
 
 TrustedProfile read_public_profile(const std::string& path) {
+#ifdef _WIN32
+    const auto raw = read_windows_profile(path);
+#else
     // lstat rejects a final symlink in the trusted, app-private destination.
     struct stat info{};
     if(path.empty() || path.size() > 4096 || lstat(path.c_str(), &info) != 0
@@ -641,6 +713,7 @@ TrustedProfile read_public_profile(const std::string& path) {
     raw.resize(static_cast<std::size_t>(stream.gcount()));
     if(stream.bad() || raw.empty() || raw.size() > max_json_bytes)
         throw ProfileReadError(ProfileReadFailure::file_read);
+#endif
     TrustedProfile result;
     try {
         auto document = parse_document(raw);

@@ -55,6 +55,8 @@ class ProfileReadDiagnostics(unittest.TestCase):
         result = subprocess.run(command, capture_output=True, text=True, timeout=240)
         if result.returncode:
             raise RuntimeError(result.stdout + result.stderr)
+        cls.max_json_bytes = json.loads(subprocess.check_output(
+            [str(cls.binary), "--limits"], text=True, timeout=10))["max_json_bytes"]
         cls.command = command
         cls.paths = paths + ["alliance_native/account_client.hpp", "tests/test_account_profile_read.py"]
         cls.observations = []
@@ -149,9 +151,12 @@ class ProfileReadDiagnostics(unittest.TestCase):
         self.path.symlink_to(self.certificate)
         self.run_probe(expected="file")
         self.path.unlink()
-        for contents in (b"", b"x" * 32769):
+        # Bind the boundary to the compiled protocol; older releases used 32 KiB.
+        for contents in (b"", b"x" * (self.max_json_bytes + 1)):
             self.path.write_bytes(contents)
             self.run_probe(expected="file")
+        self.path.write_bytes(b"x" * self.max_json_bytes)
+        self.run_probe(expected="format")
 
     def test_unreadable_regular_file_has_separate_read_code(self):
         self.write(self.profile())

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Production reader/transport probe for disposable local fixtures only.
 #include "account_client.hpp"
+#include "account_protocol.hpp"
 #include <boost/json.hpp>
 #include <openssl/crypto.h>
 #include <cstdlib>
@@ -27,6 +28,11 @@ int main(int argc, char** argv)
 {
     boost::json::object output;
     try {
+        if(argc == 2 && std::string(argv[1]) == "--limits") {
+            std::cout << boost::json::serialize(boost::json::object{
+                {"max_json_bytes", alliance::account::max_json_bytes}}) << '\n';
+            return 0;
+        }
         if(argc == 2 && std::string(argv[1]) == "--unknown-category") {
             throw ProfileReadError(static_cast<ProfileReadFailure>(999));
         }
