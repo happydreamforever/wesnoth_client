@@ -28,6 +28,10 @@ reward/duplicate check N is not silently accepted by this new checklist. Preserv
 and resume that check from the existing campaign saves separately. Company
 expeditions are accessed from Team and do not replace the Campaign destination.
 
+Workspace actions depend on the selected card and your role. If a named action
+is not one of the two visible action buttons, open **Actions** to find it. A
+disabled action is not permission to bypass its condition.
+
 ## I — Startup and existing account
 
 1. Open the game. Confirm the existing Emerald loading, Login and home remain
@@ -42,8 +46,8 @@ without a Team can still open its personal Company. It cannot issue Team orders.
 
 ## J — Persistent touch workspace
 
-1. Visit all four tabs and return without changing data. Use the list's touch
-   scrollbar; no keyboard shortcut, hover or drag operation is required.
+1. Visit all four tabs and return without changing data. Tap the list scrollbar's
+   track or arrows; no keyboard shortcut, hover or drag operation is required.
 2. In Company, search for an existing soldier. Tap **Refresh** and wait through a
    periodic update. The search and selected card remain; the window does not
    repeatedly close and reopen. Clear the search.
@@ -65,7 +69,7 @@ J3 is NOT RUN until a world exists.
 3. Inspect a soldier's native level, XP, health, movement and attacks. Use the
    visible **Recruit** button to recruit one basic soldier into an empty slot.
    Confirm the roster count increases by exactly one and existing XP is retained.
-4. If a healthy uncommitted disposable basic soldier is available, use
+4. If a healthy, uncommitted, unselected disposable basic soldier is available, use
    **Actions → Retire soldier**, cancel once, then confirm only if you intend to
    retire it. Cancellation preserves it; confirmation removes that soldier with
    no sale/refund. Do not retire your earned advanced soldiers merely for testing.
@@ -171,15 +175,16 @@ can deploy another player's Company without that owner's consent.
 
 ## Q — First neutral Castle contest
 
-1. In a fresh eligible planning round, use a friendly adjacent origin and select
+1. In planning or deployment, use a friendly adjacent origin and select
    its neutral supply Castle. As captain choose **Plan attack**, inspect the
    origin and bracket, and confirm the proposal once.
 2. In Battles inspect the fixed company and settings. The participating human
    chooses **Ready**; the captain chooses **Approve agreement** after review.
 3. The host progresses deliberately: **Apply deployment orders → Lock
-   engagements → Open tactical battles**. Each control performs one global phase
-   transition; refresh the browser between transitions. Resolve any missing
-   consent before proceeding rather than clicking through errors.
+   engagements → Open tactical battles**. If P already applied deployment,
+   continue from **Lock engagements** in the same round. Each control performs
+   one global phase transition; refresh the browser between transitions. Resolve
+   any missing consent before proceeding rather than clicking through errors.
 4. Enter only when Preparing, play the native contest and report its actual
    result. A win captures only that Castle. A loss/cancel does not transfer land.
 
@@ -191,17 +196,24 @@ Do not manufacture repeated captures just to mark this optional check passed.
 ## R — Human defense and captain-approved Area war
 
 Requires a second eligible opposing account, operated by a separate human or the
-explicitly authenticated companion described in the main delivery guide.
+explicitly authenticated companion described in the main delivery guide. After
+Q, finish the settlement and next-round controls in V before proposing a new
+territorial engagement; do not try to reuse a Company in its completed round.
+With one LDPlayer, use the existing accounts sequentially to review their own
+Company, join, Ready and captain approval. Then start the separate account
+companion for its prepared seat and return LDPlayer to your playing account.
+The companion does not perform those consent steps for the player.
 
 1. As a captain open World → **Actions → Area wars → Propose Area war**. Select
    the opposing Team. Tap one or more Castle objectives; optionally select an
    Area-control objective. **Review agreement** shows the exact targets.
-2. Cancel once and confirm no proposal was sent. Recreate and **Propose war**
-   only when both sides intend this test. The opposing captain reviews and
-   **Approve agreement** before an occupied target can commit. A captain may
-   **Withdraw proposal** or **Decline proposal** while it is still proposed;
-   confirm cancellation remains in history and changes no territory. Active wars
-   have no cancellation action.
+2. Cancel the review once and confirm no proposal was sent. Recreate and
+   **Propose war** only when both sides intend this test. Before the opposing
+   captain approves, test **Withdraw proposal** or **Decline proposal** if both
+   sides agree: cancellation stays in Area wars and changes no territory. Then
+   create a new intended proposal. The opposing captain reviews and chooses
+   **Approve agreement**. Only this active agreement permits its occupied targets
+   to commit; active wars have no cancellation action.
 3. Create an eligible adjacent attack in a planning round. Each human Company
    joins its own side using **Join with my company**, reviews the displayed
    force/rules, then selects **Ready**. Each required captain approves.
@@ -217,7 +229,13 @@ sequential account consent is not evidence of simultaneous human gameplay.
 
 1. On a defender's friendly Castle, choose **Offer defense**. Review the exact
    hero, soldiers, bracket and advancement preferences. Only that owner can
-   consent. The captain uses **Defense assignments** to approve the offer.
+   consent. A noncaptain's offer waits for the captain to use **Defense
+   assignments → Review → Approve defense**. A captain's own newly offered
+   Company is active immediately: the confirmed offer supplies both owner and
+   captain consent. No separate approval click is needed for that new offer.
+   If an existing offered/needs-review permission belongs to the current captain,
+   its review allows **Approve defense** or **Withdraw defense**, followed by a
+   separate confirmation; test that case only when it legitimately exists.
 2. Reopen **My standing defense** and verify it remains active until withdrawal.
    Before any commitment, choose **Withdraw**; the Company becomes available
    without loss of troops/XP. Offer and approve again only for the next test.
@@ -240,10 +258,11 @@ progress produces it. No silent downgrade/substitution is acceptable.
    is available. Five-minute preparation must not expire merely while queued.
 2. Once Preparing, all required human clients load the same battle before play.
    Missing attendance must not award a win or transfer a Castle.
-3. During actual play, disconnect only the required local client connection as
-   directed in the main guide. Expect a pause, no simulated victory and no silent
-   AI takeover. Restore the connection and log in as the same account; use
-   **Resume battle**. WAN disconnection alone must not force logout.
+3. During actual play, use the recovery guide's targeted interrupted-app test
+   to disconnect only the required mobile client. Expect a pause, no simulated
+   victory and no silent AI takeover. This is an app-disconnection test, not a
+   claim that Android showed a live network-error warning. Reopen the game and
+   log in as the same account; use **Resume battle**. WAN disconnection alone must not force logout.
 4. Worker interruption/recovery and preparation timeout tests need the explicit
    retained-checkpoint procedure from the main guide. Do not kill arbitrary
    processes, delete locks, or invent a restart command.
