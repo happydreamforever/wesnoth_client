@@ -227,7 +227,7 @@ def main(argv=None):
     parser.add_argument('--public-config', type=Path)
     parser.add_argument('--openssl', type=Path)
     args = parser.parse_args(argv)
-    report = {'format': 'individual-android-companion-v1', 'version': C.VERSION, 'room_id': args.room_id,
+    report = {'format': 'individual-android-companion-v1', 'version': C.VERSION, 'wire_version': C.WIRE_VERSION, 'room_id': args.room_id,
               'outcome': 'failed', 'step': 'I00_inputs', 'wan_status': 'not_recorded'}
     destination = None
     try:

@@ -28,6 +28,10 @@ def review(action='join', revision=4):
 
 
 class IndividualCompanion(unittest.TestCase):
+    def test_shared_account_transport_uses_coordinated_release(self):
+        self.assertEqual(I.C.VERSION, 1192624)
+        self.assertEqual(I.C.WIRE_VERSION, 4)
+
     def test_review_includes_current_settings_and_separate_join_ready(self):
         for action in ('join', 'ready'):
             self.assertEqual(I.reviewed_message(json.dumps(review(action)), 7), review(action))
@@ -246,7 +250,7 @@ void ordinary(const config& data,bool received_version){
  /* @GUARD@ */
 }
 int main(){
- config current{{{"alliance_protocol",{"3"}},{"implementation_release",{"1192621"}},{"individual_rooms",{"1"}}}};
+ config current{{{"alliance_protocol",{"4"}},{"implementation_release",{"1192624"}},{"individual_rooms",{"1"}}}};
  companion(current);ordinary(current,true);
  try{ordinary(current,false);assert(false);}catch(const std::runtime_error&){}
  for(const auto& key:{"alliance_protocol","implementation_release","individual_rooms"}) {

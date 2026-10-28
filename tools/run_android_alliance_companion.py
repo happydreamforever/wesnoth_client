@@ -31,8 +31,8 @@ import zlib
 
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGE = 'org.wesnoth.offline'
-VERSION = 1192623
-WIRE_VERSION = 2
+VERSION = 1192624
+WIRE_VERSION = 4
 PLAIN_LIMIT = 256 * 1024
 INT64_MAX = (1 << 63) - 1
 UUID = re.compile(r'[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}')
@@ -114,8 +114,18 @@ def exact_read(stream, size, deadline):
 
 def account_request(profile, operation, body, token=None):
     """One bounded native account request, strict TLS identity before secrets."""
-    if operation not in ('login', 'logout', 'battle_detail'):
+    if operation not in ('login', 'logout', 'battle_detail', 'world_query'):
         fail('unsupported_operation')
+    if operation == 'world_query':
+        if (not isinstance(body, dict) or set(body) != {'operation', 'payload'}
+                or body['operation'] not in ('battles', 'battle') or not isinstance(body['payload'], dict)):
+            fail('unsupported_world_query')
+        payload = body['payload']
+        if ((body['operation'] == 'battles' and payload)
+                or (body['operation'] == 'battle' and (set(payload) != {'run_id'}
+                    or not isinstance(payload['run_id'], str) or not UUID.fullmatch(payload['run_id'])))):
+            fail('unsupported_world_query')
+        if token is None: fail('invalid_session')
     request_id = uuid.uuid4().hex
     request = {'v': WIRE_VERSION, 'id': request_id, 'op': operation, 'body': body}
     if token is not None:
@@ -166,7 +176,7 @@ def integer(value, minimum=0, maximum=INT64_MAX):
 
 
 def account_identity(account, username):
-    """Validate the complete v2 owned-hero projection, without a starter hero."""
+    """Validate the complete owned-hero projection, without a starter hero."""
     if (not isinstance(account, dict) or set(account) != {'id', 'username', 'database_generation', 'heroes'}
             or not isinstance(account['id'], str) or not UUID.fullmatch(account['id'])
             or not isinstance(account['database_generation'], str) or not UUID.fullmatch(account['database_generation'])
@@ -231,13 +241,52 @@ def selected_side(data, battle_id, account, require_captain=False):
     size = battle.get('map', {}).get('size')
     if type(size) is not int or size not in (2, 3, 4) or not isinstance(teams, list) or len(teams) != 2:
         fail('invalid_battle_response')
+    plan_format = battle.get('format', 1)
+    if type(plan_format) is not int or plan_format not in (1, 2):
+        fail('invalid_battle_response')
     seats, sides, found = set(), set(), []
+    all_slots, enabled_counts = set(), []
     for team in teams:
-        if not isinstance(team, dict) or team.get('approved') is not True or not isinstance(team.get('players'), list) or len(team['players']) != size:
+        if (not isinstance(team, dict) or team.get('approved') is not True
+                or not isinstance(team.get('players'), list)
+                or not 1 <= len(team['players']) <= size
+                or plan_format == 1 and len(team['players']) != size):
             fail('battle_not_ready')
+        human_slots = None
+        if plan_format == 2:
+            slots = team.get('slots')
+            if not isinstance(slots, list) or len(slots) != size:
+                fail('invalid_battle_response')
+            human_slots = {}
+            enabled = 0
+            for slot in slots:
+                if (not isinstance(slot, dict) or set(slot) != {'side', 'kind', 'account_id', 'ai_faction', 'ai_leader'}
+                        or not integer(slot['side'], 1, size * 2) or slot['side'] in all_slots
+                        or slot['kind'] not in ('open', 'reserved', 'ai', 'closed')
+                        or any(not isinstance(slot[key], str) for key in ('account_id', 'ai_faction', 'ai_leader'))):
+                    fail('invalid_battle_response')
+                all_slots.add(slot['side'])
+                if slot['kind'] == 'reserved':
+                    if not UUID.fullmatch(slot['account_id']): fail('invalid_battle_response')
+                elif slot['account_id']:
+                    fail('invalid_battle_response')
+                if slot['kind'] == 'ai':
+                    if not bounded_text(slot['ai_faction'], 128) or not bounded_text(slot['ai_leader'], 128):
+                        fail('invalid_battle_response')
+                elif slot['ai_faction'] or slot['ai_leader']:
+                    fail('invalid_battle_response')
+                if slot['kind'] in ('open', 'reserved'):
+                    human_slots[slot['side']] = slot
+                enabled += slot['kind'] != 'closed'
+            enabled_counts.append(enabled)
+            if len(human_slots) != len(team['players']): fail('battle_not_ready')
         for player in team['players']:
             if not isinstance(player, dict) or player.get('ready') is not True or not isinstance(player.get('id'), str) or not UUID.fullmatch(player['id']) or type(player.get('side')) is not int or player['id'] in seats or player['side'] in sides:
                 fail('battle_not_ready')
+            if human_slots is not None:
+                slot = human_slots.get(player['side'])
+                if slot is None or slot['kind'] == 'reserved' and slot['account_id'] != player['id']:
+                    fail('battle_not_ready')
             validate_selection(player.get('selection'))
             seats.add(player['id']); sides.add(player['side'])
             if player['id'] == account_id:
@@ -249,7 +298,17 @@ def selected_side(data, battle_id, account, require_captain=False):
                 if require_captain and team.get('captain_id') != account_id:
                     fail('account_not_selected_captain')
                 found.append(player['side'])
-    if sides != set(range(1, size * 2 + 1)) or len(found) != 1:
+    if plan_format == 2:
+        if all_slots != set(range(1, size * 2 + 1)) or enabled_counts[0] != enabled_counts[1]:
+            fail('battle_not_ready')
+        host = battle.get('engine_host_account_id', '')
+        if host != min((player for team in teams for player in team['players']), key=lambda player: player['side'])['id']:
+            fail('battle_not_ready')
+        if battle.get('room_state') not in ('preparing', 'running') or not isinstance(battle.get('generation'), str) or not UUID.fullmatch(battle['generation']):
+            fail('battle_not_ready')
+    elif sides != set(range(1, size * 2 + 1)):
+        fail('battle_not_ready')
+    if len(found) != 1:
         fail('account_not_selected')
     return found[0]
 
@@ -513,6 +572,7 @@ def execute(args, report):
         print('Surrender ends the team\'s battle. A draw needs both teams\' offers; withdrawing a draw only removes this team\'s offer. Results still require captain review. This is a shared battle, not local practice.')
     else:
         print('This computer will control only this account\'s assigned side in the selected shared battle. Other selected players must be Ready and both captains must approve. Results require captain review; this is not local practice.')
+    print('The native host also executes explicitly assigned Computer sides; it never takes another human player\'s seat.')
     print('Use an account you own and authorize. Keep the main LDPlayer game logged in as a DIFFERENT selected player. No password or token is saved.')
     consent = ('RETRY ' if args.retry_result else 'CONTROL ') + args.username
     if policy:
@@ -583,7 +643,7 @@ def main(argv=None):
     parser.add_argument('--captain-action', choices=tuple(CAPTAIN_ACTIONS), help='Request one fixed captain action, then end this side\'s turns. Requires --after-turn.')
     parser.add_argument('--after-turn', type=int, help='First own turn numbered at least this value (1-100); requires --captain-action.')
     args = parser.parse_args(argv)
-    report = {'format': 'alliance-android-companion-v1', 'version': VERSION, 'outcome': 'failed', 'step': 'C00_inputs', 'wan_status': 'not_recorded'}
+    report = {'format': 'alliance-android-companion-v1', 'version': VERSION, 'wire_version': WIRE_VERSION, 'outcome': 'failed', 'step': 'C00_inputs', 'wan_status': 'not_recorded'}
     destination = None
     try:
         if os.name != 'nt': fail('windows_required')

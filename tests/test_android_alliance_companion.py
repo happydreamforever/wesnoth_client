@@ -51,7 +51,7 @@ def battle():
 
 
 class FixtureServer:
-    def __init__(self, cert, key, handler=None, preamble=b'\0\0\0\0', version=2, requests=1):
+    def __init__(self, cert, key, handler=None, preamble=b'\0\0\0\0', version=4, requests=1):
         self.listener = socket.socket(); self.listener.bind(('127.0.0.1', 0)); self.listener.listen(1)
         self.listener.settimeout(10)
         self.port = self.listener.getsockname()[1]
@@ -123,19 +123,35 @@ class CompanionTests(unittest.TestCase):
         self.assertIsNone(server.error)
         self.assertEqual(server.application['body']['password'], 'private-fixture-password')
         self.assertEqual(server.application['op'], 'login')
-        self.assertEqual(server.application['v'], 2)
+        self.assertEqual(server.application['v'], 4)
 
     def test_release_matches_current_builder(self):
         import re
         builder = (ROOT / 'tools/build_android_account_game.py').read_text()
         self.assertEqual(C.VERSION, int(re.search(r'^VERSION_CODE = (\d+)$', builder, re.M)[1]))
-        self.assertEqual(C.WIRE_VERSION, 2)
+        self.assertEqual(C.WIRE_VERSION, 4)
 
-    def test_actual_tls_v1_reply_is_refused(self):
-        with FixtureServer(self.cert, self.key, version=1) as server:
-            with self.assertRaisesRegex(C.CompanionError, 'invalid_account_response'):
-                C.account_request(dict(self.profile, port=server.port), 'logout', {}, TOKEN)
-        self.assertEqual(server.application['v'], 2)
+    def test_actual_tls_old_protocol_replies_are_refused(self):
+        for version in (1, 2, 3):
+            with self.subTest(version=version), FixtureServer(self.cert, self.key, version=version) as server:
+                with self.assertRaisesRegex(C.CompanionError, 'invalid_account_response'):
+                    C.account_request(dict(self.profile, port=server.port), 'logout', {}, TOKEN)
+            self.assertEqual(server.application['v'], 4)
+
+    def test_world_battle_picker_read_only_current_tls(self):
+        for body in ({'operation': 'battles', 'payload': {}}, {'operation': 'battle', 'payload': {'run_id': RUN}}):
+            with FixtureServer(self.cert, self.key, lambda req: {'data': {'battles': []}}) as server:
+                self.assertEqual(C.account_request(dict(self.profile, port=server.port), 'world_query', body, TOKEN), {'data': {'battles': []}})
+            self.assertEqual(server.application['v'], 4)
+            self.assertEqual(server.application['op'], 'world_query')
+            self.assertEqual(server.application['body'], body)
+        with mock.patch.object(C.socket, 'create_connection') as connection:
+            for operation, body, token in [('world_command', {}, TOKEN), ('world_query', {'operation': 'snapshot', 'payload': {}}, TOKEN),
+                    ('world_query', {'operation': 'battle', 'payload': {'run_id': 'bad'}}, TOKEN),
+                    ('world_query', {'operation': 'battles', 'payload': {'secret': 'no'}}, TOKEN),
+                    ('world_query', {'operation': 'battles', 'payload': {}}, None)]:
+                with self.assertRaises(C.CompanionError): C.account_request(self.profile, operation, body, token)
+            connection.assert_not_called()
 
     def test_actual_tls_large_owned_hero_profile_and_plain_bound(self):
         large = account()
@@ -225,6 +241,41 @@ class CompanionTests(unittest.TestCase):
         for changed in cases:
             with self.assertRaises(C.CompanionError): C.selected_side(changed, RUN, account())
         with self.assertRaises(C.CompanionError): C.selected_side(battle(), RUN, dict(account(), id=RUN))
+
+    def flexible_battle(self, kind='ai'):
+        value = battle(); current = value['battle']
+        current.update(format=2, room_state='preparing', generation=GENERATION, engine_host_account_id=ACCOUNT)
+        for team in current['teams']:
+            players = team['players']
+            team['slots'] = [dict(side=player['side'], kind='reserved' if i == 0 else kind,
+                account_id=player['id'] if i == 0 else '', ai_faction='Loyalists' if i and kind == 'ai' else '',
+                ai_leader='Lieutenant' if i and kind == 'ai' else '') for i, player in enumerate(players)]
+            team['players'] = players[:1]
+        return value
+
+    def test_flexible_ai_and_closed_plans_keep_human_authority(self):
+        for kind in ('ai', 'closed'):
+            for state in ('draft', 'running'):
+                value = self.flexible_battle(kind); value['battle']['state'] = state
+                self.assertEqual(C.selected_side(value, RUN, account(), True), 1)
+                with self.assertRaisesRegex(C.CompanionError, 'account_not_selected'):
+                    C.selected_side(value, RUN, dict(account(), id='00000002-1111-4111-8111-111111111111'))
+        current = self.flexible_battle(); current['battle']['teams'][0]['slots'][0].update(kind='open', account_id='')
+        self.assertEqual(C.selected_side(current, RUN, account()), 1)
+
+    def test_flexible_incomplete_or_malformed_slots_do_not_launch(self):
+        changes = []
+        for key, value in [('format', 3), ('format', True), ('room_state', ''), ('generation', ''), ('engine_host_account_id', RUN)]:
+            current = self.flexible_battle(); current['battle'][key] = value; changes.append(current)
+        for field, value in [('kind', 'closed'), ('account_id', RUN), ('side', True), ('side', 3), ('ai_leader', 'unexpected')]:
+            current = self.flexible_battle(); current['battle']['teams'][0]['slots'][0][field] = value; changes.append(current)
+        current = self.flexible_battle(); current['battle']['teams'][0]['players'] = []; changes.append(current)
+        current = self.flexible_battle(); current['battle']['teams'][1]['slots'][1].update(kind='closed', ai_faction='', ai_leader=''); changes.append(current)
+        current = self.flexible_battle(); current['battle']['teams'][1]['approved'] = False; changes.append(current)
+        current = self.flexible_battle(); current['battle']['teams'][1]['players'][0]['ready'] = False; changes.append(current)
+        current = self.flexible_battle(); current['battle']['teams'][0]['players'][0]['side'] = 2; changes.append(current)
+        for current in changes:
+            with self.subTest(current=current), self.assertRaises(C.CompanionError): C.selected_side(current, RUN, account())
 
     def test_regular_rejects_redirected_payload(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -409,7 +460,7 @@ print(''' + repr(C.FINISHED + 'acknowledged') + ''',flush=True)
             with self.assertRaisesRegex(C.CompanionError, 'installed_version_differs'): C.check_device(device, apk)
             device.private.assert_not_called()
             device.reset_mock()
-            device.call.side_effect = [b'device\n', b'1\n', b'x86_64\n', b'28\n', b'versionCode=1192623', b'package:/data/app/example/base.apk\n', b'wrong hash']
+            device.call.side_effect = [b'device\n', b'1\n', b'x86_64\n', b'28\n', b'versionCode=1192624', b'package:/data/app/example/base.apk\n', b'wrong hash']
             with self.assertRaisesRegex(C.CompanionError, 'installed_apk_differs'): C.check_device(device, apk)
             device.private.assert_not_called()
 
@@ -418,14 +469,14 @@ print(''' + repr(C.FINISHED + 'acknowledged') + ''',flush=True)
             apk = Path(tmp) / 'app.apk'
             with zipfile.ZipFile(apk, 'w') as archive: archive.writestr('assets/alliance-public-profile.json', json.dumps(self.profile).encode())
             device = mock.Mock()
-            device.call.side_effect = [b'device\n', b'1\n', b'x86_64\n', b'28\n', b'versionCode=1192623', b'package:/data/app/example/base.apk\n', C.digest(apk).encode() + b' path']
+            device.call.side_effect = [b'device\n', b'1\n', b'x86_64\n', b'28\n', b'versionCode=1192624', b'package:/data/app/example/base.apk\n', C.digest(apk).encode() + b' path']
             raw = json.dumps(self.profile).encode()
             device.private.side_effect = [b'/data/user/0/org.wesnoth.offline\n', raw, b'']
             checked = C.check_device(device, apk)
             self.assertEqual(checked[2], self.profile)
             self.assertEqual(checked[4], hashlib.sha256(raw).hexdigest())
             self.assertNotIn('cp ', ' '.join(call.args[0] for call in device.private.call_args_list))
-            device.call.side_effect = [b'device\n', b'1\n', b'x86_64\n', b'28\n', b'versionCode=1192623', b'package:/data/app/example/base.apk\n', C.digest(apk).encode() + b' path']
+            device.call.side_effect = [b'device\n', b'1\n', b'x86_64\n', b'28\n', b'versionCode=1192624', b'package:/data/app/example/base.apk\n', C.digest(apk).encode() + b' path']
             changed = json.dumps(dict(self.profile, server_address='127.0.0.2')).encode()
             device.private.side_effect = [b'/data/user/0/org.wesnoth.offline\n', changed]
             with self.assertRaisesRegex(C.CompanionError, 'bundled_profile_differs'): C.check_device(device, apk)
@@ -462,7 +513,7 @@ print(''' + repr(C.FINISHED + 'acknowledged') + ''',flush=True)
         stack.enter_context(contextlib.redirect_stdout(io.StringIO()))
         return args, report, stack
 
-    def test_actual_hidden_prompt_v2_tls_and_owned_shell_workflow(self):
+    def test_actual_hidden_prompt_current_tls_and_owned_shell_workflow(self):
         # Real getpass terminal, encrypted API, shipped execute/run_native and
         # shell wrapper. Only Android/ADB and the engine binary are fixtures.
         import pty
@@ -472,7 +523,7 @@ print(''' + repr(C.FINISHED + 'acknowledged') + ''',flush=True)
         with tempfile.TemporaryDirectory(prefix='companion workflow ') as tmp:
             root = Path(tmp); stage, private, hashes = self.make_payload(root)
             def response(request):
-                self.assertEqual(request['v'], 2)
+                self.assertEqual(request['v'], 4)
                 if request['op'] == 'login': return {'token': TOKEN, 'account': account()}
                 if request['op'] == 'battle_detail': return battle()
                 if request['op'] == 'logout': return {'status': 'logged_out'}
