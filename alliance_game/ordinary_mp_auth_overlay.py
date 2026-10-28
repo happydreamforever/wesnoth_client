@@ -31,8 +31,8 @@ def generate_multiplayer_auth_overlay(source: bytes) -> bytes:
 ''' + text[end:]
     text = once(text, '\t\tif(data.has_child("version")) {', '''\t\tif(data.has_child("version")) {
             const auto& advertised=data.mandatory_child("version");
-            if(advertised["alliance_protocol"].str()!="3" ||
-               advertised["implementation_release"].str()!="1192621" ||
+            if(advertised["alliance_protocol"].str()!="4" ||
+               advertised["implementation_release"].str()!="1192624" ||
                advertised["individual_rooms"].str()!="1")
                 throw wesnothd_error("The trusted server needs the matching game update before Multiplayer can connect.");
             alliance_greeting_checked=true;''')

@@ -19,7 +19,7 @@ bool ascii_name(char c) {
 boost::json::object parse_document(const std::string& text) {
     if(text.empty() || text.size() > max_json_bytes) invalid();
     boost::json::parse_options options;
-    options.max_depth = 8;
+    options.max_depth = 12;
     boost::system::error_code ec;
     auto result = boost::json::parse(text, ec, {}, options);
     if(ec || !result.is_object()) invalid();

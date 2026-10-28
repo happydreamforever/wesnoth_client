@@ -161,7 +161,7 @@ int run_individual_companion() noexcept {
         auto native_profile=profile;native_profile.port=15000;
         wesnothd_connection connection(native_profile);
         auto hello=until(connection,"version").mandatory_child("version");
-        require(hello["alliance_protocol"].str()=="3"&&hello["implementation_release"].str()=="1192621"&&hello["individual_rooms"].str()=="1");
+        require(hello["alliance_protocol"].str()=="4"&&hello["implementation_release"].str()=="1192624"&&hello["individual_rooms"].str()=="1");
         connection.send_data(config{"version",config{"version","1.19.26"}});until(connection,"mustlogin");
         config login{"login",config{"username",me.username,"alliance_ticket",ticket.ticket}};
         connection.send_data(login);login.clear();wipe(ticket.ticket);until(connection,"join_lobby");

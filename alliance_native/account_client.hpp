@@ -31,6 +31,9 @@ struct Request {
     std::vector<BattleSlot> slots;
     // Closed progression extension; validated before opening any socket.
     std::string progression_json;
+    // Protocol-4 world operations use the bounded {operation,payload} document.
+    // The authenticated account is supplied by the token, never by the payload.
+    std::string world_json;
 };
 struct Hero {
     std::string hero_id, name;
@@ -95,6 +98,7 @@ struct Battle {
 };
 struct Reply {
     std::string progression_json;
+    std::string world_json;
     bool ok = false;
     std::string error_code, error_message, token;
     std::string ticket, selection_ticket, username, database_generation, expires_at;

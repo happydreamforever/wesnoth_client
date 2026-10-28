@@ -89,7 +89,7 @@ class AccountClientResponseTests(unittest.TestCase):
     @classmethod
     def success(cls, request):
         return {
-            "v": 3, "id": request["id"], "ok": True, "status": 200,
+            "v": 4, "id": request["id"], "ok": True, "status": 200,
             "data": {"token": "a" * 43, "account": cls.account()},
         }
 
@@ -171,7 +171,7 @@ class AccountClientResponseTests(unittest.TestCase):
         self.assertTrue(result.returncode == 0, "Response probe did not finish successfully.")
         self.assertTrue(result.stderr == b"", "Response probe unexpectedly wrote stderr.")
         output = json.loads(result.stdout)
-        self.assertEqual(set(output), {"ok", "error_code", "has_token",
+        self.assertEqual(set(output), {"has_world", "ok", "error_code", "has_token",
                                       "has_profile", "hero_count", "elapsed_ms", "has_ticket", "has_selection_ticket", "area_count", "team_count",
                                       "has_next", "has_team", "member_count", "team_level",
                                       "applicant_count", "has_team_id", "has_account_id", "status",
@@ -225,7 +225,7 @@ class AccountClientResponseTests(unittest.TestCase):
 
     @staticmethod
     def team_reply(data, status=200):
-        return lambda request: {"v": 3, "id": request["id"], "ok": True,
+        return lambda request: {"v": 4, "id": request["id"], "ok": True,
                                 "status": status, "data": data}
 
     def team_rejects(self, operation, data, **fields):
@@ -384,7 +384,7 @@ class AccountClientResponseTests(unittest.TestCase):
                                        (503, "unrecognized", "team_failed"),
                                        (503, "invalid_session", "team_failed")]:
             def responder(request):
-                return {"v": 3, "id": request["id"], "ok": False, "status": status,
+                return {"v": 4, "id": request["id"], "ok": False, "status": status,
                         "data": {"code": code, "message": "server-secret-must-not-be-reflected"}}
             output, _ = self.exercise(responder, self.team_request("my_team"))
             self.assertFalse(output["ok"])
@@ -574,7 +574,7 @@ class AccountClientResponseTests(unittest.TestCase):
                                            (409, "captain_transfer_required", "captain_transfer_required"),
                                            (409, "busy", "busy"), (503, "service_unavailable", "team_failed")):
                 def error(received):
-                    return {"v": 3, "id": received["id"], "ok": False, "status": status,
+                    return {"v": 4, "id": received["id"], "ok": False, "status": status,
                             "data": {"code": code, "message": "Private backend detail"}}
                 output, _ = self.exercise(error, self.team_request(operation, **fields))
                 self.assertEqual(output["error_code"], expected)
@@ -680,7 +680,7 @@ class AccountClientResponseTests(unittest.TestCase):
                                        (409, "capacity", "capacity"),
                                        (409, "not_requested", "not_requested")]:
             def error(received):
-                return {"v": 3, "id": received["id"], "ok": False, "status": status,
+                return {"v": 4, "id": received["id"], "ok": False, "status": status,
                         "data": {"code": code, "message": "Private server detail"}}
             output, _ = self.exercise(error, self.team_request("approve_application", team_id=team_id,
                                                                account_id=account_id))
@@ -806,7 +806,7 @@ class AccountClientResponseTests(unittest.TestCase):
                                            (404, "not_found", "not_found"),
                                            (503, "service_unavailable", "team_failed")):
                 def error(received):
-                    return {"v": 3, "id": received["id"], "ok": False, "status": status,
+                    return {"v": 4, "id": received["id"], "ok": False, "status": status,
                             "data": {"code": code, "message": "Private backend detail"}}
                 output, _ = self.exercise(error, self.team_request(operation, **fields))
                 self.assertEqual(output["error_code"], expected)
@@ -871,7 +871,7 @@ class AccountClientResponseTests(unittest.TestCase):
             for status in (401, 403):
                 for code in ("scope_mismatch", "invalid_credentials"):
                     def responder(received):
-                        return {"v": 3, "id": received["id"], "ok": False, "status": status,
+                        return {"v": 4, "id": received["id"], "ok": False, "status": status,
                                 "data": {"code": code, "message": secret_message}}
                     output, received = self.exercise(responder, request)
                     self.assertFalse(output["ok"])
@@ -882,7 +882,7 @@ class AccountClientResponseTests(unittest.TestCase):
 
     def test_login_401_keeps_invalid_credentials_meaning(self):
         def responder(received):
-            return {"v": 3, "id": received["id"], "ok": False, "status": 401,
+            return {"v": 4, "id": received["id"], "ok": False, "status": 401,
                     "data": {"code": "invalid_credentials", "message": "Invalid credentials."}}
         output, _ = self.exercise(responder)
         self.assertFalse(output["ok"])
@@ -940,7 +940,7 @@ class AccountClientResponseTests(unittest.TestCase):
         request = {'operation': 'register', 'username':'NewPlayer', 'password':'disposable-password-only'}
         output, received = self.exercise(reply, request)
         self.assertTrue(output['ok']); self.assertEqual(output['hero_count'], 0)
-        self.assertEqual(received['v'], 3)
+        self.assertEqual(received['v'], 4)
         self.assertEqual(set(received['body']), {'username','password'})
         self.rejects(lambda r:r.update(v=1))
         with self.peer() as (port,state):
@@ -951,7 +951,7 @@ class AccountClientResponseTests(unittest.TestCase):
         data=self.account(); hero=data['heroes'][0]
         hero.update(hero_level=1000000,experience=2147483648,total_experience=9223372036854775807,revision=2147483648)
         data['heroes'].append({**hero,'hero_id':'delfador','name':'Delfador','hero_level':25,'forms':['delfador_young','delfador_elder']})
-        output,_=self.exercise(lambda r:{'v':3,'id':r['id'],'ok':True,'status':200,'data':{'token':'a'*43,'account':data}})
+        output,_=self.exercise(lambda r:{'v':4,'id':r['id'],'ok':True,'status':200,'data':{'token':'a'*43,'account':data}})
         self.assertTrue(output['ok']);self.assertEqual(output['hero_count'],2)
 
     def test_v2_hero_shapes_generation_and_duplicates_are_rejected(self):
@@ -1003,6 +1003,63 @@ class AccountClientResponseTests(unittest.TestCase):
         with self.peer() as (port,state):
             output=self.invoke(self.profile(port),self.team_request('story_begin',progression_json=json.dumps({**begin,'url':'https://example.com'})))
         self.assertFalse(output['ok']);self.assertEqual(state['connections'],0)
+
+
+    def test_world_requests_bind_version_actor_and_idempotency_nonce(self):
+        actor = self.account()
+        nonce = '22345678-1234-4321-8765-0123456789ab'
+        body = {'operation':'company_recruit','payload':{'command_id':nonce,
+                    'expected_revision':7,'unit_type':'Elvish Shaman'}}
+        data = {'version':1,'balance_revision':'world-company-1',
+                'database_generation':actor['database_generation'],'actor_id':actor['id'],
+                'data':{'company':{'revision':8,'soldiers':[]}}}
+        output, received = self.exercise(self.team_reply(data),
+            self.team_request('world_command',world_json=json.dumps(body)))
+        self.assertTrue(output['ok']); self.assertTrue(output['has_world'])
+        self.assertEqual(received['v'],4); self.assertEqual(received['body'],body)
+        self.assertEqual(received['token'],self.team_request('world_command')['token'])
+
+    def test_world_governor_can_be_removed_without_fabricating_an_account(self):
+        actor=self.account();body={'operation':'governor','payload':{
+            'command_id':'22345678-1234-4321-8765-0123456789ab',
+            'castle_id':'32345678-1234-4321-8765-0123456789ab','account_id':None}}
+        response={'version':1,'balance_revision':'world-company-1',
+            'database_generation':actor['database_generation'],'actor_id':actor['id'],'data':{'castle':{'governor_id':None}}}
+        output,received=self.exercise(self.team_reply(response),self.team_request('world_command',world_json=json.dumps(body)))
+        self.assertTrue(output['ok']);self.assertEqual(received['body'],body)
+
+    def test_world_forbidden_mutations_and_oversized_arrays_never_connect(self):
+        nonce='22345678-1234-4321-8765-0123456789ab'
+        bad=[{'operation':'bootstrap','payload':{'command_id':nonce}},
+             {'operation':'worker_terminal','payload':{'command_id':nonce}},
+             {'operation':'company_initialize','payload':{'command_id':nonce,'xp':20}},
+             {'operation':'company_initialize','payload':{'command_id':'bad'}},
+             {'operation':'company_select','payload':{'command_id':nonce,'expected_revision':1,
+               'hero_id':'konrad','form_id':'konrad_fighter','bracket':'scout','soldier_ids':[nonce]*5}}]
+        for body in bad:
+            with self.peer() as (port,state):
+                output=self.invoke(self.profile(port),self.team_request('world_command',world_json=json.dumps(body)))
+            self.assertFalse(output['ok']);self.assertEqual(state['connections'],0)
+
+    def test_world_response_rejects_private_or_malformed_state(self):
+        actor=self.account()
+        valid={'version':1,'balance_revision':'world-company-1','database_generation':actor['database_generation'],
+               'actor_id':actor['id'],'data':{'company':None}}
+        bad=[{**valid,'actor_id':'bad'},{**valid,'balance_revision':'unknown'},
+             {**valid,'version':2},{**valid,'data':{'worker_ticket':'secret'}},
+             {**valid,'data':{'company':{'password_hash':'secret'}}},
+             {**valid,'data':{'entries':[0]*257}},{**valid,'data':{'score':1.5}}]
+        for data in bad:
+            output,_=self.exercise(self.team_reply(data),
+                self.team_request('world_query',world_json=json.dumps({'operation':'company','payload':{}})))
+            self.assertFalse(output['ok']);self.assertFalse(output['has_world'])
+
+    def test_world_force_review_error_is_projected_without_private_text(self):
+        output,_=self.exercise(lambda r:{'v':4,'id':r['id'],'ok':False,'status':409,
+            'data':{'code':'force_review','message':'private raw database details'}},
+            self.team_request('world_command',world_json=json.dumps({'operation':'company_initialize',
+                'payload':{'command_id':'22345678-1234-4321-8765-0123456789ab'}})))
+        self.assertFalse(output['ok']);self.assertEqual(output['error_code'],'force_review')
 
 
 if __name__ == "__main__":

@@ -27,7 +27,7 @@ std::string safe_error(const std::string& value)
           "invalid_session", "forbidden", "suspended", "conflict", "rate_limited",
           "timeout", "cancelled", "identity", "protocol", "unavailable",
           "profile_rejected", "document_rejected", "team_failed", "already_member", "busy", "not_found", "capacity", "not_requested", "not_member", "captain_transfer_required",
-          "stale_revision", "slot_taken", "update_required", "human_required", "limit_reached", "hero_locked", "form_locked", "unbalanced_sides", "planning_exists", "invalid_map", "invalid_lineup", "different_area", "stale_proposal", "advancement_required", "approval_required", "invalid_state"}) {
+          "force_review", "command_conflict", "stale_revision", "slot_taken", "update_required", "human_required", "limit_reached", "hero_locked", "form_locked", "unbalanced_sides", "planning_exists", "invalid_map", "invalid_lineup", "different_area", "stale_proposal", "advancement_required", "approval_required", "invalid_state"}) {
         if(value == allowed) return value;
     }
     return "unrecognized_error";
@@ -35,7 +35,7 @@ std::string safe_error(const std::string& value)
 void output(const alliance::account::Reply& reply, long long elapsed_ms)
 {
     boost::json::object result{
-        {"ok", reply.ok}, {"error_code", safe_error(reply.error_code)},
+        {"has_world", !reply.world_json.empty()}, {"ok", reply.ok}, {"error_code", safe_error(reply.error_code)},
         {"has_token", !reply.token.empty()},
         {"has_ticket", !reply.ticket.empty()}, {"has_selection_ticket", !reply.selection_ticket.empty()},
         {"has_profile", !reply.profile.account_id.empty()},
@@ -92,6 +92,7 @@ int main(int argc, char** argv)
         Request request;
         request.operation = field(input, "operation");
         request.progression_json = field(input, "progression_json");
+        request.world_json = field(input, "world_json");
         request.username = field(input, "username");
         request.password = field(input, "password");
         request.starter_id = field(input, "starter_id");
