@@ -3,7 +3,7 @@
 #include "alliance_native/transport.hpp"
 #include <string>
 namespace alliance_game {
-inline constexpr int world_title_result=18104;
+inline constexpr int world_title_result=18105;
 struct WorldAdmission {alliance::TrustedProfile profile;std::string run_id,account_id,token;bool replay=false,worker=false,computer_controlled=false;};
 void queue_world(WorldAdmission);
 bool world_pending() noexcept;

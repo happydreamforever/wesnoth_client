@@ -21,6 +21,16 @@ A = module('account_game_tests', ROOT / 'tools/build_android_account_game.py')
 P = module('account_profile_tests', ROOT / 'tools/validate_android_account_profile.py')
 
 class AccountBuildTests(unittest.TestCase):
+    def test_all_native_launch_destinations_have_distinct_dispatch_values(self):
+        import re
+        headers=('battle_launch.hpp','progression_plan.hpp','shared_launch.hpp','replay_launch.hpp','world_launch.hpp')
+        values={}
+        for header in headers:
+            match=re.search(r'constexpr int \w+_title_result\s*=\s*(\d+)',(ROOT/'alliance_game'/header).read_text())
+            self.assertIsNotNone(match,header)
+            value=int(match[1])
+            self.assertNotIn(value,values,'Native dispatch collision: '+header+' / '+values.get(value,''))
+            values[value]=header
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(); self.addCleanup(self.temp.cleanup)
         self.repo = Path(self.temp.name)
