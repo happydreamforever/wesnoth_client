@@ -9,7 +9,7 @@ param(
     [string]$JavaHome = 'C:\Program Files\Android\Android Studio\jbr',
     [string]$PublicConfigPath = '',
     [string]$OpenSslPath = 'D:\Test\wesnoth-setup\msys64\mingw64\bin\openssl.exe',
-    [string]$PythonPath = (Join-Path $env:LOCALAPPDATA 'Programs\Python\Python314\python.exe'),
+    [string]$PythonPath = (Join-Path $env:LOCALAPPDATA 'Programs\Python\Python312\python.exe'),
     [switch]$RetryResult,
     [ValidateSet('Surrender', 'OfferDraw', 'WithdrawDraw')][string]$CaptainAction,
     [ValidateRange(1,100)][int]$AfterTurn

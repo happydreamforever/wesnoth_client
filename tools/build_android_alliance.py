@@ -9,6 +9,7 @@ from contextlib import contextmanager
 import importlib.util
 import os
 from pathlib import Path
+import platform
 import struct
 import sys
 import uuid
@@ -40,6 +41,18 @@ PROJECT_INPUTS = tuple(dict.fromkeys((*O.PROJECT_INPUTS, *N.PROJECT_INPUTS,
     'tools/native-alliance/CMakeLists.txt', 'tools/native-alliance/AndroidCheck.cmake',
     'tools/native-alliance/android_check.cpp', 'tools/native-alliance/probe.cpp',
     'alliance_native/transport.cpp', 'alliance_native/transport.hpp')))
+HELPER_INPUT = 'tools/build_android_alliance.py'
+# A completed transport check can retain its original Python 3.14 launcher
+# receipt. This exact historical helper is the only permitted source difference;
+# native inputs, prerequisites, ELF validation and ownership still must match.
+LEGACY_HELPER_INPUT = {
+    'bytes': 12621,
+    'sha256': '82ed6995ced8b347de1d1cc431dfc8bf87a7d087ae3fc16a9782fec44602e4ea'}
+# .py files do not force an EOL policy: retain the same reviewed source when
+# an existing Windows checkout used Git's ordinary CRLF conversion.
+LEGACY_HELPER_INPUT_CRLF = {
+    'bytes': 12888,
+    'sha256': 'fe6eb0bd6c328c9e45361359041995428987506910faec9302d3048acc991251'}
 
 
 def checked(function, *args, **kwargs):
@@ -171,16 +184,34 @@ def validate_prefix(repo, root):
     return validation, files
 
 
+def completed_inputs_match(saved, current):
+    if saved == current:
+        return True
+    if not isinstance(saved, dict) or not isinstance(current, dict):
+        return False
+    old_files, current_files = saved.get('project_files'), current.get('project_files')
+    if (not isinstance(old_files, dict) or not isinstance(current_files, dict)
+            or old_files.get(HELPER_INPUT) not in (LEGACY_HELPER_INPUT, LEGACY_HELPER_INPUT_CRLF)
+            or current_files.get(HELPER_INPUT) != B.fingerprint(Path(__file__))):
+        return False
+    # Compare a temporary copy, never rewrite the original recorded binding.
+    normalized = dict(saved, project_files=dict(old_files))
+    normalized['project_files'][HELPER_INPUT] = current_files[HELPER_INPUT]
+    return normalized == current
+
+
 def checked_receipt(repo, root, inputs, profile):
     saved = record(root / 'receipt.json')
     validation, files = validate_prefix(repo, root)
     if (saved.get('schema_version') != 1 or saved.get('kind') != KIND
-            or saved.get('profile') != profile or saved.get('inputs') != inputs
+            or saved.get('profile') != profile or not completed_inputs_match(saved.get('inputs'), inputs)
             or saved.get('artifacts') != files or saved.get('validation') != validation
             or saved.get('device_executed') is not False):
         raise BuildError('Alliance receipt, prerequisites, source or artifacts differ. Nothing overwritten or sent.')
-    if record(root / MARKER) != {'schema_version': 1, 'kind': KIND, 'profile': profile, 'inputs': inputs}:
+    if record(root / MARKER) != {'schema_version': 1, 'kind': KIND, 'profile': profile, 'inputs': saved['inputs']}:
         raise BuildError('Alliance stage ownership differs.')
+    if saved['inputs'] != inputs:
+        print('Verified completed transport artifacts against their retained historical launcher receipt; no inputs or outputs rewritten.', flush=True)
     return saved
 
 
@@ -200,11 +231,12 @@ def build(repo, args):
     inputs['prerequisites'] = prior_inputs(repo)
     root = repo / STAGE
     with operation(repo):
-        prepare_stage(root, inputs, profile)
         if (root / 'receipt.json').exists():
-            checked_receipt(repo, root, inputs, profile)
+            saved = checked_receipt(repo, root, inputs, profile)
+            prepare_stage(root, saved['inputs'], profile)
             print('Existing Alliance artifacts verified; no compilation needed.', flush=True)
         else:
+            prepare_stage(root, inputs, profile)
             ndk = B.ndk_paths(args.ndk, B.host_tag())
             versions = B.check_tools(args.cmake, args.ninja, ndk)
             if B.fingerprint(ndk['runtime']) != inputs['prerequisites']['runtime']:
@@ -236,6 +268,15 @@ def build(repo, args):
     print('Android execution, account login and team gameplay are not tested by this build.', flush=True)
 
 
+def check_windows_python():
+    if sys.platform == 'win32' and (
+            sys.version_info[:3] != (3, 12, 10)
+            or platform.python_implementation() != 'CPython'
+            or struct.calcsize('P') != 8
+            or platform.machine().lower() not in {'amd64', 'x86_64'}):
+        raise BuildError('Use native Windows CPython 3.12.10 x64.')
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--repo', type=Path, default=REPO)
@@ -245,8 +286,7 @@ def main(argv=None):
     parser.add_argument('--verify', '--verify-only', action='store_true')
     args = parser.parse_args(argv)
     try:
-        if sys.platform == 'win32' and sys.version_info[:3] != (3, 14, 3):
-            raise BuildError('Use the confirmed native Windows Python 3.14.3.')
+        check_windows_python()
         repo = args.repo.absolute()
         checked(N.ninja_path, repo)
         if args.verify:

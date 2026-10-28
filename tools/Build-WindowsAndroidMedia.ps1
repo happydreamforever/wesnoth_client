@@ -2,7 +2,7 @@
 [CmdletBinding()]
 param(
     [string]$SdkRoot = (Join-Path $env:LOCALAPPDATA 'Android\Sdk'),
-    [string]$PythonPath = (Join-Path $env:LOCALAPPDATA 'Programs\Python\Python314\python.exe'),
+    [string]$PythonPath = (Join-Path $env:LOCALAPPDATA 'Programs\Python\Python312\python.exe'),
     [string]$CMakePath = 'C:\Program Files\CMake\bin\cmake.exe',
     [string]$NinjaPath = 'D:\Test\msys64\ucrt64\bin\ninja.exe',
     [ValidateRange(1, 64)][int]$Jobs = 2,

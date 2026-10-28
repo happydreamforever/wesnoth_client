@@ -5,7 +5,7 @@ param(
     [switch]$SdkVerbose,
     [string]$SdkRoot = (Join-Path $env:LOCALAPPDATA 'Android\Sdk'),
     [string]$JavaHome = 'C:\Program Files\Android\Android Studio\jbr',
-    [string]$PythonPath = (Join-Path $env:LOCALAPPDATA 'Programs\Python\Python314\python.exe'),
+    [string]$PythonPath = (Join-Path $env:LOCALAPPDATA 'Programs\Python\Python312\python.exe'),
     [string]$GradleUserHome = (Join-Path $env:USERPROFILE '.gradle')
 )
 $ErrorActionPreference = 'Stop'

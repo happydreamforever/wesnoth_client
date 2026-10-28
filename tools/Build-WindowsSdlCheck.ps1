@@ -3,7 +3,7 @@
 param(
     [string]$SdkRoot = (Join-Path $env:LOCALAPPDATA 'Android\Sdk'),
     [string]$JavaHome = 'C:\Program Files\Android\Android Studio\jbr',
-    [string]$PythonPath = (Join-Path $env:LOCALAPPDATA 'Programs\Python\Python314\python.exe'),
+    [string]$PythonPath = (Join-Path $env:LOCALAPPDATA 'Programs\Python\Python312\python.exe'),
     [string]$CMakePath = 'C:\Program Files\CMake\bin\cmake.exe',
     [string]$NinjaPath = 'D:\Test\msys64\ucrt64\bin\ninja.exe',
     [string]$GradleUserHome = (Join-Path $env:USERPROFILE '.gradle'),

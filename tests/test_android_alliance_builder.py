@@ -169,6 +169,89 @@ class AllianceBuildTests(unittest.TestCase):
             E.build(self.repo, self.args)
         self.assertEqual(snapshot(self.repo), before)
 
+    def legacy_completed(self, legacy=None):
+        self.project[E.HELPER_INPUT] = copy.deepcopy(legacy or E.LEGACY_HELPER_INPUT)
+        saved = copy.deepcopy(self.completed())
+        self.project[E.HELPER_INPUT] = E.B.fingerprint(Path(E.__file__))
+        return saved
+
+    def test_python312_verifies_and_reuses_legacy_completed_stage_without_rebinding(self):
+        original = self.legacy_completed()
+        before = snapshot(self.repo)
+        with ExitStack() as stack:
+            self.selections(stack)
+            stack.enter_context(patch.object(E.B, 'ndk_paths', side_effect=AssertionError('compiler requested')))
+            stack.enter_context(patch.object(E.M, 'run', side_effect=AssertionError('tool requested')))
+            with redirect_stdout(io.StringIO()) as output:
+                self.assertEqual(E.verify_receipt(self.repo), original)
+                E.build(self.repo, self.args)
+        self.assertIn('retained historical launcher receipt', output.getvalue())
+        self.assertEqual(snapshot(self.repo), before)
+
+    def test_legacy_helper_exception_does_not_accept_other_changes(self):
+        self.legacy_completed()
+        current = copy.deepcopy(self.inputs)
+        for changed in (
+                dict(current, prerequisites={'changed': True}),
+                dict(current, project_files=dict(current['project_files'], recipe={'changed': True})),
+                dict(current, project_files=dict(current['project_files'], **{E.HELPER_INPUT: {'bytes': 1, 'sha256': 'unreviewed'}}))):
+            with self.subTest(current=changed):
+                with self.assertRaises(E.BuildError):
+                    E.checked_receipt(self.repo, self.root, changed, self.profile)
+        saved = E.record(self.root / 'receipt.json')
+        saved['inputs']['project_files'][E.HELPER_INPUT]['sha256'] = '0' * 64
+        write(self.root, 'receipt.json', E.B.json_bytes(saved))
+        with self.assertRaises(E.BuildError):
+            E.checked_receipt(self.repo, self.root, current, self.profile)
+
+    def test_known_windows_crlf_legacy_helper_is_retained_without_rewriting(self):
+        original = self.legacy_completed(E.LEGACY_HELPER_INPUT_CRLF)
+        before = snapshot(self.repo)
+        self.assertEqual(E.checked_receipt(self.repo, self.root, self.inputs, self.profile), original)
+        self.assertEqual(snapshot(self.repo), before)
+
+    def test_legacy_receipt_marker_and_output_checks_still_apply(self):
+        self.legacy_completed()
+        original_marker = (self.root / E.MARKER).read_bytes()
+        write(self.root, E.MARKER, E.B.json_bytes(
+            {'schema_version': 1, 'kind': E.KIND, 'profile': self.profile, 'inputs': self.inputs}))
+        with self.assertRaisesRegex(E.BuildError, 'ownership differs'):
+            E.checked_receipt(self.repo, self.root, self.inputs, self.profile)
+        write(self.root, E.MARKER, original_marker)
+        write(self.root, E.ARTIFACTS[0], self.probe + b'modified')
+        with self.assertRaises(E.BuildError):
+            E.checked_receipt(self.repo, self.root, self.inputs, self.profile)
+
+    def test_incomplete_legacy_stage_is_not_resumed_under_another_python_binding(self):
+        self.project[E.HELPER_INPUT] = copy.deepcopy(E.LEGACY_HELPER_INPUT)
+        self.stage()
+        self.project[E.HELPER_INPUT] = E.B.fingerprint(Path(E.__file__))
+        before = snapshot(self.repo)
+        with ExitStack() as stack:
+            self.selections(stack)
+            stack.enter_context(patch.object(E.B, 'ndk_paths', side_effect=AssertionError('compiler requested')))
+            with self.assertRaisesRegex(E.BuildError, 'different inputs'):
+                E.build(self.repo, self.args)
+        self.assertEqual(snapshot(self.repo), before)
+
+    def test_native_windows_runtime_requires_exact_cpython31210_x64(self):
+        with patch.object(E.sys, 'platform', 'win32'), \
+                patch.object(E.sys, 'version_info', (3, 12, 10)), \
+                patch.object(E.platform, 'python_implementation', return_value='CPython'), \
+                patch.object(E.platform, 'machine', return_value='AMD64'), \
+                patch.object(E.struct, 'calcsize', return_value=8):
+            E.check_windows_python()
+            for version in ((3, 12, 3), (3, 14, 3), (3, 11, 10)):
+                with self.subTest(version=version), patch.object(E.sys, 'version_info', version):
+                    with self.assertRaisesRegex(E.BuildError, '3.12.10 x64'):
+                        E.check_windows_python()
+            for owner, name, value in ((E.platform, 'machine', 'ARM64'),
+                                       (E.platform, 'python_implementation', 'PyPy'),
+                                       (E.struct, 'calcsize', 4)):
+                with self.subTest(field=name), patch.object(owner, name, return_value=value):
+                    with self.assertRaises(E.BuildError):
+                        E.check_windows_python()
+
     def test_owner_input_mismatch_unknown_stage_and_nested_link_preserved(self):
         self.root.mkdir()
         write(self.root, 'user-file', b'preserve')

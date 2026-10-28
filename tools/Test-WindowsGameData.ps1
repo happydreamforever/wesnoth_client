@@ -2,7 +2,7 @@
 [CmdletBinding()]
 param(
     [string]$DataRoot = (Join-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) 'gamedata-1.19.26'),
-    [string]$PythonPath = (Join-Path $env:LOCALAPPDATA 'Programs\Python\Python314\python.exe')
+    [string]$PythonPath = (Join-Path $env:LOCALAPPDATA 'Programs\Python\Python312\python.exe')
 )
 $ErrorActionPreference = 'Stop'
 $testExit = 2
