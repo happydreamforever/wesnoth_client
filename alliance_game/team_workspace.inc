@@ -79,9 +79,9 @@ std::string plan_window(bool editor) {
     }
     auto& footer=ui::cell(ui::row(grid),"grid");
     if(editor){auto& r=ui::row(footer);ui::cell(r,"button","save")["label"]="Save plan";ui::cell(r,"button","cancel")["label"]="Back";}
-    else {const std::array<const char*,8> ids{{"hero","ready","approve","edit","leave","refresh","cancel_plan","cancel"}};
-        const std::array<const char*,8> labels{{"Choose hero","Ready","Approve","Settings","Leave seat","Refresh","Cancel plan","Back"}};
-        for(int y=0;y<2;++y){auto& r=ui::row(footer);for(int x=0;x<4;++x){const int n=y*4+x;ui::cell(r,"button",ids[n])["label"]=labels[n];}}}
+    else {const std::array<const char*,9> ids{{"use_companies","hero","ready","approve","edit","leave","refresh","cancel_plan","cancel"}};
+        const std::array<const char*,9> labels{{"Use personal companies","Choose hero","Ready","Approve","Settings","Leave seat","Refresh","Cancel plan","Back"}};
+        for(int y=0;y<2;++y){auto& r=ui::row(footer);for(int x=0;x<5;++x){const int n=y*5+x;if(n<9)ui::cell(r,"button",ids[n])["label"]=labels[n];else {auto& gap=ui::cell(r,"spacer");gap["width"]=1;gap["height"]=1;}}}}
     windows.emplace(id,gui2::builder_window(def));return id;
 }
 class PlanEditor final:public gui2::dialogs::modal_dialog {
@@ -149,25 +149,15 @@ private:
         });
     }
 };
-class PlanWorkspace final:public gui2::dialogs::modal_dialog,private events::pump_monitor {
+class PlanWorkspace final:public gui2::dialogs::modal_dialog {
 public:
     PlanWorkspace(const alliance::account::Battle& battle,const std::string& actor,const std::string& team,const std::vector<alliance::account::Team>& rosters,bool terminal_result,bool pending_result):modal_dialog(plan_window(false)),battle_(battle),actor_(actor),team_(team),rosters_(rosters),terminal_result_(terminal_result),pending_result_(pending_result){set_allow_plugin_skip(false);}
     TeamPlanActionResult result;
 private:
     const alliance::account::Battle& battle_;std::string actor_,team_;const std::vector<alliance::account::Team>& rosters_;bool terminal_result_,pending_result_;
-    std::chrono::steady_clock::time_point refresh_at_{};
-    bool polling_=false;
-    void process()override {
-        // This workspace opens no nested modal. A read-only refresh unwinds it
-        // before the controller fetches a new revision; no mutation is retried.
-        if(polling_&&std::chrono::steady_clock::now()>=refresh_at_) {
-            polling_=false;result.action=TeamPlanAction::refresh;set_retval(gui2::retval::OK);
-        }
-    }
     const std::string& window_id()const override{static const std::string id="alliance_plan_workspace";return id;}
     void action(const char* id,TeamPlanAction value,bool enabled=true){auto& b=find_widget<gui2::button>(id);b.set_active(enabled);gui2::event::connect_signal_mouse_left_click(b,[this,value](auto&&...){result.action=value;set_retval(gui2::retval::OK);});}
     void pre_show()override{
-        polling_=battle_.state=="draft";refresh_at_=std::chrono::steady_clock::now()+std::chrono::seconds(4);
         find_widget<gui2::label>("plan_title").set_label(battle_.teams.at(0).name+"  vs  "+battle_.teams.at(1).name);
         const bool draft=battle_.state=="draft";bool captain=false,approved=false,joined=false,ready=false,hero=false;
         for(const auto& team:battle_.teams){if(team.captain_id==actor_){captain=true;approved=team.approved;}for(const auto& p:team.players)if(p.id==actor_){joined=true;ready=p.ready;hero=p.selection_present;}}
@@ -192,6 +182,7 @@ private:
         action("ready",result?TeamPlanAction::upload:TeamPlanAction::ready,result?pending_result_:draft&&joined&&hero);
         find_widget<gui2::button>("ready").set_label(result?"Send result":ready?"Not ready":"Ready");
         if(terminal_result_&&battle_.state=="running")find_widget<gui2::label>("plan_status").set_label(pending_result_?"Result saved · Upload pending":"Result sent · Captain review");
+        find_widget<gui2::button>("use_companies").set_visible(draft&&captain&&battle_.room_state!="preparing"?gui2::widget::visibility::visible:gui2::widget::visibility::invisible);action("use_companies",TeamPlanAction::companies,draft&&captain&&battle_.room_state!="preparing");
         action("approve",TeamPlanAction::approve,draft&&captain&&!approved);action("edit",TeamPlanAction::edit,draft&&captain);
         action("leave",TeamPlanAction::leave,draft&&joined);
         const bool member=std::any_of(battle_.teams.begin(),battle_.teams.end(),[this](const auto& t){return t.id==team_;});

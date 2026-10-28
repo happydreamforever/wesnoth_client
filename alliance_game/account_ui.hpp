@@ -24,6 +24,8 @@ void show_campaign_heroes(const std::string& campaign);
 // Main-menu action; always clears this device session even if revocation fails.
 void logout_player();
 void show_teams_dialog();
+// One-shot Campaign shortcut from an empty personal Company.
+bool take_world_campaign_request() noexcept;
 void show_training_dialog();
 // Rechecks current ownership before returning a selected hero/form.
 bool choose_owned_hero(std::string& hero_id, std::string& form_id);

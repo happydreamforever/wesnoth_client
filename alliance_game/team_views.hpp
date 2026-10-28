@@ -19,7 +19,7 @@ struct TeamPlanDraft {
 bool edit_team_plan(const std::vector<alliance::account::BattleMap>& maps,
                     const std::vector<alliance::account::Team>& teams,
                     const std::string& actor, TeamPlanDraft& draft);
-enum class TeamPlanAction { back, refresh, join, leave, hero, ready, approve, edit, cancel, replay, reconnect, watch, result, upload };
+enum class TeamPlanAction { back, refresh, join, leave, hero, ready, approve, edit, cancel, replay, reconnect, watch, result, upload, companies };
 struct TeamPlanActionResult { TeamPlanAction action=TeamPlanAction::back; int side=0; };
 TeamPlanActionResult show_team_plan_workspace(const alliance::account::Battle& battle,
                                              const std::string& actor,const std::string& actor_team,

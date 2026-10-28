@@ -3,6 +3,8 @@
 #include "alliance_game/battle_ui.hpp"
 #include "alliance_game/native_menu_theme.hpp"
 #include "alliance_game/team_views.hpp"
+#include "alliance_game/world_ui.hpp"
+#include "alliance_game/world_launch.hpp"
 #include "alliance_game/android_lifecycle.hpp"
 #include "alliance_game/session_watch.hpp"
 #include "alliance_game/hero_catalog.hpp"
@@ -1640,6 +1642,24 @@ bool flexible_plan_action(const alliance::TrustedProfile& profile,const account:
         try{(void)verified_shared_replay(actor,battle.id);queue_alliance_replay(AllianceReplay::shared,actor,battle.id);}
         catch(...){download_shared_replay(profile,battle);}return false;
     }
+    if(action.action==TeamPlanAction::companies){
+        if(!world_ui::confirm("Use personal companies", "Replace this waiting skirmish with a company battle. Each participant brings an owned hero and selected soldiers. The original plan stays in history; both teams must review and give fresh approval and Ready.", "Use companies")||!same_actor())return true;
+        const std::string id=world_ui::command_id();
+        const boost::json::object payload{{"command_id",id},{"plan_id",battle.id}};
+        try{world_command_record::save(actor,generation,"skirmish_create",payload);}
+        catch(const std::exception& e){message(e.what());return false;}
+        account::Request input;input.operation="world_command";input.token=token;
+        input.world_json=boost::json::serialize(boost::json::object{{"operation","skirmish_create"},{"payload",payload}});
+        account::Reply reply;
+        if(!request(profile,input,"Creating company skirmish…",reply)||!same_actor())return false;
+        if(reply.ok||world_ui::rejected_without_change(reply.error_code)){
+            try{world_command_record::acknowledge(actor,generation,id);}
+            catch(const std::exception& e){message(e.what());return false;}
+        }
+        if(!reply.ok){show_failure(reply);return false;}
+        message("Company skirmish created. Open Battles to review the companies and confirm readiness.");
+        return false;
+    }
     if(action.action==TeamPlanAction::edit){
         std::vector<account::Team> teams;if(!load_plan_teams(profile,battle,teams))return true;
         account::Request input;input.operation="battle_maps";input.area_id=battle.area_id;account::Reply maps;
@@ -1957,7 +1977,7 @@ void team_options_hub(const alliance::TrustedProfile& profile,const account::Tea
     else if(action==4){if(team)team_management_hub(profile,*team);else create_team(profile);}
 }
 
-void teams(const alliance::TrustedProfile& profile)
+void legacy_teams(const alliance::TrustedProfile& profile)
 {
     int selected=0;
     while(!current_session().token.empty()) {
@@ -1986,6 +2006,47 @@ void teams(const alliance::TrustedProfile& profile)
         else if(picked.action==4)team_options_hub(profile,own.team?&*own.team:nullptr);
         if(practice_pending()||progression_pending()||shared_pending()||replay_pending())return;
     }
+}
+
+
+bool world_campaign_requested=false;
+void teams(const alliance::TrustedProfile& profile)
+{
+    const auto actor=current_session().profile.account_id;
+    const auto token=current_session().token;
+    const auto generation=current_session().profile.database_generation;
+    world_campaign_requested=false;
+    world_ui::Hooks hooks;hooks.actor_id=actor;hooks.generation=generation;
+    hooks.same_actor=[actor,token,generation]{return !token.empty()&&current_session().token==token&&current_session().profile.account_id==actor&&current_session().profile.database_generation==generation;};
+    hooks.request=[profile,token](bool mutation,const std::string& operation,boost::json::object payload,alliance::CancellationToken& cancellation){
+        account::Request input;input.operation=mutation?"world_command":"world_query";input.token=token;
+        input.world_json=boost::json::serialize(boost::json::object{{"operation",operation},{"payload",std::move(payload)}});
+        const auto reply=account::perform_request(profile,input,cancellation);clear_secret(input.token);
+        world_ui::Reply result;result.ok=reply.ok;result.code=reply.error_code;result.message=reply.error_message;
+        if(reply.ok)result.document=account::parse_document(reply.world_json);return result;
+    };
+    hooks.connection_failure=[actor,generation](const world_ui::Reply& reply){
+        request_session_reauthentication(actor,generation);current_session().clear();world_campaign_requested=false;
+        message(reply.code=="request_failed"?"Connection to the local game server was lost. Log in again.":reply.message.empty()?"Your session ended. Log in again.":reply.message);
+    };
+    hooks.choose_hero=[profile](std::string& hero,std::string& form){return choose_hero(profile,hero,form);};
+    hooks.external=[profile,actor](const std::string& action){
+        if(!same_extension_actor(actor))return;
+        if(action=="roster")my_team(profile);
+        else if(action=="settings"){account::Request request;request.operation="my_team";account::Reply own;if(team_request(profile,request,"Loading your team…",own))team_options_hub(profile,own.team?&*own.team:nullptr);}
+        else if(action=="skirmishes")battle_plans(profile);
+        else if(action=="legacy_history")battle_history(profile);
+        else if(action=="new_skirmish")propose_battle(profile);
+        else if(action=="campaign")world_campaign_requested=true;
+    };
+    hooks.destination_pending=[] {return world_campaign_requested||world_pending()||shared_pending()||practice_pending()||progression_pending()||replay_pending();};
+    hooks.launch=[profile,actor,token](const std::string& run,bool replay){WorldAdmission admission;admission.profile=profile;admission.profile.port=15002;admission.run_id=run;admission.account_id=actor;admission.token=token;admission.replay=replay;queue_world(std::move(admission));};
+    world_ui::State state;
+    // Polling is owned by this workspace. SessionWatch cannot open another auth
+    // modal while the foreground controller is resolving a saved request.
+    AccountNetworkActivity activity;
+    world_ui::show(std::move(hooks),state);
+    if(current_session().token.empty())world_campaign_requested=false;
 }
 
 
@@ -2143,10 +2204,14 @@ void logout_player()
     // logout always ends that old-account intent, including this failure path.
     clear_session_reauthentication();
 }
+bool take_world_campaign_request() noexcept
+{
+    const bool requested=world_campaign_requested&&!current_session().token.empty();world_campaign_requested=false;return requested;
+}
 void show_teams_dialog()
 {
     MenuThemeScope menu_theme("alliance_teams");
-    if(practice_pending()||progression_pending()||shared_pending()||replay_pending())return;
+    if(practice_pending()||progression_pending()||shared_pending()||replay_pending()||world_pending())return;
     try {auto session=player_session();if(session)teams(session->trusted);}
     catch(...){message("The teams screen could not be opened. Return to the title screen and try again.");}
 }
