@@ -99,7 +99,7 @@ def generate_synced_commands_overlay(source: bytes) -> bytes:
 '''
     if source.count(anchor) != 1:
         raise ValueError("Pinned captain command commit boundary differs.")
-    return source.replace(anchor, anchor + b'''\tif(child["name"] == "alliance_captain_v1") {
+    result = source.replace(anchor, anchor + b'''\tif(child["name"] == "alliance_captain_v1") {
 \t\tconst auto action = child.child_or_empty("data")["action"].str();
 \t\tif(action == "surrender" || action == "offer_draw" || action == "withdraw_draw") {
 \t\t\t// These explicitly confirmed decisions must reach replay and peers even
@@ -108,6 +108,31 @@ def generate_synced_commands_overlay(source: bytes) -> bytes:
 \t\t}
 \t}
 ''')
+    # Native replay normally trusts the sender's source location. New World
+    # battles automatically settle persistent armies, so additionally require
+    # moves and attacks to name a unit belonging to the active tactical side.
+    # Authored campaigns, individual Rooms and legacy Team replays are unchanged.
+    guard = b'''static bool world_source_owned(const unit& source, action_spectator& spectator)
+{
+\tif(!resources::gamedata || !resources::gamedata->get_variable_const("alliance_world").to_bool()) return true;
+\tif(resources::controller && source.side() == resources::controller->current_side()) return true;
+\talliance_game::world_sync_error();
+\tspectator.error("World command source does not belong to the current side.");
+\treturn false;
+}
+
+'''
+    at = b'SYNCED_COMMAND_HANDLER_FUNCTION(recruit, child, spectator)'
+    if result.count(at) != 1:
+        raise ValueError('Pinned World ownership helper boundary differs.')
+    result = result.replace(at, guard + at)
+    attack = b'\tif (child.has_attribute("attacker_type")) {'
+    move = b'\tbool skip_sighted = child["skip_sighted"] == "all";'
+    for boundary in (attack, move):
+        if result.count(boundary) != 1:
+            raise ValueError('Pinned World source ownership boundary differs.')
+        result = result.replace(boundary, b'\tif(!world_source_owned(*u, spectator)) return false;\n\n' + boundary)
+    return b'#include "alliance_game/world_result.hpp"\n' + result
 
 def generate_campaign_overlay(source: bytes) -> bytes:
     if sha256(source).hexdigest() != CAMPAIGN_SHA256:

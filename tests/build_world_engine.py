@@ -38,7 +38,7 @@ originals = lines[index].split(':', 1)[1].split()[1:]
 originals = originals[:originals.index('|')]
 replaced = tuple('/' + path.removeprefix('src/') + '.o' for name, path in mapping.items() if name.endswith('.cpp'))
 selected = [name for name in originals if not name.endswith(replaced)]
-if len(originals) - len(selected) != 8: raise ValueError('Native worker object ownership differs.')
+if len(originals) - len(selected) != 9: raise ValueError('Native worker object ownership differs.')
 libraries = shlex.split(next(line.strip().split(' = ', 1)[1] for line in lines[index:index+25] if line.strip().startswith('LINK_LIBRARIES = ')))
 command = ['g++', *selected, *objects, *libraries, '/opt/boost/lib/libboost_container.a', '-lpng', '-o', str(out / 'world-worker')]
 commands.append(command)

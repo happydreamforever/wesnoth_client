@@ -101,6 +101,9 @@ class AccountBuildTests(unittest.TestCase):
         result = A.synced_commands_overlay(ROOT)
         self.assertEqual(source.read_bytes(), before)
         self.assertIn(b'if(child["name"] == "alliance_captain_v1")', result)
+        self.assertIn(b'get_variable_const("alliance_world").to_bool()', result)
+        self.assertIn(b'source.side() == resources::controller->current_side()', result)
+        self.assertEqual(result.count(b'if(!world_source_owned(*u, spectator)) return false;'), 2)
         with self.assertRaises(ValueError):
             overlay.generate_synced_commands_overlay(before + b'\n')
         with self.assertRaises(ValueError):

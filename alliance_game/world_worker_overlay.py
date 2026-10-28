@@ -3,7 +3,7 @@ from pathlib import Path
 from hashlib import sha256
 import json
 from shared_connection_overlay import write_overlay
-from engine_overlay import generate_config_manager_overlay
+from engine_overlay import generate_config_manager_overlay, generate_synced_commands_overlay
 
 WORLD_SOURCES = ("world_storage", "world_scenario", "world_result", "world_launch", "world_worker")
 
@@ -56,9 +56,11 @@ def generate(client, out):
     multiplayer = once(multiplayer, anchor, anchor + b'\n\talliance_game::world_sync_error();')
     (out / "playmp_controller.cpp").write_bytes(b'#include "alliance_game/world_result.hpp"\n' + multiplayer)
     (out / "game_config_manager.cpp").write_bytes(generate_config_manager_overlay(source("src/game_config_manager.cpp")))
+    (out / "synced_commands.cpp").write_bytes(generate_synced_commands_overlay(source("src/synced_commands.cpp")))
     write_overlay(client / "engine/src", out)
     (out / "world_json.cpp").write_text('#include <boost/json/src.hpp>\n')
     return {"wesnoth.cpp": "src/wesnoth.cpp", "playcampaign.cpp": "src/game_initialization/playcampaign.cpp",
         "attack.cpp": "src/actions/attack.cpp", "advancement.cpp": "src/actions/advancement.cpp",
         "lua_unit.cpp": "src/scripting/lua_unit.cpp", "playmp_controller.cpp": "src/playmp_controller.cpp", "game_config_manager.cpp": "src/game_config_manager.cpp",
-        "wesnothd_connection.cpp": "src/wesnothd_connection.cpp", "wesnothd_connection.hpp": "src/wesnothd_connection.hpp"}
+        "wesnothd_connection.cpp": "src/wesnothd_connection.cpp", "wesnothd_connection.hpp": "src/wesnothd_connection.hpp",
+        "synced_commands.cpp": "src/synced_commands.cpp"}
