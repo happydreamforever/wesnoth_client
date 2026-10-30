@@ -32,9 +32,9 @@ ENGINE_KIND = 'wesnoth-android-account-engine'
 LOCK = '.wesnoth-account-game-operation.json'
 MARKER = '.wesnoth-account-game.json'
 ENGINE_MARKER = '.wesnoth-account-engine.json'
-VERSION_CODE = 1192624
-PREVIOUS_VERSION_CODES = frozenset(range(1192608, 1192624))
-UPDATE_JOURNAL = '.wesnoth-account-game-update-1192624.json'
+VERSION_CODE = 1192625
+PREVIOUS_VERSION_CODES = frozenset(range(1192608, 1192625))
+UPDATE_JOURNAL = '.wesnoth-account-game-update-1192625.json'
 UPDATE_KIND = 'wesnoth-android-account-game-update'
 UPDATE_STAGES = ('android-account-engine', 'android-account-game')
 PACKAGE = G.PACKAGE
@@ -48,7 +48,8 @@ TEMPLATES.update({name + '.java': 'app/src/main/java/org/wesnoth/offline/' + nam
                   for name in ('AlliancePublicProfile', 'BundledStartup', 'StartupProgress', 'WesnothGameTask', 'ProductTheme', 'StartupFrame')})
 TEMPLATES.update({name + '.java': 'app/src/main/java/org/libsdl/app/' + name + '.java'
                   for name in ('WesnothKeyboard', 'WesnothKeyboardState')})
-NEW_INPUTS = ('tools/build_android_account_game.py', 'tools/android_public_bundle.py',
+PRESENTATION_HEADERS = ('mobile_home.hpp', 'presentation_icons.hpp')
+NEW_INPUTS = (*(f'tools/android-presentation/{name}' for name in PRESENTATION_HEADERS), 'tools/build_android_account_game.py', 'tools/android_public_bundle.py',
               'tools/generate_product_theme.py', 'tools/native-account-game/ui-theme.json',
               'alliance_game/product_theme.hpp', 'alliance_game/home_ui.hpp', 'alliance_game/menu_icons.hpp', 'alliance_game/emerald_chrome.hpp',
               'alliance_game/native_menu_theme.hpp', 'alliance_game/menu_theme_overlay.py',
@@ -187,7 +188,32 @@ def title_overlay(repo):
     spec = importlib.util.spec_from_file_location('account_title_overlay', repo / 'alliance_game/title_overlay.py')
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    return module.generate_title_overlay(regular(repo / 'engine/src' / TITLE_SOURCE, 'Pinned title source').read_bytes())
+    source = module.generate_title_overlay(regular(repo / 'engine/src' / TITLE_SOURCE, 'Pinned title source').read_bytes())
+    # Android presentation is deliberately separate from the source set bound
+    # into completed Windows workers. Exact anchors fail closed if that base
+    # menu changes; no original engine or shared gameplay source is rewritten.
+    return mobile_title_overlay(source)
+
+
+def mobile_title_overlay(source):
+    changes = (
+        (b'#include "alliance_game/home_ui.hpp"', b'#include "mobile_home.hpp"', 1),
+        (b'alliance_game::prepare_home_window()', b'alliance_game::mobile_home::prepare_window()', 1),
+        (b'alliance_game::home_ui::', b'alliance_game::mobile_home::', 3),
+        (b'    alliance_game::mobile_home::bind(*this);',
+         b'    register_button("help", hotkey::HOTKEY_HELP, [refresh_profile] { help::show_help(); refresh_profile(); });\n'
+         b'    alliance_game::mobile_home::bind(*this);', 1),
+    )
+    for before, after, count in changes:
+        if source.count(before) != count:
+            raise BuildError('Android home presentation does not match the pinned title overlay.')
+        source = source.replace(before, after)
+    return source
+
+
+def presentation_headers(repo):
+    return {name: regular(repo / 'tools/android-presentation' / name, 'Android presentation header').read_bytes()
+            for name in PRESENTATION_HEADERS}
 
 
 def main_overlay(repo):
@@ -283,7 +309,7 @@ def engine_generated(repo, prior):
     lines = ['set(account_base_objects']
     lines.extend(' ' + cmake_literal(repo / record['path']) for name, record in sorted(objects.items()) if name not in REPLACED_SOURCES)
     lines.append(')\n')
-    return {**shared_connection_overlay(repo), **unified_overlays(repo), 'objects.cmake': '\n'.join(lines).encode('utf-8'),
+    return {**shared_connection_overlay(repo), **unified_overlays(repo), **presentation_headers(repo), 'objects.cmake': '\n'.join(lines).encode('utf-8'),
             'title_screen.cpp': title_overlay(repo),
             'wesnoth.cpp': main_overlay(repo),
             'game_launcher.cpp': launcher_overlay(repo),
@@ -606,7 +632,7 @@ def previous_version(root, marker, receipt):
     apk = validation.get('apk') if isinstance(validation, dict) else None
     version = apk.get('version_code') if isinstance(apk, dict) else None
     if type(version) is not int or version not in PREVIOUS_VERSION_CODES:
-        raise BuildError('Expected a completed account APK from versions 1192608 through 1192623; nothing was renamed.')
+        raise BuildError('Expected a completed account APK from versions 1192608 through 1192624; nothing was renamed.')
     if 'app/build.gradle' not in marker['files']:
         raise BuildError('The previous account version is not bound to its owned Gradle input.')
     data = call(N.ninja_read, root / 'app/build.gradle', 64 * 1024)
@@ -669,7 +695,7 @@ def checked_update_journal(record, current_inputs):
         entry = record['stages'][name]
         if not isinstance(entry, dict) or set(entry) != {'backup', 'snapshot'}:
             raise BuildError('Invalid account update stage record.')
-        match = re.fullmatch(re.escape(name) + r'-before-world-companies-(\d{8}T\d{6}Z-[0-9a-f]{32})', str(entry['backup']))
+        match = re.fullmatch(re.escape(name) + r'-before-menu-polish-(\d{8}T\d{6}Z-[0-9a-f]{32})', str(entry['backup']))
         if not match:
             raise BuildError('Invalid account backup location; no paths were changed.')
         suffixes.add(match.group(1))
@@ -733,7 +759,7 @@ def prepare_update(repo):
             token = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ-') + uuid.uuid4().hex
             record = {'schema_version': 1, 'kind': UPDATE_KIND, 'target_version': VERSION_CODE,
                       'target_inputs': inputs, 'stages': {name: {
-                          'backup': name + '-before-world-companies-' + token, 'snapshot': snapshots[name]}
+                          'backup': name + '-before-menu-polish-' + token, 'snapshot': snapshots[name]}
                           for name in UPDATE_STAGES}}
             checked_update_journal(record, inputs)
             write_new(journal, B.json_bytes(record))
@@ -840,7 +866,7 @@ def main(argv=None):
     parser.add_argument('--public-config', type=Path, help='Public-only .env file; defaults to the repository .env.')
     parser.add_argument('--openssl', type=Path, help='Existing OpenSSL 3 executable for offline public certificate verification.')
     parser.add_argument('--verify', '--verify-only', action='store_true')
-    parser.add_argument('--prepare-update', action='store_true', help='Preserve completed 1192608 through 1192623 stages before the 1192624 Companies and territorial world update.')
+    parser.add_argument('--prepare-update', action='store_true', help='Preserve completed 1192608 through 1192624 stages before the 1192625 Emerald Court menu update.')
     args = parser.parse_args(argv)
     try:
         for name, value in vars(args).items():

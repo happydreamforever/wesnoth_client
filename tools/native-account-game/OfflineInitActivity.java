@@ -96,7 +96,7 @@ public final class OfflineInitActivity extends Activity {
         preparation.setOrientation(LinearLayout.VERTICAL);
         preparation.setGravity(Gravity.CENTER);
         preparation.setPadding(padding, padding / 2, padding, padding);
-        preparation.setBackground(new StartupFrame(density, false, true, false));
+        // Keep measured progress directly over the artwork, without a panel.
         LinearLayout.LayoutParams preparationBounds = new LinearLayout.LayoutParams(-1, -2);
         preparationBounds.topMargin = padding / 2;
         layout.addView(preparation, preparationBounds);

@@ -381,7 +381,7 @@ class ApkBundleTests(unittest.TestCase):
 
     def test_new_apk_inspector_binds_every_public_asset(self):
         result = self.A.inspect_apk(self.apk, self.root)
-        self.assertEqual(result['version_code'], 1192623)
+        self.assertEqual(result['version_code'], self.A.VERSION_CODE)
         self.assertEqual(result['activity'], 'org.wesnoth.offline.OfflineInitActivity')
         self.assertEqual(result['bundled_assets'], self.marker['inputs']['bundled_assets'])
 
