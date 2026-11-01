@@ -27,6 +27,7 @@ bool individual_start_authorized() noexcept;
 void invalidate_individual_start() noexcept;
 bool confirm_individual_ready();
 bool review_individual_join(const config& room);
+std::string take_individual_admission_ticket();
 bool show_individual_details(const config& room, bool can_observe);
 void show_individual_settings();
 bool create_individual_room(saved_game& state);

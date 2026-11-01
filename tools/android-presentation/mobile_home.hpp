@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #pragma once
 #include "alliance_game/product_ui_layout.hpp"
+#include "alliance_game/court_common.hpp"
+#include "alliance_game/session_watch.hpp"
+#include "events.hpp"
 #include "presentation_icons.hpp"
 #include "alliance_game/emerald_chrome.hpp"
 #include "gui/core/timer.hpp"
@@ -20,12 +23,13 @@ inline double scale(){const auto size=video::game_canvas_size();return std::floo
 inline int px(int value){return static_cast<int>(std::lround(value*scale()));}
 inline std::string style(const std::string& name){return name+"_"+std::to_string(px(1000));}
 struct Action {const char* id;const char* name;presentation_icons::Symbol symbol;int width,height,icon;};
-inline constexpr std::array<Action,10> actions{{
+inline constexpr std::array<Action,11> actions{{
     {"quit","Quit",presentation_icons::Symbol::quit,52,52,26},
     {"help","Help",presentation_icons::Symbol::help,52,52,26},
     {"preferences","Preferences",presentation_icons::Symbol::preferences,52,52,26},
     {"addons","My Heroes",presentation_icons::Symbol::heroes,52,52,26},
     {"achievements","Achievements",presentation_icons::Symbol::achievements,52,52,26},
+    {"shop","Shop",presentation_icons::Symbol::shop,52,52,26},
     {"load","Load",presentation_icons::Symbol::load,148,172,60},
     {"multiplayer","Room",presentation_icons::Symbol::room,164,190,76},
     {"campaign","Campaign",presentation_icons::Symbol::campaign,184,224,96},
@@ -74,7 +78,7 @@ inline void action_style(const Action& action,bool utility) {
 }
 inline void prepare_styles() {
     product_ui::prepare_theme();if(gui2::current_gui->second.widget_types["window"].count(style("alliance_mobile_home_scene")))return;
-    for(std::size_t i=0;i<actions.size();++i)action_style(actions[i],i<5);
+    for(std::size_t i=0;i<actions.size();++i)action_style(actions[i],i<6);
     label_style("alliance_mobile_home_kicker",760,36,30,product_ui::ivory,true);
     label_style("alliance_mobile_home_title",760,112,96,product_theme::light_gold_rgba,true);
     {config c;c["id"]=style("alliance_mobile_home_crest");c["description"]="Oak crest";auto& cr=c.add_child("resolution");cr["min_width"]=px(260);cr["default_width"]=px(260);cr["max_width"]=px(260);cr["min_height"]=px(30);cr["default_height"]=px(30);cr["max_height"]=px(30);
@@ -82,10 +86,11 @@ inline void prepare_styles() {
       for(int side=0;side<2;++side){auto& line=draw.add_child("line");line["x1"]=px(side?155:5);line["x2"]=px(side?255:105);line["y1"]=px(17);line["y2"]=px(17);line["color"]=product_ui::gold;}cr.add_child("state_disabled").add_child("draw");gui2::add_single_widget_definition("label",style("alliance_mobile_home_crest"),c);}
     label_style("alliance_mobile_home_name",172,26,19,product_ui::ivory);
     label_style("alliance_mobile_home_count",172,22,16,product_ui::gold);
+    label_style("alliance_mobile_home_cash",172,22,16,product_ui::ivory);
     label_style("alliance_mobile_home_tip",240,32,20,product_ui::ivory);
     label_style("alliance_mobile_home_profile_tip",500,32,20,product_ui::ivory);
     config panel;panel["id"]=style("alliance_mobile_home_profile");panel["description"]="Signed-in player";auto& p=panel.add_child("resolution");
-    const int horizontal_padding=px(200)-px(172),vertical_padding=px(60)-px(26)-px(22);
+    const int horizontal_padding=px(200)-px(172),vertical_padding=px(82)-px(26)-px(22)-px(22);
     p["left_border"]=horizontal_padding/2;p["right_border"]=horizontal_padding-horizontal_padding/2;
     p["top_border"]=vertical_padding/2;p["bottom_border"]=vertical_padding-vertical_padding/2;
     emerald_chrome::frame_canvas(p.add_child("background").add_child("draw"),emerald_chrome::Kind::profile,false,false,px(24));p.add_child("foreground").add_child("draw");
@@ -121,22 +126,42 @@ inline std::string prepare_window() {
     r["x"]=0;r["y"]=0;r["width"]="(screen_width)";r["height"]="(screen_height)";r.add_child("tooltip")["id"]=style("alliance_mobile_home_tooltip");r.add_child("helptip")["id"]=style("alliance_mobile_home_tooltip");
     auto& grid=r.add_child("grid");auto& header_column=product_ui::row(grid).add_child("column");header_column["horizontal_grow"]=true;header_column["border"]="top,left,right";header_column["border_size"]=px(24);
     auto& header=product_ui::row(header_column.add_child("grid"));spacer(header,1,px(60),1);
-    for(std::size_t i=0;i<5;++i){auto& b=plain_cell(header,"button",actions[i].id);b["definition"]=style("alliance_mobile_home_"+std::string(actions[i].id));b["label"]=actions[i].name;b["tooltip"]=actions[i].name;b["return_value"]=0;if(i<4)spacer(header,px(8),1);}
+    for(std::size_t i=0;i<6;++i){auto& b=plain_cell(header,"button",actions[i].id);b["definition"]=style("alliance_mobile_home_"+std::string(actions[i].id));b["label"]=actions[i].name;b["tooltip"]=actions[i].name;b["return_value"]=0;if(i<5)spacer(header,px(8),1);}
     spacer(header,px(16),1);auto& profile=plain_cell(header,"panel","home_profile");profile["definition"]=style("alliance_mobile_home_profile");
     auto& profile_grid=profile.add_child("grid");auto& name=plain_cell(product_ui::row(profile_grid),"label","home_player");name["definition"]=style("alliance_mobile_home_name");name["wrap"]=false;name["label"]="Player";
-    auto& count=plain_cell(product_ui::row(profile_grid),"label","home_heroes");count["definition"]=style("alliance_mobile_home_count");count["label"]="Heroes: 0";
+    auto& count=plain_cell(product_ui::row(profile_grid),"label","home_heroes");count["definition"]=style("alliance_mobile_home_count");count["label"]="Heroes: 0";auto& cash=plain_cell(product_ui::row(profile_grid),"label","home_cash");cash["definition"]=style("alliance_mobile_home_cash");cash["label"]="Crowns: …";
     auto& kicker=plain_cell(product_ui::row(grid),"label","home_kicker");kicker["definition"]=style("alliance_mobile_home_kicker");kicker["label"]=emerald_chrome::serif_text(product_theme::title_kicker);kicker["use_markup"]=true;
     auto& crest=plain_cell(product_ui::row(grid),"label","home_crest");crest["definition"]=style("alliance_mobile_home_crest");
     auto& title=plain_cell(product_ui::row(grid),"label","home_title");title["definition"]=style("alliance_mobile_home_title");title["label"]=emerald_chrome::serif_text(product_theme::title_name);title["use_markup"]=true;
     spacer(product_ui::row(grid,1),1,1,1);
     auto& footer=product_ui::row(plain_cell(product_ui::row(grid),"grid"));spacer(footer,1,px(224),1);
-    for(std::size_t i=5;i<actions.size();++i){if(i>5)spacer(footer,px(12),1);auto& column=footer.add_child("column");column["vertical_alignment"]="bottom";column["horizontal_alignment"]="center";auto& b=column.add_child("button");b["id"]=actions[i].id;b["definition"]=style("alliance_mobile_home_"+std::string(actions[i].id));b["label"]=actions[i].name;b["tooltip"]=actions[i].name;}
+    for(std::size_t i=6;i<actions.size();++i){if(i>6)spacer(footer,px(12),1);auto& column=footer.add_child("column");column["vertical_alignment"]="bottom";column["horizontal_alignment"]="center";auto& b=column.add_child("button");b["id"]=actions[i].id;b["definition"]=style("alliance_mobile_home_"+std::string(actions[i].id));b["label"]=actions[i].name;b["tooltip"]=actions[i].name;}
     spacer(footer,1,px(224),1);spacer(product_ui::row(grid),1,px(24));windows.emplace(id,gui2::builder_window(definition));return id;
 }
 
 inline void set_profile(gui2::window& window,const std::string& username,std::size_t heroes) {
     auto& name=window.find_widget<gui2::label>("home_player");name.set_label(username);name.set_tooltip(username);name.set_text_ellipse_mode(PANGO_ELLIPSIZE_END);
     window.find_widget<gui2::label>("home_heroes").set_label("Heroes: "+std::to_string(heroes));
+}
+
+
+class CashRefresh final:private events::pump_monitor {
+    gui2::window& window_;court_ui::Hooks hooks_;std::function<void()> unavailable_;std::unique_ptr<court_ui::Job> job_;
+    std::chrono::steady_clock::time_point next_{};
+    void process()override {
+        if(account_session_interaction_active()||!hooks_.request||!hooks_.same_actor||!hooks_.same_actor())return;
+        if(job_&&job_->complete()) {auto reply=job_->take();job_.reset();next_=std::chrono::steady_clock::now()+std::chrono::seconds(5);
+            if(reply.ok&&court_ui::number(reply.document,"version")==1&&court_ui::text(reply.document,"actor_id")==hooks_.actor_id&&court_ui::text(reply.document,"database_generation")==hooks_.generation)
+                window_.find_widget<gui2::label>("home_cash").set_label("Crowns: "+std::to_string(court_ui::number(court_ui::object(court_ui::object(reply.document,"data"),"wallet"),"available")));
+            else if(!reply.ok&&court_ui::connection_error(reply.code)){if(hooks_.connection_failure)hooks_.connection_failure(reply);if(unavailable_)unavailable_();}
+        }
+        if(!job_&&std::chrono::steady_clock::now()>=next_){next_=std::chrono::steady_clock::now()+std::chrono::seconds(5);job_=std::make_unique<court_ui::Job>(hooks_,false,"wallet",court_ui::json::object{});}
+    }
+public:CashRefresh(gui2::window& window,court_ui::Hooks hooks,std::function<void()> unavailable):window_(window),hooks_(std::move(hooks)),unavailable_(std::move(unavailable)){}
+};
+inline void bind_cash(gui2::window& window,court_ui::Hooks hooks,std::function<void()> unavailable){
+    auto owner=std::make_shared<CashRefresh>(window,std::move(hooks),std::move(unavailable));
+    window.connect_signal<gui2::event::SDL_ACTIVATE>([owner](auto&&...){});
 }
 
 // A press describes an action at 550ms. Its eventual release must never
@@ -154,7 +179,7 @@ class Interaction : public std::enable_shared_from_this<Interaction> {
     void stop(std::size_t i){if(timers_[i])gui2::remove_timer(timers_[i]);timers_[i]=0;}
     void describe(std::size_t i){auto& b=window_.find_widget<gui2::button>(actions[i].id);const auto box=b.get_rectangle();if(box.w&&box.h)gui2::dialogs::tip::show(style("alliance_mobile_home_tooltip"),actions[i].name,point{box.x+box.w/2,box.y},box);}
     void describe_profile(){auto& label=window_.find_widget<gui2::label>("home_player");const auto box=window_.find_widget<gui2::widget>("home_profile").get_rectangle();if(box.w&&box.h)gui2::dialogs::tip::show(style("alliance_mobile_home_profile_tooltip"),label.get_label(),point{box.x,box.y},box);}
-    void focus(std::size_t i,bool focused){auto& b=window_.find_widget<gui2::button>(actions[i].id);for(int n=0;n<4;++n)b.get_canvas(n).set_variable("home_focus",wfl::variant(focused));b.queue_redraw();if(focused&&i<5)describe(i);else gui2::dialogs::tip::remove();}
+    void focus(std::size_t i,bool focused){auto& b=window_.find_widget<gui2::button>(actions[i].id);for(int n=0;n<4;++n)b.get_canvas(n).set_variable("home_focus",wfl::variant(focused));b.queue_redraw();if(focused&&i<6)describe(i);else gui2::dialogs::tip::remove();}
 public:
     explicit Interaction(gui2::window& window):window_(window){}
     ~Interaction(){for(std::size_t i=0;i<timers_.size();++i)stop(i);}
@@ -173,8 +198,8 @@ public:
                 if(mod&(SDL_KMOD_CTRL|SDL_KMOD_ALT|SDL_KMOD_GUI))return;
                 if(!self->window_.find_widget<gui2::button>(actions[i].id).get_active())return;
                 if(key==SDLK_RETURN||key==SDLK_KP_ENTER||key==SDLK_SPACE){self->presses_[i].begin();self->presses_[i].release();auto& b=self->window_.find_widget<gui2::button>(actions[i].id);handled=halt=true;b.fire(gui2::event::LEFT_BUTTON_CLICK,b);}
-                else if(key==SDLK_LEFT||key==SDLK_RIGHT||key==SDLK_UP||key==SDLK_DOWN){std::size_t next=i;const std::size_t begin=i<5?0:5,end=i<5?5:actions.size();
-                    if(key==SDLK_LEFT)next=i==begin?end-1:i-1;else if(key==SDLK_RIGHT)next=i+1==end?begin:i+1;else next=i<5?i+5:i-5;
+                else if(key==SDLK_LEFT||key==SDLK_RIGHT||key==SDLK_UP||key==SDLK_DOWN){std::size_t next=i;const std::size_t begin=i<6?0:6,end=i<6?6:actions.size();
+                    if(key==SDLK_LEFT)next=i==begin?end-1:i-1;else if(key==SDLK_RIGHT)next=i+1==end?begin:i+1;else next=i<6?std::min(i+6,actions.size()-1):i-6;
                     handled=halt=true;self->window_.keyboard_capture(&self->window_.find_widget<gui2::button>(actions[next].id));}
             },gui2::event::dispatcher::front_child);
         }

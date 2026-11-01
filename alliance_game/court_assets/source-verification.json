@@ -1,0 +1,157 @@
+{
+  "format": 1,
+  "packaged": [
+    {
+      "bytes": 3702885,
+      "path": "court/area.png",
+      "sha256": "5d30464217f1230c9decba4873f9ec6a83f7338279fc6109fc4e40f37d5d69e1"
+    },
+    {
+      "bytes": 114903,
+      "path": "court/geometry.json",
+      "sha256": "ed32a8577ddc086c4eaeb9d1d1cc508afda8ef7ee1d1ed385094946e9ddc60c0"
+    },
+    {
+      "bytes": 3361958,
+      "path": "court/world.png",
+      "sha256": "63a36826ac5452e8d1fd7612c97b20c5c8a5d565267eb0723b0d09c0da18c9a8"
+    }
+  ],
+  "source_files": [
+    {
+      "bytes": 18360437,
+      "path": "World_128_Areas/Shattered_Crown_Natural_Strong_Hex_128_Flags_v6.png",
+      "sha256": "c7fe933d143374dfffa6d744a4de8a9740580632c61c2f3e4683a68c68f9f8a5"
+    },
+    {
+      "bytes": 19390776,
+      "path": "World_128_Areas/Shattered_Crown_Natural_Strong_Hex_v6.png",
+      "sha256": "e342d3d0f12aea1c05ef9c78b3ed34a508b0813aa8b6a15f01f82f37736618ef"
+    },
+    {
+      "bytes": 3361958,
+      "path": "World_128_Areas/Shattered_Crown_Compact_Terrain_Clean_v6.png",
+      "sha256": "63a36826ac5452e8d1fd7612c97b20c5c8a5d565267eb0723b0d09c0da18c9a8"
+    },
+    {
+      "bytes": 829927,
+      "path": "World_128_Areas/Shattered_Crown_128_Flags_Preview_v6.jpg",
+      "sha256": "ccca9e4a784b7455f9465d412e52b55ef63a157c93de81a5a0a1d5de177b5fa9"
+    },
+    {
+      "bytes": 184939,
+      "path": "World_128_Areas/Shattered_Crown_128_Area_Hex_Coordinates_v6.json",
+      "sha256": "b643ca10b8e695646aa67aabc1e77dc964de6b0ff85a45ff39880263ae2c447a"
+    },
+    {
+      "bytes": 529290,
+      "path": "World_128_Areas/Shattered_Crown_Grid_Overlay_v6.svg",
+      "sha256": "ef86d4402af828a3795ad86e9df1326842e85d97d5b346bfa55784db752914f6"
+    },
+    {
+      "bytes": 199269,
+      "path": "World_128_Areas/Shattered_Crown_128_Flags_Overlay_v6.svg",
+      "sha256": "52c15fd1d7fb7537d5d9caa03f38a61288807f0fc99613afb6f68f8260efbbb3"
+    },
+    {
+      "bytes": 727429,
+      "path": "World_128_Areas/Shattered_Crown_Grid_and_Flags_Overlay_v6.svg",
+      "sha256": "f439474c44487b9ef42313284fe686b7234db128d73111037fb95b943c37acbb"
+    },
+    {
+      "bytes": 104109,
+      "path": "World_128_Areas/Area_Anchor_Reference.json",
+      "sha256": "319ee49ac2f46d4e8d5b5d0b0bcc0da855f02f5f40266e2657b4896d1855b431"
+    },
+    {
+      "bytes": 16491,
+      "path": "World_128_Areas/build_world_v6.cjs",
+      "sha256": "c640812b94e85480228b96b58d98caa7f7cfdf03ca1e5031c8b5e57fc5ef4b3a"
+    },
+    {
+      "bytes": 803,
+      "path": "World_128_Areas/Validation_v6.json",
+      "sha256": "a6f867beb21f0bf3c28fd31962d1d87cb8e3ea91c4ea4e1b46631cb98819cbac"
+    },
+    {
+      "bytes": 1516,
+      "path": "World_128_Areas/Art_and_Overlay_Prompts_v6.txt",
+      "sha256": "e911556c9a5de5c7634b3f0a1b7eab4b6cabf913b13d8066069c283e3fc365f4"
+    },
+    {
+      "bytes": 18903034,
+      "path": "Area_64_Castles/Verdant_Marches_Natural_Strong_Hex_64_Flags_v6.png",
+      "sha256": "bacf54dd7a2d8801808b7e34411bac7ca12e02b429d6f119481a701425a86348"
+    },
+    {
+      "bytes": 19304167,
+      "path": "Area_64_Castles/Verdant_Marches_Natural_Strong_Hex_v6.png",
+      "sha256": "f6f507ca33d8305439a09708dfc062548d9a4a2b3200f83257e32dac0c75a1fc"
+    },
+    {
+      "bytes": 3702885,
+      "path": "Area_64_Castles/Verdant_Marches_Asian_Terrain_Clean_v6.png",
+      "sha256": "5d30464217f1230c9decba4873f9ec6a83f7338279fc6109fc4e40f37d5d69e1"
+    },
+    {
+      "bytes": 846113,
+      "path": "Area_64_Castles/Verdant_Marches_64_Castles_Preview_v6.jpg",
+      "sha256": "d53e3e6f6ef86634ec45d43f13f4da32e3e9419f3e7c24eb8215ec777221c417"
+    },
+    {
+      "bytes": 119032,
+      "path": "Area_64_Castles/Verdant_Marches_64_Castles_Hex_Coordinates_v6.json",
+      "sha256": "53195eb568538432f27287cbf4a01b61fd9e872094c222fae8c9dd9d55e09254"
+    },
+    {
+      "bytes": 661848,
+      "path": "Area_64_Castles/Verdant_Marches_Grid_Overlay_v6.svg",
+      "sha256": "705108c285a3be9c50d51194e1f3e1c2f4a2e72162ef9908de9f01a917dfa006"
+    },
+    {
+      "bytes": 104003,
+      "path": "Area_64_Castles/Verdant_Marches_64_Flags_Overlay_v6.svg",
+      "sha256": "74ed4e2273d806479d3cf3d0f6480c05138968f74f0329d6435ea59c715d0433"
+    },
+    {
+      "bytes": 764723,
+      "path": "Area_64_Castles/Verdant_Marches_Grid_and_Flags_Overlay_v6.svg",
+      "sha256": "3e02037a17c6352dc2e4f797d6f9cd0663afd428afebf3af2c6c44b0f4f8e86a"
+    },
+    {
+      "bytes": 68075,
+      "path": "Area_64_Castles/Castle_Anchor_Reference.json",
+      "sha256": "5ec29ecfe3a3bf61676a4574b4cc15544a7aab65b9f43d3bc93cfa079269ba37"
+    },
+    {
+      "bytes": 15901,
+      "path": "Area_64_Castles/build_area_v6.cjs",
+      "sha256": "048da68797419160c8f21afa954c30a68070bec1ca2a783b7c37adbb69bd55b4"
+    },
+    {
+      "bytes": 1118,
+      "path": "Area_64_Castles/Validation_Area_v6.json",
+      "sha256": "39c0b0587320d22273e0774d2a7d7f8111fb646a82b60b63809afe2540547035"
+    },
+    {
+      "bytes": 3181,
+      "path": "Area_64_Castles/Area_Art_and_Overlay_Prompts_v6.txt",
+      "sha256": "a1b71c8ccffe5250a846916761a8502c48b6ec7ec08c4b2b97cefff3858b9af8"
+    },
+    {
+      "bytes": 4172,
+      "path": "README.txt",
+      "sha256": "a64f63a285e0e95c35d205c486b4bd8424a53b9df294229586f933043daf6f5a"
+    },
+    {
+      "bytes": 8476,
+      "path": "Docs/MAP_INTEGRATION_GUIDE.md",
+      "sha256": "8c3fc080ffa4b0c1aa243c2cbac9e19f78db2b48735d509ad11c32a0ec345419"
+    },
+    {
+      "bytes": 2025,
+      "path": "Docs/Validation_Package_v6.json",
+      "sha256": "8b9d7e68ed00be5d00c227232d85ff58fecb285b57ebef6866df1930399b7d54"
+    }
+  ]
+}

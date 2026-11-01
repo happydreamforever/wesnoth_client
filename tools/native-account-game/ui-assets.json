@@ -1,20 +1,35 @@
 {
-  "format": 1,
   "files": [
     {
-      "path": "hero/refumee.png",
       "bytes": 2092869,
+      "path": "hero/refumee.png",
       "sha256": "cb05c9f0da6d16a068355e2b7fb59201ecf1296ebcafdfdb11763f43f30c04f8"
     },
     {
-      "path": "hero/thea.png",
       "bytes": 2190871,
+      "path": "hero/thea.png",
       "sha256": "1e3fe73953569a247e6055780e84125cf3bbe5148546fe449a3c7057d1a3f7f7"
     },
     {
-      "path": "background/citadel-dawn.png",
       "bytes": 2739237,
+      "path": "background/citadel-dawn.png",
       "sha256": "ff3271e5ac176041517c42739ab15afbd2d57c69b56fbf290164d793e42b36ce"
+    },
+    {
+      "bytes": 3702885,
+      "path": "court/area.png",
+      "sha256": "5d30464217f1230c9decba4873f9ec6a83f7338279fc6109fc4e40f37d5d69e1"
+    },
+    {
+      "bytes": 114903,
+      "path": "court/geometry.json",
+      "sha256": "ed32a8577ddc086c4eaeb9d1d1cc508afda8ef7ee1d1ed385094946e9ddc60c0"
+    },
+    {
+      "bytes": 3361958,
+      "path": "court/world.png",
+      "sha256": "63a36826ac5452e8d1fd7612c97b20c5c8a5d565267eb0723b0d09c0da18c9a8"
     }
-  ]
+  ],
+  "format": 1
 }

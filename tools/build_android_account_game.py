@@ -32,9 +32,9 @@ ENGINE_KIND = 'wesnoth-android-account-engine'
 LOCK = '.wesnoth-account-game-operation.json'
 MARKER = '.wesnoth-account-game.json'
 ENGINE_MARKER = '.wesnoth-account-engine.json'
-VERSION_CODE = 1192625
-PREVIOUS_VERSION_CODES = frozenset(range(1192608, 1192625))
-UPDATE_JOURNAL = '.wesnoth-account-game-update-1192625.json'
+VERSION_CODE = 1192626
+PREVIOUS_VERSION_CODES = frozenset(range(1192608, 1192626))
+UPDATE_JOURNAL = '.wesnoth-account-game-update-1192626.json'
 UPDATE_KIND = 'wesnoth-android-account-game-update'
 UPDATE_STAGES = ('android-account-engine', 'android-account-game')
 PACKAGE = G.PACKAGE
@@ -48,7 +48,7 @@ TEMPLATES.update({name + '.java': 'app/src/main/java/org/wesnoth/offline/' + nam
                   for name in ('AlliancePublicProfile', 'BundledStartup', 'StartupProgress', 'WesnothGameTask', 'ProductTheme', 'StartupFrame')})
 TEMPLATES.update({name + '.java': 'app/src/main/java/org/libsdl/app/' + name + '.java'
                   for name in ('WesnothKeyboard', 'WesnothKeyboardState')})
-PRESENTATION_HEADERS = ('mobile_home.hpp', 'presentation_icons.hpp')
+PRESENTATION_HEADERS = ('mobile_home.hpp', 'presentation_icons.hpp', 'court_touch_actions.hpp', 'court_help.hpp')
 NEW_INPUTS = (*(f'tools/android-presentation/{name}' for name in PRESENTATION_HEADERS), 'tools/build_android_account_game.py', 'tools/android_public_bundle.py',
               'tools/generate_product_theme.py', 'tools/native-account-game/ui-theme.json',
               'alliance_game/product_theme.hpp', 'alliance_game/home_ui.hpp', 'alliance_game/menu_icons.hpp', 'alliance_game/emerald_chrome.hpp',
@@ -59,9 +59,11 @@ NEW_INPUTS = (*(f'tools/android-presentation/{name}' for name in PRESENTATION_HE
               'alliance_game/hero_presentation.hpp', 'alliance_game/hero_presentation_data.inc', 'alliance_game/hero_presentation.json', 'alliance_game/hero_gallery.inc',
               'alliance_game/campaign_rewards.hpp', 'alliance_game/campaign_selection_overlay.py',
               'alliance_native/world_protocol.hpp', 'alliance_game/world_ui.hpp', 'alliance_game/world_command_record.hpp',
+              'alliance_native/court_protocol.hpp', 'alliance_game/court_ui.hpp', 'alliance_game/court_common.hpp', 'alliance_game/court_bracket.hpp', 'alliance_game/court_command_record.hpp', 'alliance_game/court_map.hpp', 'alliance_game/court_geometry.hpp',
+              'tools/prepare_court_assets.py', 'alliance_game/court_assets/source-verification.json',
               *(f'alliance_game/world_{name}.{suffix}' for name in ('launch','scenario','result','storage','worker') for suffix in ('hpp','cpp')),
               'alliance_native/flexible_protocol.hpp', 'alliance_game/title_overlay.py',
-              'alliance_game/engine_overlay.py',
+              'alliance_game/engine_overlay.py', 'alliance_game/court_touch_overlay.py',
               *(f'alliance_game/{name}.{suffix}' for name in ('session_watch', 'android_lifecycle') for suffix in ('cpp', 'hpp')), 'alliance_game/battle_launch.cpp', 'alliance_game/battle_launch.hpp',
               'alliance_game/practice_plan.cpp', 'alliance_game/practice_plan.hpp',
               'alliance_game/practice_scenario.cpp', 'alliance_game/practice_scenario.hpp',
@@ -94,6 +96,7 @@ MENU_THEME_OVERLAYS = {'gui/dialogs/modal_dialog.cpp': 'generate_modal_theme_ove
                        'gui/dialogs/preferences_dialog.cpp': 'generate_preferences_theme_overlay'}
 CONNECTION_SOURCE = 'wesnothd_connection.cpp'
 SYNCED_COMMANDS_SOURCE = 'synced_commands.cpp'
+COURT_ACTIONS_SOURCE = 'hotkey/hotkey_handler.cpp'
 STORY_OVERLAYS = {'game_config_manager.cpp': 'generate_config_manager_overlay',
                   'actions/attack.cpp': 'generate_attack_overlay',
                   'actions/advancement.cpp': 'generate_advancement_overlay',
@@ -104,7 +107,7 @@ CASUAL_OVERLAYS = ('game_initialization/connect_engine.cpp', 'gui/dialogs/multip
 MULTIPLAYER_SOURCE = 'game_initialization/multiplayer.cpp'
 LOBBY_SOURCE = 'gui/dialogs/multiplayer/lobby.cpp'
 REPLACED_SOURCES = frozenset((TITLE_SOURCE, MAIN_SOURCE, LAUNCHER_SOURCE, CAMPAIGN_SOURCE, CAMPAIGN_SELECTION_SOURCE, CONNECTION_SOURCE,
-                              SYNCED_COMMANDS_SOURCE, MULTIPLAYER_SOURCE, LOBBY_SOURCE, *STORY_OVERLAYS, *CASUAL_OVERLAYS, *MENU_THEME_OVERLAYS))
+                              SYNCED_COMMANDS_SOURCE, COURT_ACTIONS_SOURCE, MULTIPLAYER_SOURCE, LOBBY_SOURCE, *STORY_OVERLAYS, *CASUAL_OVERLAYS, *MENU_THEME_OVERLAYS))
 
 
 def call(function, *args, **kwargs):
@@ -197,11 +200,13 @@ def title_overlay(repo):
 
 def mobile_title_overlay(source):
     changes = (
-        (b'#include "alliance_game/home_ui.hpp"', b'#include "mobile_home.hpp"', 1),
+        (b'#include "alliance_game/home_ui.hpp"', b'#include "mobile_home.hpp"\n#include "court_help.hpp"', 1),
         (b'alliance_game::prepare_home_window()', b'alliance_game::mobile_home::prepare_window()', 1),
         (b'alliance_game::home_ui::', b'alliance_game::mobile_home::', 3),
         (b'    alliance_game::mobile_home::bind(*this);',
-         b'    register_button("help", hotkey::HOTKEY_HELP, [refresh_profile] { help::show_help(); refresh_profile(); });\n'
+         b'    register_button("help", hotkey::HOTKEY_HELP, [refresh_profile] { alliance_game::mobile_help::show(); refresh_profile(); });\n'
+         b'    register_button("shop", hotkey::HOTKEY_NULL, [refresh_profile] { alliance_game::show_shop_dialog(); refresh_profile(); });\n'
+         b'    alliance_game::mobile_home::bind_cash(*this, alliance_game::make_court_hooks(), [this] { set_retval(RELOAD_UI); });\n'
          b'    alliance_game::mobile_home::bind(*this);', 1),
     )
     for before, after, count in changes:
@@ -260,7 +265,8 @@ def unified_overlays(repo):
     engine = overlay_module(repo, 'engine_overlay')
     sides = overlay_module(repo, 'ordinary_mp_sides_overlay')
     auth = overlay_module(repo, 'ordinary_mp_auth_overlay')
-    result = {}
+    result = {'hotkey_handler.cpp': flatten_includes(repo, COURT_ACTIONS_SOURCE,
+        overlay_module(repo, 'court_touch_overlay').generate(regular(repo / 'engine/src' / COURT_ACTIONS_SOURCE, 'Pinned Actions menu').read_bytes()))}
     for name, transform in STORY_OVERLAYS.items():
         result[Path(name).name] = flatten_includes(repo, name, getattr(engine, transform)(regular(repo / 'engine/src' / name, 'Pinned story source').read_bytes()))
     for name in CASUAL_OVERLAYS:
@@ -632,7 +638,7 @@ def previous_version(root, marker, receipt):
     apk = validation.get('apk') if isinstance(validation, dict) else None
     version = apk.get('version_code') if isinstance(apk, dict) else None
     if type(version) is not int or version not in PREVIOUS_VERSION_CODES:
-        raise BuildError('Expected a completed account APK from versions 1192608 through 1192624; nothing was renamed.')
+        raise BuildError('Expected a completed account APK from versions 1192608 through 1192625; nothing was renamed.')
     if 'app/build.gradle' not in marker['files']:
         raise BuildError('The previous account version is not bound to its owned Gradle input.')
     data = call(N.ninja_read, root / 'app/build.gradle', 64 * 1024)
@@ -866,7 +872,7 @@ def main(argv=None):
     parser.add_argument('--public-config', type=Path, help='Public-only .env file; defaults to the repository .env.')
     parser.add_argument('--openssl', type=Path, help='Existing OpenSSL 3 executable for offline public certificate verification.')
     parser.add_argument('--verify', '--verify-only', action='store_true')
-    parser.add_argument('--prepare-update', action='store_true', help='Preserve completed 1192608 through 1192624 stages before the 1192625 Emerald Court menu update.')
+    parser.add_argument('--prepare-update', action='store_true', help='Preserve completed 1192608 through 1192625 stages before the 1192626 Emerald Court world update.')
     args = parser.parse_args(argv)
     try:
         for name, value in vars(args).items():

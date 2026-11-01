@@ -8,7 +8,7 @@
 
 namespace alliance::account {
 constexpr std::size_t max_json_bytes = 256 * 1024;
-// One gzip member, bounded expansion, strict UTF-8 JSON, depth <= 8.
+// One gzip member, bounded expansion, strict UTF-8 JSON, depth <= 12.
 std::vector<std::uint8_t> encode_message(const boost::json::object&);
 boost::json::object decode_message(const std::vector<std::uint8_t>&);
 boost::json::object parse_document(const std::string&);

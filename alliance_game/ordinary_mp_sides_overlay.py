@@ -165,7 +165,7 @@ def add_individual_side_hooks(name, source):
         text=once(text, ': modal_dialog(window_id())', ': modal_dialog('+native+')')
     if name.endswith('connect_engine.cpp'):
         text = once(text, '\t\t\t\t"name", params_.name,',
-                    '\t\t\t\t"name", params_.name,\n                "individual_room", level_.child_or_empty("scenario")["individual_room"].to_bool(),')
+                    '\t\t\t\t"name", params_.name,\n                "court_fee_ticket", alliance_game::take_individual_admission_ticket(),\n                "individual_room", level_.child_or_empty("scenario")["individual_room"].to_bool(),')
         text = once(text, '\t\t\t\t"ignored", prefs::get().get_ignored_delim(),', '\t\t\t\t"ignored", level_.child_or_empty("scenario")["individual_room"].to_bool() ? std::string() : prefs::get().get_ignored_delim(),')
         text = once(text, '\tmp::send_to_server(config{"start_game"});\n}\n\nvoid connect_engine::start_game_commandline',
                     '''    config start;

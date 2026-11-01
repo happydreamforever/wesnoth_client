@@ -24,6 +24,9 @@ void show_campaign_heroes(const std::string& campaign);
 // Main-menu action; always clears this device session even if revocation fails.
 void logout_player();
 void show_teams_dialog();
+void show_shop_dialog();
+namespace court_ui { struct Hooks; }
+court_ui::Hooks make_court_hooks();
 // One-shot Campaign shortcut from an empty personal Company.
 bool take_world_campaign_request() noexcept;
 void show_training_dialog();

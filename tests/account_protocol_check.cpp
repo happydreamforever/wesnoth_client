@@ -2,6 +2,7 @@
 // Host/NDK compilable semantic checks; no Android runtime claim from host use.
 #include "account_protocol.hpp"
 #include "account_client.hpp"
+#include "transport.hpp"
 #include <zlib.h>
 #include <functional>
 #include <iostream>
@@ -37,7 +38,7 @@ int main() {
                                      "{\"v\":1}junk", "{\"v\":\"\\ud800\"}"})
             rejects([&] { decode_message(gzip(text)); });
         rejects([&] { decode_message(gzip(std::string("{\"x\":\"") + char(0xff) + "\"}")); });
-        rejects([&] { parse_document("{\"x\":[[[[[[[[[1]]]]]]]]]}"); });
+        rejects([&] { parse_document("{\"x\":" + std::string(13, '[') + "1" + std::string(13, ']') + "}"); });
         rejects([&] { parse_document("{ \"port\": 15001, \"port\": 15002 }"); });
         rejects([&] { parse_document("{\"x\":[{\"a\":1,\"\\u0061\":2}]}"); });
         require(parse_document("{ \"address\" : \"::1\", \"x\": [{\"escaped\": \"\\\"x:y\"}] }").size() == 2);
@@ -51,9 +52,9 @@ int main() {
         damaged = frame; damaged.insert(damaged.end(), frame.begin(), frame.end());
         rejects([&] { decode_message(damaged); });
         rejects([&] { decode_message({}); });
-        rejects([&] { decode_message(std::vector<std::uint8_t>(65537, 0)); });
-        rejects([&] { decode_message(gzip("{\"x\":\"" + std::string(100000, 'a') + "\"}")); });
-        rejects([&] { encode_message({{"x", std::string(32768, 'a')}}); });
+        rejects([&] { decode_message(std::vector<std::uint8_t>(alliance::max_frame_bytes + 1, 0)); });
+        rejects([&] { decode_message(gzip("{\"x\":\"" + std::string(max_json_bytes, 'a') + "\"}")); });
+        rejects([&] { encode_message({{"x", std::string(max_json_bytes, 'a')}}); });
         std::cout << "PASS checksum truncation trailing-member and expansion limits\n";
         require(username_valid("Player_123") && !username_valid("x") && !username_valid("../x"));
         require(token_valid(std::string(43, 'a')) && !token_valid(std::string(44, 'a')));

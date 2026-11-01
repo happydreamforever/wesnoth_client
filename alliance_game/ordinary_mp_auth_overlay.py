@@ -31,8 +31,8 @@ def generate_multiplayer_auth_overlay(source: bytes) -> bytes:
 ''' + text[end:]
     text = once(text, '\t\tif(data.has_child("version")) {', '''\t\tif(data.has_child("version")) {
             const auto& advertised=data.mandatory_child("version");
-            if(advertised["alliance_protocol"].str()!="4" ||
-               advertised["implementation_release"].str()!="1192624" ||
+            if(advertised["alliance_protocol"].str()!="5" ||
+               advertised["implementation_release"].str()!="1192626" ||
                advertised["individual_rooms"].str()!="1")
                 throw wesnothd_error("The trusted server needs the matching game update before Multiplayer can connect.");
             alliance_greeting_checked=true;''')
@@ -140,6 +140,7 @@ def add_individual_dashboard(source):
             lobby_delay_gamelist_update_guard delay(*this);
             if(!alliance_game::review_individual_join(reviewed))return;
             join_data["room_revision"]=reviewed["room_revision"];
+            join_data["court_fee_ticket"]=alliance_game::take_individual_admission_ticket();
         }
     }
     join_data["id"] = std::to_string(game.id);''')

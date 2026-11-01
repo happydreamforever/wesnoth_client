@@ -30,6 +30,7 @@ add_library(main SHARED ${account_base_objects}
  "${ACCOUNT_STAGE}/preferences_dialog.cpp"
  "${ACCOUNT_STAGE}/wesnothd_connection.cpp"
  "${ACCOUNT_STAGE}/synced_commands.cpp"
+ "${ACCOUNT_STAGE}/hotkey_handler.cpp"
  "${ACCOUNT_STAGE}/game_config_manager.cpp"
  "${ACCOUNT_STAGE}/attack.cpp"
  "${ACCOUNT_STAGE}/advancement.cpp"

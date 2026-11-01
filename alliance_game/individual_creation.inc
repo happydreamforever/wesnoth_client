@@ -20,13 +20,16 @@ std::string room_creation_window() {
 }
 class RoomCreationDialog final:public gui2::dialogs::modal_dialog {
 public:
-    RoomCreationDialog(const std::vector<RoomMap>& maps):modal_dialog(room_creation_window()),maps_(maps){set_allow_plugin_skip(false);}
+    RoomCreationDialog(const std::vector<RoomMap>& maps,std::int64_t fee):modal_dialog(room_creation_window()),maps_(maps),fee_(fee){set_allow_plugin_skip(false);}
     int selected=-1,gold=100,income=2,turn_limit=-1;bool fog=true,shroud=false,observers=false;std::string name;
 private:
     const std::vector<RoomMap>& maps_;
+    std::int64_t fee_;
     const std::string& window_id()const override{static const std::string id="alliance_room_create";return id;}
     void preview(){auto& list=find_widget<gui2::listbox>("maps");const int i=list.get_selected_row();find_widget<gui2::minimap>("room_map").set_map_data(i>=0?maps_.at(i).data:"");find_widget<gui2::button>("publish").set_active(i>=0);}
     void pre_show()override {
+        find_widget<gui2::button>("publish").set_label("Create · "+std::to_string(fee_)+" Crowns");
+        find_widget<gui2::label>("room_error").set_label("Fee held until battle starts · Cancel before play for a refund");
         auto& list=find_widget<gui2::listbox>("maps");
         for(const auto& map:maps_)list.add_row(gui2::widget_data{{"map_name",{{"label",map.name}}},{"map_players",{{"label",std::to_string(map.sides)+" players"}}}});
         gui2::event::connect_signal_notify_modified(list,[this](auto&&...){preview();});
@@ -64,7 +67,12 @@ std::vector<RoomMap> room_creation_maps(saved_game& state) {
 bool create_individual_room(saved_game& state) {
     if(!individual_rooms_supported()){gui2::show_message("Room","The server does not support individual rooms.",gui2::dialogs::message::ok_button,false,false);return false;}
     const auto maps=room_creation_maps(state);
-    RoomCreationDialog dialog(maps);if(!dialog.show()||dialog.selected<0)return false;
+    namespace json=boost::json;
+    alliance::account::Request fee_request;alliance::account::Reply fee_reply;
+    fee_request.operation="court_query";fee_request.world_json=json::serialize(json::object{{"version",1},{"query","room_quote"},{"payload",json::object{}}});
+    if(!player_request(fee_request,fee_reply))return false;
+    const auto quote=json::parse(fee_reply.world_json).as_object().at("data").as_object();
+    RoomCreationDialog dialog(maps,quote.at("create_fee").as_int64());if(!dialog.show()||dialog.selected<0)return false;
     config preset;preset["individual_room"]=true;preset["scenario"]=maps.at(dialog.selected).id;preset["era"]="era_default";preset["turn_count"]=dialog.turn_limit;
     preset["village_gold"]=2;preset["village_support"]=1;preset["experience_modifier"]=100;preset["fog"]=dialog.fog;preset["shroud"]=dialog.shroud;
     preset["countdown"]=false;preset["shuffle_sides"]=false;preset["random_start_time"]=false;
@@ -76,5 +84,12 @@ bool create_individual_room(saved_game& state) {
         side["income"]=dialog.income-game_config::base_income;side["gold_lock"]=true;side["income_lock"]=true;side["team_lock"]=true;
         side.remove_attribute("current_player");side.remove_attribute("player_id");
     }
-    return configure_individual_creation(scenario,true);
+    if(!configure_individual_creation(scenario,true))return false;
+    fee_request={};fee_reply={};fee_request.operation="court_command";
+    fee_request.world_json=json::serialize(json::object{{"version",1},{"operation","room_consent"},{"payload",json::object{
+        {"command_id",boost::uuids::to_string(boost::uuids::random_generator()())},{"kind","create"},{"game_id",""},
+        {"price_revision",quote.at("price_revision")},{"confirmation","confirmed"}}}});
+    if(!player_request(fee_request,fee_reply))return false;
+    pending_admission_ticket=std::string(json::parse(fee_reply.world_json).as_object().at("data").as_object().at("ticket").as_string());
+    return true;
 }

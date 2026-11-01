@@ -31,8 +31,8 @@ import zlib
 
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGE = 'org.wesnoth.offline'
-VERSION = 1192624
-WIRE_VERSION = 4
+VERSION = 1192626
+WIRE_VERSION = 5
 PLAIN_LIMIT = 256 * 1024
 INT64_MAX = (1 << 63) - 1
 UUID = re.compile(r'[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}')
@@ -114,17 +114,21 @@ def exact_read(stream, size, deadline):
 
 def account_request(profile, operation, body, token=None):
     """One bounded native account request, strict TLS identity before secrets."""
-    if operation not in ('login', 'logout', 'battle_detail', 'world_query'):
+    if operation not in ('login', 'logout', 'court_query'):
         fail('unsupported_operation')
-    if operation == 'world_query':
-        if (not isinstance(body, dict) or set(body) != {'operation', 'payload'}
-                or body['operation'] not in ('battles', 'battle') or not isinstance(body['payload'], dict)):
-            fail('unsupported_world_query')
+    if operation == 'court_query':
+        if (not isinstance(body, dict) or set(body) != {'version', 'query', 'payload'}
+                or type(body['version']) is not int or body['version'] != 1
+                or body['query'] not in ('plans', 'plan') or not isinstance(body['payload'], dict)):
+            fail('unsupported_court_query')
         payload = body['payload']
-        if ((body['operation'] == 'battles' and payload)
-                or (body['operation'] == 'battle' and (set(payload) != {'run_id'}
-                    or not isinstance(payload['run_id'], str) or not UUID.fullmatch(payload['run_id'])))):
-            fail('unsupported_world_query')
+        if ((body['query'] == 'plans' and set(payload) - {'state', 'after'})
+                or (body['query'] == 'plans' and payload.get('state', 'active') != 'active')
+                or (body['query'] == 'plans' and payload.get('after') and
+                    (not isinstance(payload['after'], str) or not UUID.fullmatch(payload['after'])))
+                or (body['query'] == 'plan' and (set(payload) != {'match_id'}
+                    or not isinstance(payload['match_id'], str) or not UUID.fullmatch(payload['match_id'])))):
+            fail('unsupported_court_query')
         if token is None: fail('invalid_session')
     request_id = uuid.uuid4().hex
     request = {'v': WIRE_VERSION, 'id': request_id, 'op': operation, 'body': body}
@@ -630,6 +634,12 @@ def execute(args, report):
 
 
 def main(argv=None):
+    print('This companion belongs to the retired Team game. Use the Windows Court native companion for release 1192626.')
+    print('Run wesnoth_server/tools/Run-WindowsWorldCompanion.ps1 after joining and readying your own battle seat.')
+    return 2
+
+
+def legacy_main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--username', required=True)
     parser.add_argument('--battle-id', required=True)

@@ -5,12 +5,17 @@
 // Android-only menu symbols keep the accepted Windows engine source binding
 // unchanged. Existing symbols still use the shared Emerald Court renderer.
 namespace alliance_game::presentation_icons {
-enum class Symbol { quit, preferences, heroes, achievements, load, room, campaign, team, editor, help };
+enum class Symbol { quit, preferences, heroes, achievements, load, room, campaign, team, editor, help, shop };
 inline menu_icons::Symbol existing(Symbol symbol) {
     return static_cast<menu_icons::Symbol>(symbol);
 }
 inline void path(cairo_t* c,Symbol symbol) {
-    if(symbol==Symbol::help) {
+    if(symbol==Symbol::shop) {
+        cairo_move_to(c,18,38);cairo_line_to(c,25,20);cairo_line_to(c,75,20);cairo_line_to(c,82,38);cairo_close_path(c);
+        cairo_move_to(c,23,39);cairo_line_to(c,23,80);cairo_line_to(c,77,80);cairo_line_to(c,77,39);
+        cairo_move_to(c,40,80);cairo_line_to(c,40,56);cairo_line_to(c,61,56);cairo_line_to(c,61,80);
+        for(int x:{32,46,60}){cairo_move_to(c,x,21);cairo_line_to(c,x,38);}
+    } else if(symbol==Symbol::help) {
         cairo_move_to(c,31,31);cairo_curve_to(c,31,9,72,8,72,32);
         cairo_curve_to(c,72,46,51,48,51,64);
         cairo_move_to(c,51,80);cairo_line_to(c,51,82);
@@ -30,9 +35,9 @@ inline void path(cairo_t* c,Symbol symbol) {
     } else menu_icons::path(c,existing(symbol));
 }
 inline std::string image(Symbol symbol,int logical_size,std::uint32_t rgb,int pixel_scale=2) {
-    if(symbol<Symbol::quit||symbol>Symbol::help||logical_size<16||logical_size>256||pixel_scale<1||pixel_scale>4||rgb>0xffffff)
+    if(symbol<Symbol::quit||symbol>Symbol::shop||logical_size<16||logical_size>256||pixel_scale<1||pixel_scale>4||rgb>0xffffff)
         throw std::invalid_argument("Invalid presentation icon dimensions or colour.");
-    if(symbol!=Symbol::help&&symbol!=Symbol::campaign)return menu_icons::image(existing(symbol),logical_size,rgb,pixel_scale);
+    if(symbol!=Symbol::help&&symbol!=Symbol::campaign&&symbol!=Symbol::shop)return menu_icons::image(existing(symbol),logical_size,rgb,pixel_scale);
     using Key=std::tuple<Symbol,int,std::uint32_t,int>;static std::map<Key,std::string> cache;
     const Key key{symbol,logical_size,rgb,pixel_scale};if(const auto i=cache.find(key);i!=cache.end())return i->second;
     if(cache.size()>=96)cache.erase(cache.begin());
@@ -42,7 +47,7 @@ inline std::string image(Symbol symbol,int logical_size,std::uint32_t rgb,int pi
     })).first->second;
 }
 inline std::string emblem(Symbol symbol,int size,bool dark=false,int pixel_scale=2) {
-    if(symbol!=Symbol::campaign&&symbol!=Symbol::help)return emerald_chrome::emblem(existing(symbol),size,dark,pixel_scale);
+    if(symbol!=Symbol::campaign&&symbol!=Symbol::help&&symbol!=Symbol::shop)return emerald_chrome::emblem(existing(symbol),size,dark,pixel_scale);
     if(size<16||size>256||pixel_scale<1||pixel_scale>4)throw std::invalid_argument("Invalid presentation emblem dimensions.");
     using Key=std::tuple<Symbol,int,bool,int>;static std::map<Key,std::string> cache;
     const Key key{symbol,size,dark,pixel_scale};if(const auto i=cache.find(key);i!=cache.end())return i->second;

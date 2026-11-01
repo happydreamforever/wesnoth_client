@@ -25,10 +25,14 @@
 #include <sstream>
 #include <stdexcept>
 #include <vector>
+#include <boost/json.hpp>
+#include <boost/uuid/random_generator.hpp>
+#include <boost/uuid/uuid_io.hpp>
 
 namespace alliance_game {
 namespace {
 std::string current_game;
+std::string pending_admission_ticket;
 config current_room;
 std::int64_t revision = 0, requested_revision = 0, authorized_revision = 0;
 bool active = false;
@@ -87,10 +91,6 @@ BattleView room_view(const config& room,const std::string& title) {
             unit.empty()?std::string():battle_unit_image(unit),{}});
     }
     return view;
-}
-bool review_room(const config& room,const std::string& title,const std::string& action) {
-    auto view=room_view(room,title);view.actions={{action,true}};
-    return show_battle_view(view).action==0;
 }
 
 }
@@ -174,8 +174,24 @@ std::string individual_room_status() {
     return field(current_room,"name","Room")+" · "+individual_listing_status(current_room);
 }
 bool review_individual_join(const config& room) {
-    return review_room(room,"Review and join","Agree and join");
+    namespace json=boost::json;
+    alliance::account::Request request;alliance::account::Reply reply;
+    request.operation="court_query";request.world_json=json::serialize(json::object{{"version",1},{"query","room_quote"},{"payload",json::object{}}});
+    if(!player_request(request,reply))return false;
+    const auto data=json::parse(reply.world_json).as_object().at("data").as_object();
+    auto view=room_view(room,"Review and join");
+    view.subtitle+=" · "+std::to_string(data.at("join_fee").as_int64())+" Crowns";
+    view.actions={{"Join · reserve fee",true}};
+    if(show_battle_view(view).action!=0)return false;
+    request={};reply={};request.operation="court_command";
+    request.world_json=json::serialize(json::object{{"version",1},{"operation","room_consent"},{"payload",json::object{
+        {"command_id",boost::uuids::to_string(boost::uuids::random_generator()())},{"kind","join"},
+        {"game_id",room["court_game_id"].str()},{"price_revision",data.at("price_revision")},{"confirmation","confirmed"}}}});
+    if(!player_request(request,reply))return false;
+    pending_admission_ticket=std::string(json::parse(reply.world_json).as_object().at("data").as_object().at("ticket").as_string());
+    return true;
 }
+std::string take_individual_admission_ticket(){auto result=std::move(pending_admission_ticket);pending_admission_ticket.clear();return result;}
 bool show_individual_details(const config& room,bool can_observe) {
     auto view=room_view(room,"Battle room");
     if(can_observe)view.actions={{"Observe",true}};

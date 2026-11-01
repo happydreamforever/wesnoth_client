@@ -5,6 +5,7 @@
 #include "unified_protocol.hpp"
 #include "flexible_protocol.hpp"
 #include "world_protocol.hpp"
+#include "court_protocol.hpp"
 #include <openssl/rand.h>
 #include <algorithm>
 #include <array>
@@ -752,7 +753,8 @@ Reply perform_request(const TrustedProfile& trusted, const Request& request,
     try {
         json::object body;
         const auto& op = request.operation;
-        const bool is_world = world_protocol::operation(op);
+        const bool is_court = court_protocol::operation(op);
+        const bool is_world = world_protocol::operation(op) || is_court;
         const bool is_progression = progression_protocol::operation(op);
         const bool is_team = team_operation(op);
         const bool is_casual = op == "casual_ticket" || op == "casual_select";
@@ -774,7 +776,8 @@ Reply perform_request(const TrustedProfile& trusted, const Request& request,
             if(!token_valid(request.token) || !request.username.empty() || !request.password.empty() ||
                !request.starter_id.empty() || request.world_json.empty() || request.world_json.size()>65536) return failure("invalid_input");
             body=parse_document(request.world_json);
-            world_protocol::request(op,body);
+            if(is_court) court_protocol::request(op,body);
+            else world_protocol::request(op,body);
         } else if(is_casual) {
             if(!token_valid(request.token) || !request.username.empty() || !request.password.empty() || !request.starter_id.empty()) return failure("invalid_input");
             if(op == "casual_select") {
@@ -926,7 +929,7 @@ Reply perform_request(const TrustedProfile& trusted, const Request& request,
         constexpr char hex[] = "0123456789abcdef";
         std::string id;
         for(auto c : random) { id += hex[c >> 4]; id += hex[c & 15]; }
-        json::object message{{"v", 4}, {"id", id}, {"op", op}, {"body", std::move(body)}};
+        json::object message{{"v", 5}, {"id", id}, {"op", op}, {"body", std::move(body)}};
         if(op == "me" || op == "logout" || is_team || is_extension || is_casual || is_world) message["token"] = request.token;
         auto frame = encode_message(message);
         const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
@@ -945,7 +948,7 @@ Reply perform_request(const TrustedProfile& trusted, const Request& request,
         if(!result) return transport_failure(result, is_team);
         auto response = decode_message(result.frame);
         keys(response, {"v", "id", "ok", "status", "data"});
-        integer(response, "v", 4, 4);
+        integer(response, "v", 5, 5);
         if(string(response, "id", 32) != id || !response.at("ok").is_bool()) invalid();
         int status = integer(response, "status", 200, 599);
         bool ok = response.at("ok").as_bool();
@@ -957,7 +960,7 @@ Reply perform_request(const TrustedProfile& trusted, const Request& request,
             string(data, "message", 256);
             if(is_extension || is_world) {
                 auto reply = failure(status == 401 ? "invalid_session" : code);
-                const auto public_message=is_world ? world_protocol::public_error(code) : progression_protocol::public_error(code);
+                const auto public_message=is_court ? court_protocol::public_error(code) : is_world ? world_protocol::public_error(code) : progression_protocol::public_error(code);
                 if(status!=401&&!public_message.empty()) reply.error_message=public_message;
                 return reply;
             }
@@ -975,7 +978,8 @@ Reply perform_request(const TrustedProfile& trusted, const Request& request,
         Reply reply;
         if(is_world) {
             if(status!=200) invalid();
-            world_protocol::response(data);
+            if(is_court) court_protocol::response(data);
+            else world_protocol::response(data);
             reply.world_json=json::serialize(data);
         } else if(is_casual) {
             if(status != 200) invalid();
