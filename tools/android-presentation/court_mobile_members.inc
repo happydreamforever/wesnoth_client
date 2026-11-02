@@ -5,6 +5,28 @@
     bool mobile_list_dirty_=true,mobile_actions_top_=false;
     std::string mobile_layout_key_,mobile_scene_;
     std::vector<std::string> mobile_candidates_;
+    bool mobile_alert_open_=false,mobile_editing_=false;
+    std::string mobile_alert_title_,mobile_alert_message_;
+    void mobile_problem(const std::string& message,const std::string& title="Action unavailable"){
+        hint(message);
+        if(mobile_editing_||message.empty()||!mobile_alert_message_.empty())return;
+        mobile_alert_title_=title;mobile_alert_message_=message;mobile_cancel();
+    }
+    template<class F> void mobile_edit(F&& fn){
+        const bool before=mobile_editing_;mobile_editing_=true;
+        try{fn();}catch(...){mobile_editing_=before;throw;}
+        mobile_editing_=before;
+    }
+    void mobile_present_problem(){
+        if(mobile_alert_open_||mobile_alert_message_.empty())return;
+        const auto title=std::move(mobile_alert_title_),message=std::move(mobile_alert_message_);
+        mobile_alert_title_.clear();mobile_alert_message_.clear();mobile_cancel();mobile_alert_open_=true;
+        try{
+            MenuThemeScope theme("alliance_court_workspace");
+            gui2::show_message(title,message,gui2::dialogs::message::ok_button,false,false);
+        }catch(...){mobile_alert_open_=false;throw;}
+        mobile_alert_open_=false;invalidate_layout();
+    }
     bool mobile_geo()const{return state_.map&&state_.view.empty()&&state_.depth<2&&!form_;}
     bool mobile_can_run(std::size_t n)const{return n<actions_.size()&&(!job_||(!mutation_&&actions_[n].navigation));}
     void mobile_cancel(){mobile_gesture_.cancel();mobile_pointer_=false;mobile_candidates_.clear();if(visible_)find_widget<gui2::menu_button>("court_choices").set_visible(gui2::widget::visibility::invisible);}
@@ -40,7 +62,7 @@
         invalidate_layout();
     }
     void mobile_tick(){
-        if(!visible_)return;mobile_layout();
+        if(!visible_||mobile_alert_open_)return;mobile_layout();
         const std::string scene=std::to_string(state_.depth)+":"+state_.area+":"+state_.view+":"+std::to_string(state_.map)+":"+std::to_string(bool(form_));
         if(scene!=mobile_scene_){mobile_cancel();mobile_scene_=scene;}
         if(!mobile_geo()&&state_.view!="competitions")return;
@@ -58,6 +80,6 @@
         const auto i=std::find_if(cards_.begin(),cards_.end(),[&](const auto& c){return c.id==id;});if(i==cards_.end())return;
         state_.selected=id;mobile_expanded_=true;mobile_->set_selection(id);
         if(!flag(i->value,"enabled"))hint(state_.depth?"This Castle is inactive.":"This Area is inactive.");
-        else if(state_.depth==0&&team_id().empty())hint("Join a Team first.");else hint("");
+        else if(state_.depth==0&&team_id().empty())mobile_problem("Join a Team first.");else hint("");
         detail();actions();mobile_layout();mobile_tick();
     }

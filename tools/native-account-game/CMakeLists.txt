@@ -49,7 +49,7 @@ add_library(main SHARED ${account_base_objects}
  "${REPO}/alliance_game/story_progression.cpp"
  "${REPO}/alliance_game/casual_session.cpp"
  "${REPO}/alliance_game/casual_sides.cpp"
- "${REPO}/alliance_game/individual_rooms.cpp"
+ "${ACCOUNT_STAGE}/room_feedback_rooms.cpp"
  "${REPO}/alliance_game/battle_ui.cpp"
  "${REPO}/alliance_game/team_views.cpp"
  "${REPO}/alliance_game/individual_companion.cpp"

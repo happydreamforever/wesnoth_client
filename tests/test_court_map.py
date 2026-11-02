@@ -38,8 +38,8 @@ class CourtMapTest(unittest.TestCase):
             self.assertIn(path,builder.NEW_INPUTS)
             self.assertTrue((ROOT/path).is_file())
         self.assertIn('alliance_native/court_protocol.hpp',builder.NEW_INPUTS)
-        self.assertEqual(builder.VERSION_CODE,1192628)
-        self.assertIn(1192627,builder.PREVIOUS_VERSION_CODES)
+        self.assertEqual(builder.VERSION_CODE,1192629)
+        self.assertIn(1192628,builder.PREVIOUS_VERSION_CODES)
 
     def test_touch_overlay_preserves_native_execution_and_refuses_changed_sources(self):
         import importlib.util
@@ -113,7 +113,7 @@ class MapInputCompanionVersionTests(unittest.TestCase):
             return json.loads((out/'device-report.json').read_text())
 
     def test_current_release_permits_bounded_companion_after_foreground_check(self):
-        report=self.run_companion('versionCode=1192628 minSdk=23')
+        report=self.run_companion('versionCode=1192629 minSdk=23')
         self.assertEqual(len(self.build_calls),1)
         self.assertEqual(self.calls[:3],[['get-state'],['shell','dumpsys','package','org.wesnoth.offline'],['shell','dumpsys','activity','activities']])
         self.assertEqual(sum(c[:3]==['shell','am','instrument'] for c in self.calls),1)
@@ -121,8 +121,8 @@ class MapInputCompanionVersionTests(unittest.TestCase):
         self.assertFalse(any('clear' in c or 'uninstall' in c or 'force-stop' in c for c in self.calls))
 
     def test_other_or_ambiguous_release_stops_before_build_install_or_gestures(self):
-        for installed in ['versionCode=1192627','versionCode=1192629','versionCode=unknown','versionCode=1192628\nversionCode=1192628']:
-            with self.subTest(installed=installed),self.assertRaisesRegex(RuntimeError,'Install verified game 1192628 first'):
+        for installed in ['versionCode=1192627','versionCode=1192630','versionCode=unknown','versionCode=1192629\nversionCode=1192629']:
+            with self.subTest(installed=installed),self.assertRaisesRegex(RuntimeError,'Install verified game 1192629 first'):
                 self.run_companion(installed)
             self.assertEqual(self.build_calls,[])
             self.assertEqual(self.calls,[['get-state'],['shell','dumpsys','package','org.wesnoth.offline']])

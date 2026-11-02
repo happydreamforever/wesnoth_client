@@ -29,7 +29,7 @@ try {
     $log = Join-Path $diagnostics ('android-account-rebuild-' + (Get-Date -Format 'yyyyMMdd-HHmmss-fff') + '-' + [guid]::NewGuid().ToString('N') + '.txt')
     Start-Transcript -LiteralPath $log -NoClobber | Out-Null
     $started = $true
-    Write-Host 'Verifying and preserving both completed 1192608, 1192609, 1192610, 1192611, 1192612, 1192613, 1192614, 1192615, 1192616, 1192617, 1192618, 1192619, 1192620, 1192621, 1192622, 1192623, 1192624, 1192625, 1192626 or 1192627 account stages before the 1192628 full-width map toolbar update.'
+    Write-Host 'Verifying and preserving both completed 1192608, 1192609, 1192610, 1192611, 1192612, 1192613, 1192614, 1192615, 1192616, 1192617, 1192618, 1192619, 1192620, 1192621, 1192622, 1192623, 1192624, 1192625, 1192626, 1192627 or 1192628 account stages before the 1192629 Court feedback update.'
     Write-Host 'Recorded preparation reuses its retained backups. If an operation lock remains, stop and send the log.'
     $prepareArguments = @('-I', '-B', '-u', $builder, '--prepare-update', '--openssl', $OpenSslPath)
     if ($PublicConfigPath) { $prepareArguments += @('--public-config', $PublicConfigPath) }

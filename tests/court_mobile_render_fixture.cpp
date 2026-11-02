@@ -24,6 +24,34 @@ std::ofstream frames("/render/frames.csv");
 alliance_game::court_mobile::Clock::time_point input_at{},last_frame{};int motion_step=0;bool awaiting=false;double pinch_initial_zoom=1;
 std::set<std::string> initial_maps;
 alliance_game::court_mobile::Camera saved_world,saved_area;
+gui2::window* feedback_popup=nullptr;
+int feedback_alerts=0,feedback_closed=0;
+std::atomic<int> feedback_reads{0};int feedback_reads_at_popup=0;
+Uint64 feedback_popup_at=0,feedback_started=0;
+std::string feedback_actor="actor",feedback_generation="generation";
+bool feedback_case(){return scenario.rfind("feedback-",0)==0;}
+void capture(const std::string& suffix){auto pixels=video::read_pixels();if(!pixels||!SDL_SaveBMP(pixels,("/render/"+phase+suffix+".bmp").c_str()))throw std::runtime_error("Feedback capture failed");}
+void finish_feedback(){
+ const int expected=scenario=="feedback-poll"?0:1;
+ if(feedback_alerts!=expected||feedback_closed!=expected)throw std::runtime_error("Unexpected modal count");
+ const int submissions=scenario=="feedback-funds"?1:0;
+ if(mutations.load()!=submissions)throw std::runtime_error("Feedback unexpectedly submitted a command");
+ if(scenario=="feedback-funds"||scenario=="feedback-numeric"){
+  const auto value=watched->find_widget<gui2::text_box>("court_input_0").get_value();
+  if(value!=(scenario=="feedback-funds"?"77":"bad"))throw std::runtime_error("Modal lost unsent form input");
+  if(watched->find_widget<gui2::button>("court_primary").get_label().str()!="Review")throw std::runtime_error("Failed action lost the review gate");
+ }
+ if(scenario=="feedback-pending"){
+  if(watched->find_widget<gui2::label>("court_name").get_label().str()!="Unconfirmed action")throw std::runtime_error("Pending action was cancelled by the modal");
+  if(!alliance_game::court_command_record::read(feedback_actor,feedback_generation))throw std::runtime_error("Pending journal was lost");
+ }
+ if(scenario=="feedback-nohero-attack"&&(active_state->depth!=2||!active_state->view.empty()))throw std::runtime_error("Blocked attack navigated away");
+ if(scenario=="feedback-teamless"&&(active_state->depth!=0||!active_state->view.empty()||active_state->selected!="A001"))throw std::runtime_error("Team-required alert lost map selection");
+ if((scenario=="feedback-nohero-select"||scenario=="feedback-nohero-defend")&&active_state->view!="plans")throw std::runtime_error("Blocked hero choice lost plan context");
+ capture("-returned");geo<<phase<<" feedback alerts "<<feedback_alerts<<" closed "<<feedback_closed<<" submissions "<<mutations.load()<<" reads "<<feedback_reads.load()<<'\n';geo.flush();
+ if(scenario=="feedback-numeric"||scenario=="feedback-funds"||scenario=="feedback-empty-choice"){auto& cancel=watched->find_widget<gui2::button>("court_secondary");cancel.fire(gui2::event::LEFT_BUTTON_CLICK,cancel);if(watched->find_widget<gui2::button>("court_primary").get_label().str()=="Review")throw std::runtime_error("Cancel did not leave the form");}
+ auto* w=watched;watched=nullptr;w->set_retval(gui2::retval::CANCEL);
+}
 void press(const char* id){auto& b=watched->find_widget<gui2::button>(id);b.fire(gui2::event::LEFT_BUTTON_CLICK,b);}
 void require_camera(const alliance_game::court_mobile::Camera& saved,const alliance_game::court_mobile::Camera& current,const char* context){
  if(std::abs(saved.cx-current.cx)>1e-6||std::abs(saved.cy-current.cy)>1e-6||std::abs(saved.scale()-current.scale())>1e-5)throw std::runtime_error(std::string(context)+" moved or rescaled camera");
@@ -43,6 +71,49 @@ void require_top_row(){
 c::json::object fixture(const std::string&);
 void push_touch(SDL_EventType type,SDL_FingerID id,double x,double y){auto size=video::game_canvas_size();SDL_Event e{};e.type=type;e.tfinger.type=type;e.tfinger.windowID=SDL_GetWindowID(video::get_window());e.tfinger.pressure=1;e.tfinger.touchID=1;e.tfinger.fingerID=id;e.tfinger.x=x/size.x;e.tfinger.y=y/size.y;SDL_SetEventEnabled(type,true);if(!SDL_PushEvent(&e))throw std::runtime_error(SDL_GetError());}
 class Monitor:public events::pump_monitor{void process()override{if(!watched)return;++ticks;
+if(feedback_case()){
+ if(SDL_GetTicks()-feedback_started>15000)throw std::runtime_error("Feedback scenario did not complete");
+ if(feedback_popup){
+  if(SDL_GetTicks()-feedback_popup_at<500)return;
+  if(feedback_reads.load()!=feedback_reads_at_popup)throw std::runtime_error("Workspace kept polling behind blocking modal");
+  const auto title=feedback_popup->find_widget<gui2::label>("title").get_label().str();
+  const auto message=feedback_popup->find_widget<gui2::styled_widget>("label").get_label().str();
+  const std::string expected=scenario=="feedback-funds"?"Not enough Crowns.":scenario=="feedback-numeric"?"Enter a valid whole number.":scenario=="feedback-empty-choice"?"No eligible choice is available for Opposing Team.":scenario=="feedback-teamless"?"Join a Team first.":scenario=="feedback-pending"?"This action is unconfirmed. Refresh its status before another purchase.":"Earn or unlock a hero before joining a battle.";
+  if(message!=expected||title.empty())throw std::runtime_error("Blocking explanation missing: "+message);
+  auto& ok=feedback_popup->find_widget<gui2::button>("ok");const auto b=ok.get_rectangle(),bounds=feedback_popup->get_rectangle();
+  geo<<phase<<" modal "<<bounds<<" ok "<<b<<" label "<<ok.get_label().str()<<" message "<<message<<'\n';geo.flush();capture("-modal");
+  if(ok.get_label().str()!="OK"||ok.get_visible()!=gui2::widget::visibility::visible||b.w<48||b.h<48)throw std::runtime_error("Modal needs visible touch-sized OK: "+ok.get_label().str()+" "+std::to_string(b.w)+"x"+std::to_string(b.h));
+  if(bounds.x<0||bounds.y<0||bounds.x+bounds.w>video::game_canvas_size().x||bounds.y+bounds.h>video::game_canvas_size().y)throw std::runtime_error("Feedback modal clipped");
+  feedback_popup=nullptr;++feedback_closed;armed=SDL_GetTicks();ticks=0;ok.fire(gui2::event::LEFT_BUTTON_CLICK,ok);return;
+ }
+ if(ticks<15||SDL_GetTicks()-armed<450)return;
+ if(scenario=="feedback-poll"){
+  if(feedback_reads.load()<4){press("court_refresh");armed=SDL_GetTicks();ticks=0;return;}
+  if(watched->find_widget<gui2::label>("court_notice").get_label().str()!="Refresh failed; try again.")throw std::runtime_error("Background failure was not visible inline");finish_feedback();return;
+ }
+ if(scenario=="feedback-pending"){
+  if(actions==0){if(watched->find_widget<gui2::label>("court_name").get_label().str()!="Unconfirmed action")return;press("court_secondary");++actions;armed=SDL_GetTicks();ticks=0;return;}
+  if(feedback_closed){finish_feedback();return;}
+ }
+ else if(scenario=="feedback-numeric"||scenario=="feedback-funds"){
+  if(actions==0){press("court_primary");++actions;}
+  else if(actions==1){auto& input=watched->find_widget<gui2::text_box>("court_input_0");input.set_value(scenario=="feedback-funds"?"77":"bad");input.fire(gui2::event::NOTIFY_MODIFIED,input,nullptr);++actions;}
+  else if(actions==2){if(feedback_alerts)throw std::runtime_error("Typing opened a modal");press("court_primary");++actions;}
+  else if(scenario=="feedback-funds"&&actions==3){press("court_primary");++actions;}
+  else if(feedback_closed){finish_feedback();return;}
+  armed=SDL_GetTicks();ticks=0;return;
+ }
+ else if(scenario=="feedback-empty-choice"){
+  if(actions<2){press("court_primary");++actions;armed=SDL_GetTicks();ticks=0;return;}
+  if(feedback_closed){finish_feedback();return;}
+ }
+ else if(scenario=="feedback-teamless"){
+  if(actions==0){press("court_centre");const auto b=watched->find_widget<gui2::drawing>("court_map").get_rectangle();const auto& node=alliance_game::court_map::world_nodes[0];const auto p=active_state->world_camera.project({node.x,node.y});push_touch(SDL_EVENT_FINGER_DOWN,3,b.x+p.x,b.y+p.y);push_touch(SDL_EVENT_FINGER_UP,3,b.x+p.x,b.y+p.y);++actions;armed=SDL_GetTicks();ticks=0;return;}
+  if(feedback_closed){finish_feedback();return;}
+ }
+ else {if(actions==0){press("court_primary");++actions;armed=SDL_GetTicks();ticks=0;return;}if(feedback_closed){finish_feedback();return;}}
+ if(SDL_GetTicks()-armed>10000)throw std::runtime_error("Expected feedback modal never appeared");return;
+}
 if(scenario=="map-controls"){
  if(ticks<15||SDL_GetTicks()-armed<400)return;
  auto& world=active_state->world_camera;auto& area=active_state->area_cameras["A001"];
@@ -126,38 +197,61 @@ c::json::array areas(){c::json::array a;for(std::size_t n=0;n<128;++n){const aut
 c::json::array castles(){c::json::array a;for(std::size_t n=0;n<64;++n){const auto& node=alliance_game::court_map::castle_nodes[n];a.push_back(c::json::object{{"id",std::string("A001-")+node.id},{"name",node.name},{"enabled",n<32},{"role",n==27?"competition":n==9?"plan":"normal"},{"owner_team_name",n%3?"Koichi":"Rival"},{"owner_team_id",n%3?"team-one":"team-two"},{"state",n%4==0?"protected":n%4==1?"fighting":"owned"},{"revision",1}});}return a;}
 c::json::object fixture(const std::string& op){c::json::object team{{"id","team-one"},{"name","Koichi"},{"area_id","A001"},{"captain_id","actor"},{"level",3},{"revision",1},{"wallet",c::json::object{{"available",200}}},{"members",c::json::array{c::json::object{{"account_id","actor"},{"username","A very long commander name"},{"status","online"}},c::json::object{{"account_id","second"},{"username","UniRecruit"},{"status","offline"}}}}};
  if(scenario=="team-large"||scenario=="team-large-bottom"){auto members=c::array(team,"members");for(int n=2;n<10;++n)members.push_back(c::json::object{{"account_id","member-"+std::to_string(n)},{"username","CommanderTwentyFourName"+std::to_string(n)},{"status",n%2?"online":"offline"}});team["members"]=members;}
- if(scenario=="form-team"||scenario=="world-teamless")team={};
+ if(scenario=="form-team"||scenario=="world-teamless"||scenario=="feedback-teamless")team={};
  if(op=="snapshot")return {{"team",team},{"areas",areas()},{"wallet",c::json::object{{"available",100}}},{"settings",c::json::object{{"revision",1},{"prices",c::json::object{{"hero",100},{"item",5},{"plan",10},{"create_team",50}}}}},{"notifications_unread",2}};
  if(op=="areas")return {{"items",areas()}};
+ if(op=="area"&&scenario=="feedback-empty-choice")return {{"area",c::json::object{{"id","A001"},{"name","Verdant Marches"}}},{"castles",castles()},{"teams",c::json::array{team}}};
  if(op=="area")return {{"area",c::json::object{{"id","A001"},{"name","Verdant Marches"}}},{"castles",castles()},{"teams",c::json::array{team,c::json::object{{"id","team-two"},{"name","Rival"}}}}};
+ if(op=="castle"&&scenario=="feedback-nohero-attack")return {{"castle",c::json::object{{"id","A001-C010"},{"name","Dawnwatch"},{"role","normal"},{"state","unclaimed"},{"enabled",true},{"revision",1}}}};
  if(op=="castle")return {{"castle",castles()[9]}};
  if(op=="my_team")return {{"team",team}};
  if(op=="competitions"){c::json::object event{{"id","event-one"},{"name","Emerald Cup"},{"state","running"},{"revision",1},{"entries",c::json::array{c::json::object{{"team_id","one"},{"team_name","Koichi"}},c::json::object{{"team_id","two"},{"team_name","Rival"}},c::json::object{{"team_id","three"},{"team_name","Northern Watch"}},c::json::object{{"team_id","four"},{"team_name","Silver Legion"}}}}};event["rounds"]=c::json::array{c::json::object{{"number",1},{"matches",c::json::array{c::json::object{{"team_ids",c::json::array{"one","two"}},{"state","completed"},{"winner_team_id","one"}},c::json::object{{"team_ids",c::json::array{"three","four"}},{"state","running"}}}}},c::json::object{{"number",2},{"matches",c::json::array{c::json::object{{"team_ids",c::json::array{"one"}},{"state","waiting"}}}}}};return {{"items",c::json::array{event}}};}
  if(op=="wallet")return {{"wallet",c::json::object{{"available",scenario=="home-empty"?0:42},{"held",10}}}};
  if(op=="shop")return {{"heroes",c::json::array{c::json::object{{"hero_id","deoran"},{"name","Deoran"},{"owned",scenario=="purchase"&&mutations.load()>0}}}},{"items",c::json::array{c::json::object{{"id","healing_draught"},{"name","Healing draught"}},c::json::object{{"id","remedy"},{"name","Remedy"}}}}};
- if(op=="plans"&&scenario=="form-force"){c::json::object match{{"id","match-one"},{"state","scheduled"},{"revision",1}};match["seats"]=c::json::array{c::json::object{{"account_id","actor"},{"ready",false}}};return {{"items",c::json::array{match}}};}
+ if(op=="plans"&&scenario=="feedback-nohero-defend")return {{"items",c::json::array{c::json::object{{"id","match-one"},{"kind","attack"},{"state","response"},{"initiator_team_id","team-two"},{"revision",1}}}}};
+ if(op=="plans"&&(scenario=="form-force"||scenario=="feedback-nohero-select")){c::json::object match{{"id","match-one"},{"state","scheduled"},{"revision",1}};match["seats"]=c::json::array{c::json::object{{"account_id","actor"},{"ready",false}}};return {{"items",c::json::array{match}}};}
  return {{"items",c::json::array{}}};}
 }
-void mobile_native_arm(gui2::window& w){if(phase.empty())return;watched=&w;ticks=0;actions=0;armed=SDL_GetTicks();}
+void mobile_native_arm(gui2::window& w){if(phase.empty())return;if(feedback_case()&&!dynamic_cast<c::Workspace*>(&w)){feedback_popup=&w;++feedback_alerts;feedback_popup_at=SDL_GetTicks();feedback_reads_at_popup=feedback_reads.load();return;}watched=&w;ticks=0;actions=0;armed=SDL_GetTicks();feedback_started=armed;}
 namespace alliance_game { bool account_session_interaction_active()noexcept{return false;} }
 namespace { class Home:public gui2::dialogs::modal_dialog {
  c::Hooks hooks_;const std::string& window_id()const override{static const std::string id="alliance_mobile_home";return id;}
  void pre_show()override{set_click_dismiss(false);set_enter_disabled(true);home_dispatch.fill(0);for(std::size_t i=0;i<alliance_game::mobile_home::actions.size();++i){auto& button=find_widget<gui2::button>(alliance_game::mobile_home::actions[i].id);button.set_retval(gui2::retval::NONE);gui2::event::connect_signal_mouse_left_click(button,[i](auto&&...){++home_dispatch[i];});}alliance_game::mobile_home::set_profile(*this,scenario=="home-empty"?"UniPlayer":"TwentyFourCharacterNameXY",scenario=="home-empty"?0:117);alliance_game::mobile_home::bind(*this);alliance_game::mobile_home::bind_cash(*this,hooks_,[]{});}
  public:Home(c::Hooks hooks):modal_dialog(alliance_game::mobile_home::prepare_window()),hooks_(hooks){set_show_even_without_video(true);}
  };}
-bool auth_render_fixture(game_launcher&){game_config_manager::get()->load_game_config_for_create(true);Monitor monitor;c::Hooks hooks;hooks.journal=false;hooks.actor_id="actor";hooks.generation="generation";hooks.same_actor=[] {return true;};hooks.heroes={c::json::object{{"id","deoran"},{"name","Deoran"},{"forms",c::json::array{c::json::object{{"id","deoran-one"},{"name","Cavalryman"}}}}}};hooks.request=[](bool mutation,const std::string& op,c::json::object payload,alliance::CancellationToken&){if(mutation){if(scenario=="plan-submit"){const auto& settings=c::object(payload,"settings");if(op!="create_plan"||c::number(settings,"base_income")!=7||c::number(settings,"turns")!=55||!c::flag(settings,"fog")||!c::flag(settings,"shroud")||!c::flag(settings,"observers")||!c::flag(settings,"items")||c::number(settings,"hero_cap")!=15||c::number(settings,"size")!=1)throw std::runtime_error("Plan settings payload differs");}else if(scenario!="purchase"||op!="buy_hero"||c::text(payload,"hero_id")!="deoran"||c::text(payload,"confirmation")!="confirmed"||c::number(payload,"price_revision")!=1||c::text(payload,"command_id").size()!=36)throw std::runtime_error("Wrong reviewed purchase payload");++mutations;}return c::Reply{true,{},{},{{"version",1},{"actor_id","actor"},{"database_generation","generation"},{"server_time","2026-11-01T10:00:00Z"},{"data",fixture(op)}}};};
+bool auth_render_fixture(game_launcher&){game_config_manager::get()->load_game_config_for_create(true);Monitor monitor;c::Hooks hooks;hooks.journal=false;hooks.actor_id="actor";hooks.generation="generation";hooks.same_actor=[] {return true;};hooks.heroes={c::json::object{{"id","deoran"},{"name","Deoran"},{"forms",c::json::array{c::json::object{{"id","deoran-one"},{"name","Cavalryman"}}}}}};hooks.request=[](bool mutation,const std::string& op,c::json::object payload,alliance::CancellationToken&){
+ if(feedback_case()){
+  if(!mutation){++feedback_reads;if(scenario=="feedback-poll")return c::Reply{false,"invalid_request","Refresh failed; try again.",{}};}
+  else {++mutations;if(scenario!="feedback-funds"||op!="donate"||c::number(payload,"amount")!=77||c::text(payload,"command_id").size()!=36)throw std::runtime_error("Wrong feedback submission");return c::Reply{false,"insufficient_funds","Not enough Crowns.",{}};}
+  return c::Reply{true,{},{},{{"version",1},{"actor_id",feedback_actor},{"database_generation",feedback_generation},{"server_time","2026-11-01T10:00:00Z"},{"data",fixture(op)}}};
+ }
+ if(mutation){if(scenario=="plan-submit"){const auto& settings=c::object(payload,"settings");if(op!="create_plan"||c::number(settings,"base_income")!=7||c::number(settings,"turns")!=55||!c::flag(settings,"fog")||!c::flag(settings,"shroud")||!c::flag(settings,"observers")||!c::flag(settings,"items")||c::number(settings,"hero_cap")!=15||c::number(settings,"size")!=1)throw std::runtime_error("Plan settings payload differs");}else if(scenario!="purchase"||op!="buy_hero"||c::text(payload,"hero_id")!="deoran"||c::text(payload,"confirmation")!="confirmed"||c::number(payload,"price_revision")!=1||c::text(payload,"command_id").size()!=36)throw std::runtime_error("Wrong reviewed purchase payload");++mutations;}return c::Reply{true,{},{},{{"version",1},{"actor_id","actor"},{"database_generation","generation"},{"server_time","2026-11-01T10:00:00Z"},{"data",fixture(op)}}};};
 int captures=0;
 for(const std::string theme:{"default","modern"}){gui2::current_gui=gui2::guis.find(theme);gui2::current_gui->second.activate();
- for(const auto& name:{"map-controls","motion-world","motion-area","stress","tap-world","tap-area","tap-inactive","world","world-teamless","team-large","team-large-bottom","pinch","area","castle","team","shop","home","home-empty","form-hero","form-cash","form-team","form-plan","form-settings","form-settings-bottom","form-force","competition","purchase","plan-submit","help-world","help-items","touch-item"}){scenario=name;initial_maps.clear();motion_step=0;awaiting=false;last_frame={};if(const auto* subset=std::getenv("COURT_RENDER_SUBSET");subset&&std::string(subset)!=""&&std::string(subset).find("|"+scenario+"|")==std::string::npos)continue;phase=theme+"-"+name;mutations=0;
+ for(const auto& name:{"feedback-nohero-attack","feedback-nohero-select","feedback-nohero-defend","feedback-numeric","feedback-funds","feedback-poll","feedback-pending","feedback-teamless","feedback-empty-choice","map-controls","motion-world","motion-area","stress","tap-world","tap-area","tap-inactive","world","world-teamless","team-large","team-large-bottom","pinch","area","castle","team","shop","home","home-empty","form-hero","form-cash","form-team","form-plan","form-settings","form-settings-bottom","form-force","competition","purchase","plan-submit","help-world","help-items","touch-item"}){scenario=name;initial_maps.clear();motion_step=0;awaiting=false;last_frame={};if(const auto* subset=std::getenv("COURT_RENDER_SUBSET");subset&&std::string(subset)!=""&&std::string(subset).find("|"+scenario+"|")==std::string::npos)continue;phase=theme+"-"+name;active_state=nullptr;mutations=0;feedback_alerts=feedback_closed=0;feedback_reads=0;feedback_popup=nullptr;feedback_actor="actor";feedback_generation="generation";
  if(scenario=="home"||scenario=="home-empty"){Home home(hooks);home.show();++captures;continue;}
  if(scenario.rfind("help-",0)==0){if(scenario=="help-world")alliance_game::mobile_help::show();else {alliance_game::MenuThemeScope scope("alliance_court_help");auto manager=help::help_manager::get_instance();auto root=manager->regenerate();root.sections.push_front(alliance_game::mobile_help::topics());gui2::dialogs::help_browser::display(root,"court_items");}++captures;continue;}
  if(scenario=="touch-item"){std::vector<config> original{config{"id","recruit"},config{"id","recall"}},items{config{"id","recruit","label","Recruit"}};auto expand=[](auto& rows){rows.emplace_back("id","wml_menu:court_item_1","label","Use Healing Draught","icon","items/potion-red.png");rows.emplace_back("id","wml_menu:court_item_9");rows.emplace_back("id","wml_menu:unrelated");};auto allowed=[](const auto&){return true;};alliance_game::mobile_actions::append(original,items,false,expand,allowed);assert(items.size()==2&&items.front()["id"].str()=="wml_menu:court_item_1");alliance_game::mobile_actions::append(original,items,false,expand,allowed);assert(items.size()==2);auto empty=std::vector<config>{};alliance_game::mobile_actions::append(original,empty,true,expand,allowed);assert(empty.empty());alliance_game::mobile_actions::append({},empty,false,expand,allowed);assert(empty.empty());alliance_game::mobile_actions::append(original,empty,false,expand,[](const auto&){return false;});assert(empty.empty());alliance_game::MenuThemeScope scope("alliance_court_actions");gui2::dialogs::drop_down_menu menu(rect{400,150,1,1},items,-1,true,false);menu.show();++captures;continue;}
- c::State state;if(scenario=="area"||scenario=="castle"||scenario=="form-plan"||scenario=="form-settings"||scenario=="form-settings-bottom"||scenario=="plan-submit"||scenario=="form-force"){state.depth=scenario=="area"?1:2;state.area="A001";state.castle="A001-C010";}
+ auto scenario_hooks=hooks;
+ if(scenario.rfind("feedback-nohero-",0)==0)scenario_hooks.heroes={};
+ if(scenario=="feedback-pending"){
+  feedback_actor="12345678-1234-4234-8234-123456789abc";feedback_generation="23456789-1234-4234-8234-123456789abc";
+  scenario_hooks.actor_id=feedback_actor;scenario_hooks.generation=feedback_generation;scenario_hooks.journal=true;
+  auto root=std::filesystem::path("/render")/("pending-"+theme);std::filesystem::create_directory(root);const auto profile=(root/"alliance-bundled-profile.json").string();setenv("WESNOTH_ALLIANCE_PROFILE",profile.c_str(),1);
+  alliance_game::court_command_record::save(feedback_actor,feedback_generation,"request_cash",{{"command_id","34567890-1234-4234-8234-123456789abc"},{"kind","personal"},{"package",100}});
+ }
+ c::State state;
+ if(scenario=="feedback-nohero-attack"||scenario=="feedback-nohero-select"||scenario=="feedback-nohero-defend"||scenario=="feedback-empty-choice"){state.depth=2;state.area="A001";state.castle="A001-C010";}
+ if(scenario=="feedback-nohero-select"||scenario=="feedback-nohero-defend"||scenario=="feedback-empty-choice")state.view="plans";
+ if(scenario=="feedback-numeric"||scenario=="feedback-funds")state.view="my_team";
+ if(scenario=="feedback-pending")state.view="shop";
+ if(scenario=="feedback-teamless")state.selected="A001";
+ if(scenario=="area"||scenario=="castle"||scenario=="form-plan"||scenario=="form-settings"||scenario=="form-settings-bottom"||scenario=="plan-submit"||scenario=="form-force"){state.depth=scenario=="area"?1:2;state.area="A001";state.castle="A001-C010";}
  if(scenario=="team"||scenario=="team-large"||scenario=="team-large-bottom")state.view="my_team";if(scenario=="competition"){state.depth=2;state.area="A001";state.castle="A001-C028";state.view="competitions";}
  if(scenario=="shop"||scenario=="form-hero"||scenario=="form-cash"||scenario=="purchase")state.view="shop";
  if(scenario=="form-team")state.view="teams";
  if(scenario=="form-plan"||scenario=="form-settings"||scenario=="form-settings-bottom"||scenario=="plan-submit"||scenario=="form-force")state.view="plans";
- if(scenario=="motion-area"||scenario=="tap-area"){state.depth=1;state.area="A001";}active_state=&state;c::Workspace dialog(hooks,state);dialog.accept_snapshot("snapshot",fixture("snapshot"));dialog.accept_snapshot("areas",fixture("areas"));dialog.accept_snapshot("area",fixture("area"),{{"area_id","A001"}});dialog.accept_snapshot("castle",fixture("castle"),{{"castle_id","A001-C010"}});dialog.show();++captures;
+ if(scenario=="motion-area"||scenario=="tap-area"){state.depth=1;state.area="A001";}active_state=&state;c::Workspace dialog(scenario_hooks,state);dialog.accept_snapshot("snapshot",fixture("snapshot"));dialog.accept_snapshot("areas",fixture("areas"));dialog.accept_snapshot("area",fixture("area"),{{"area_id","A001"}});dialog.accept_snapshot("castle",fixture("castle"),{{"castle_id","A001-C010"}});dialog.show();active_state=nullptr;++captures;
  }}
  std::cout<<"COURT REAL NATIVE RENDER PASS: "<<captures<<" captures\n";return true;}
 

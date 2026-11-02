@@ -27,7 +27,7 @@ def generate_workspace(source):
     if sha256(source).hexdigest() != WORKSPACE_PIN:
         raise ValueError('Pinned Court workspace changed; originals preserved.')
     s=source.decode('utf-8')
-    s=replace(s, '#include "alliance_game/court_map.hpp"', '#include "alliance_game/court_map.hpp"\n#include "court_mobile_viewport.hpp"')
+    s=replace(s, '#include "alliance_game/court_map.hpp"', '#include "alliance_game/court_map.hpp"\n#include "court_mobile_viewport.hpp"\n#include "alliance_game/native_menu_theme.hpp"\n#include "gui/dialogs/message.hpp"')
     s=replace(s, 'court_map::Camera world_camera,area_camera,bracket_camera;', 'court_map::Camera world_camera,area_camera,bracket_camera;\n    std::map<std::string,court_map::Camera> area_cameras;std::map<std::string,std::string> map_selections;std::map<std::string,bool> map_camera_initialized;')
     s=replace(s, 'struct Action {std::string label;std::function<void()> run;};', 'struct Action {std::string label;std::function<void()> run;bool navigation=false;};')
     old=section(s,'inline std::string workspace_window(){','class Workspace final:')
@@ -35,6 +35,30 @@ def generate_workspace(source):
     layout=(ROOT/'court_mobile_layout.inc').read_text().replace('    /*COURT_FORM*/',form.rstrip())
     s=replace(s,old,layout+'\n')
     s=replace(s,'    void actions();void refresh_widgets();', '#include "court_mobile_members.inc"\n    void actions();void refresh_widgets();')
+    # Blocking action feedback must not depend on the empty footer label's
+    # previous geometry. Ordinary background refresh/status stays nonmodal.
+    s=replace(s,'void hint(const std::string& value){find_widget<gui2::label>("court_notice").set_label(value);}',
+        'void hint(const std::string& value){auto& notice=find_widget<gui2::label>("court_notice");if(notice.get_label().str()!=value){notice.set_label(value);invalidate_layout();notice.queue_redraw();}}')
+    for text,count in (
+        ('"Finish or cancel your current changes first."',2),
+        ('"This action is unconfirmed. Refresh its status before another purchase."',1),
+        ('"Earn or unlock a hero before joining a battle."',1),
+        ('"Enter a valid whole number."',1),
+        ('"No eligible choice is available for "+field.label+"."',1),
+        ('"Income must be 0–20; turn limit must be 1–1000."',1),
+    ):
+        s=replace(s,'hint('+text+');','mobile_problem('+text+');',count)
+    s=replace(s,'if(team_id().empty()){hint("Join a Team first.");return;}',
+        'if(team_id().empty()){mobile_problem("Join a Team first.");return;}')
+    s=replace(s,'hint(e.what());','mobile_problem(e.what());',2)
+    s=replace(s,'void process()override{if(!visible_)return;',
+        'void process()override{if(!visible_||mobile_alert_open_)return;')
+    s=replace(s,'if(!reply.ok){hint(reply.message.empty()?"Could not update. Try Refresh.":reply.message);',
+        'if(!reply.ok){const auto message=reply.message.empty()?"Could not update. Try Refresh.":reply.message;if((mutation||operation_=="command_status")&&!connection_error(reply.code))mobile_problem(message,"Action could not finish");else hint(message);')
+    # Input-change validation still updates inline feedback, but a transient
+    # empty/partial number must never open a modal while the player is typing.
+    s=replace(s,'if(updating_||!form_)return;collect_fields();form_->reviewed=false;map();actions();',
+        'if(updating_||!form_)return;mobile_edit([this]{collect_fields();});form_->reviewed=false;map();actions();')
     s=replace(s,'return state_.view=="competitions"?state_.bracket_camera:state_.depth?state_.area_camera:state_.world_camera;', 'return state_.view=="competitions"?state_.bracket_camera:state_.depth?state_.area_cameras[state_.area]:state_.world_camera;')
     old=section(s,'inline void Workspace::map(){','inline void Workspace::select(){')
     s=replace(s,old,'#include "court_mobile_workspace.inc"\n')
@@ -57,7 +81,7 @@ def generate_workspace(source):
     s=replace(s,'const auto value=object(reply.document,"data");if(!mutation)',
         'const auto value=object(reply.document,"data");const bool presentation_changed=mutation||operation_=="command_status"||data(key_)!=value;if(!mutation)')
     s=replace(s,'hint("Saved");refresh();}refresh_widgets();}', 'hint("Saved");refresh();}if(presentation_changed)refresh_widgets();}')
-    s=replace(s,'    }if(!form_&&std::chrono::steady_clock::now()>=countdown_)','    }mobile_tick();if(!form_&&std::chrono::steady_clock::now()>=countdown_)')
+    s=replace(s,'    }if(!form_&&std::chrono::steady_clock::now()>=countdown_)','    }mobile_present_problem();mobile_tick();if(!form_&&std::chrono::steady_clock::now()>=countdown_)')
     s=replace(s,'queued_.clear();refresh_widgets();refresh();}', 'queued_.clear();mobile_cancel();refresh_widgets();refresh();}',2)
     s=replace(s,'void back(){if(form_)', 'void back(){mobile_cancel();if(form_)')
     s=replace(s,'~Workspace(){visible_=false;', '~Workspace(){mobile_cancel();visible_=false;')

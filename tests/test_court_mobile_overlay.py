@@ -25,9 +25,26 @@ class CourtMobileOverlay(unittest.TestCase):
         original=self.original.decode()
         for begin,end in [('    void submit(){','    void process()override'),('    void begin(','    void actions();'),('    bool collect_fields(){','    void render_form(){')]:
             if begin=='    void begin(':continue
-            self.assertEqual(mobile.section(original,begin,end),mobile.section(self.generated,begin,end))
+            # Error presentation may change; payload collection, consent,
+            # command identity and journal transitions must remain exact.
+            generated=mobile.section(self.generated,begin,end).replace('mobile_problem(', 'hint(')
+            self.assertEqual(mobile.section(original,begin,end),generated)
         self.assertIn('if(form_)submit();else if(mobile_can_run(0))',self.generated)
         self.assertIn('hooks_.journal)court_command_record::acknowledge',self.generated)
+    def test_blocking_feedback_is_separate_from_passive_polling_and_typing(self):
+        source=self.generated
+        self.assertIn('mobile_problem("Earn or unlock a hero before joining a battle.")',source)
+        self.assertIn('if(team_id().empty()){mobile_problem("Join a Team first.");return;}',source)
+        self.assertIn('if((mutation||operation_=="command_status")&&!connection_error(reply.code))mobile_problem(message,"Action could not finish");else hint(message);',source)
+        self.assertIn('mobile_edit([this]{collect_fields();});',source)
+        self.assertIn('void process()override{if(!visible_||mobile_alert_open_)return;',source)
+        self.assertIn('}mobile_present_problem();mobile_tick();',source)
+        self.assertIn('notice.set_label(value);invalidate_layout();notice.queue_redraw();',source)
+        members=(ROOT/'tools/android-presentation/court_mobile_members.inc').read_text()
+        self.assertIn('if(mobile_editing_||message.empty()||!mobile_alert_message_.empty())return;',members)
+        self.assertIn('gui2::show_message(title,message,gui2::dialogs::message::ok_button,false,false);',members)
+        self.assertIn('mobile_alert_open_=false;invalidate_layout();',members)
+        self.assertNotIn('mobile_present_problem();mobile_layout();',members)
     def test_retained_renderer_not_old_png_overlay(self):
         self.assertNotIn('map_cache',self.generated)
         self.assertIn('#include "court_mobile_workspace.inc"',self.generated)

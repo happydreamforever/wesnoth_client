@@ -41,7 +41,7 @@ inline void Workspace::click_map(court_map::Point p){
 }
 inline void Workspace::handle_event(const SDL_Event& event){
     if(event.type==SDL_EVENT_FINGER_CANCELED||event.type==SDL_EVENT_WINDOW_FOCUS_LOST||event.type==SDL_EVENT_WILL_ENTER_BACKGROUND){mobile_cancel();return;}
-    if(!visible_||!state_.map||form_||(!state_.view.empty()&&state_.view!="competitions")||(state_.depth>1&&state_.view!="competitions"))return;
+    if(!visible_||mobile_alert_open_||!state_.map||form_||(!state_.view.empty()&&state_.view!="competitions")||(state_.depth>1&&state_.view!="competitions"))return;
     auto& camera=active_camera();const auto box=find_widget<gui2::drawing>("court_map").get_rectangle();
     auto inside=[&](double x,double y){return x>=box.x&&y>=box.y&&x<box.x+box.w&&y<box.y+box.h;};
     if(event.type==SDL_EVENT_FINGER_DOWN||event.type==SDL_EVENT_FINGER_MOTION||event.type==SDL_EVENT_FINGER_UP){
