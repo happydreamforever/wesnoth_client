@@ -1,0 +1,1587 @@
+{
+  "release": 1192627,
+  "date": "2026-11-02",
+  "status": "VPS functional/build verification complete; Windows U1-U7 and device performance pending",
+  "baseline_client_commit": "ca2764ca6ba93de899bfa12dd09c8282b668543f",
+  "baseline_server_commit": "355bb1be2f1eaa56ffa8f7cb75d7aa3a37a613af",
+  "protocol": 5,
+  "schema": 5,
+  "backend_and_worker_release": 1192626,
+  "scope": "Android presentation, assets, build integration and optional test companion only; no server/gameplay/database changes",
+  "tests": {
+    "python_unique": 150,
+    "passed": 150,
+    "skipped": 0,
+    "builder_preservation": 80,
+    "powershell_wrappers": 38,
+    "court_maps_and_guarded_overlay": 10,
+    "startup_public_bundle_chrome": 22,
+    "asan_ubsan_gesture_executable": "passed"
+  },
+  "native": {
+    "rendered": {
+      "1280x720": {
+        "screens_and_motion_frames": 74,
+        "software_renderer": true,
+        "themes": [
+          "default",
+          "Celes (modern)"
+        ],
+        "log": {
+          "bytes": 411,
+          "sha256": "a4e6c26fbf36d1e37a2c04fc1564a3bfbcc1c8e53ed807650ac830261504b520"
+        },
+        "geometry": {
+          "bytes": 8942,
+          "sha256": "ab3062c92fa90a823e99b1b19e939de3551c738df637571125abe4b2e3ff9408"
+        },
+        "images": {
+          "default-area.png": {
+            "bytes": 587829,
+            "sha256": "7c87de4ea93a119144ee99f2b97734db4c69208d35583a73eb4af23d1e326464"
+          },
+          "default-castle.png": {
+            "bytes": 33259,
+            "sha256": "0eb6d42fef9d8a597dcc7c5cdd89313e358deb1f44c1d85999a85d8f59b2bb7d"
+          },
+          "default-competition.png": {
+            "bytes": 129346,
+            "sha256": "c52b4560eb3cd423dc96f3bd868bc10e113f1de6c1abd4344e7244857b3005d8"
+          },
+          "default-form-cash.png": {
+            "bytes": 122009,
+            "sha256": "3be937cdf1bc8d57cc7abe7ae5279bc5a079b578baeb9b3ff3dcb05002c7bf4b"
+          },
+          "default-form-force.png": {
+            "bytes": 122018,
+            "sha256": "093fcf27cfee9fb6e501b51c19c12f197e1e62977066aa76f4d36a1375acd358"
+          },
+          "default-form-hero.png": {
+            "bytes": 121260,
+            "sha256": "3802b9fc428b5154efa62b79a3e49cf4681524b3f10342bc56843886bb0deb06"
+          },
+          "default-form-plan.png": {
+            "bytes": 232666,
+            "sha256": "76b1dacaf5c1feaddd4f751f7e9f2ee4e5ce7c68299f257a93ec8159a9a9fa0a"
+          },
+          "default-form-settings-bottom.png": {
+            "bytes": 238366,
+            "sha256": "c54f11fff5634badc6d17619d811196aa3a3b1aecaa1a68da828e64f9ba29dba"
+          },
+          "default-form-settings.png": {
+            "bytes": 230803,
+            "sha256": "a603d8b0297be77c4f40787befaa899cba3a25c1513d3adc1c023b633a10938b"
+          },
+          "default-form-team.png": {
+            "bytes": 121752,
+            "sha256": "298b2a130b801f9bb5a023edeb9562339f8b1e3fa39e650979cd5cf53cfa80ce"
+          },
+          "default-help-items.png": {
+            "bytes": 91467,
+            "sha256": "a8117f37dddcc50d197988e935eaf31a2de41f7a60ad643eaaa3b9a6238921cb"
+          },
+          "default-help-world.png": {
+            "bytes": 84737,
+            "sha256": "3ecc1c7635cb2f5edf8032e387879ab1deece607c3d1793ed57f3a3434cf1d6d"
+          },
+          "default-home-empty.png": {
+            "bytes": 1774179,
+            "sha256": "eb12a58e70450f873fb13b617ae3103f73cee2563fbf9b6145d490d9fdc5a302"
+          },
+          "default-home.png": {
+            "bytes": 1764609,
+            "sha256": "f807c67403beb73688b2ce27b82d83f9d79d12ec3d3a0485b260a57db064eb6e"
+          },
+          "default-motion-area-40.png": {
+            "bytes": 949813,
+            "sha256": "18191906801edf3ecf5416936ae3fbdc358cf844b72c12f5050617ff500928d5"
+          },
+          "default-motion-area-41.png": {
+            "bytes": 951148,
+            "sha256": "7c47ee65c313450eb8ce68779e744c28eb2bd56db3c33dbb1e23172c108aee7e"
+          },
+          "default-motion-area-5.png": {
+            "bytes": 657195,
+            "sha256": "b45c1dfbe269d76995c62044fdcd6ef749379a6a36ccc642200c076e26c92e8a"
+          },
+          "default-motion-area-55.png": {
+            "bytes": 956266,
+            "sha256": "74fedc7c294b1f6ed95657e84447ad000e90c9927ba0e5f9c5b9ca0b4fe57d8c"
+          },
+          "default-motion-area-6.png": {
+            "bytes": 689184,
+            "sha256": "f1bcdca3c56de87e9fd7e5c15b37b86d9f3311e8583cdd408eef13e015443e50"
+          },
+          "default-motion-world-40.png": {
+            "bytes": 973250,
+            "sha256": "175c9d68d70828948bc258c05cf6f5492e81076e99a19303f2b9bd9518f25421"
+          },
+          "default-motion-world-41.png": {
+            "bytes": 973201,
+            "sha256": "1834c295c8b658524c39d22637cd90cf5d65a29b3e5790f1c84e183aa5c3c967"
+          },
+          "default-motion-world-5.png": {
+            "bytes": 567203,
+            "sha256": "850680f453719acf933038c18acb25e2fee44c27e91fa39ad63a1abb082e0941"
+          },
+          "default-motion-world-55.png": {
+            "bytes": 976243,
+            "sha256": "4628bf6023771463576d053fd889371637291b96aa2daeef39615afce1cc04ea"
+          },
+          "default-motion-world-6.png": {
+            "bytes": 592599,
+            "sha256": "508cef11417bd50912f66279759bf40b86cfeadbef5f0edee2cb5a063c35b1d0"
+          },
+          "default-pinch.png": {
+            "bytes": 992872,
+            "sha256": "1f8d7c6b17d41bbf7b4369d9d2bc642b3f2ee6913370c4744c6b65df3f98f645"
+          },
+          "default-plan-submit.png": {
+            "bytes": 114907,
+            "sha256": "84f390e204007904b0638f6c7fc715e1df7136ec12dbee8fd16a9311091a9348"
+          },
+          "default-purchase.png": {
+            "bytes": 146303,
+            "sha256": "7a638d9fc94cd3b558350ed1db21aaa7b8e7038928c2d9f3ccefe03a7f9ca121"
+          },
+          "default-shop.png": {
+            "bytes": 59443,
+            "sha256": "009e849f95cecf3aa49c1e5d8a68764192bab81d8b3da9c67f0e1e9d70aa49c1"
+          },
+          "default-tap-area.png": {
+            "bytes": 345887,
+            "sha256": "77c9a6034eac03f88be523cf057b6dde15f3d907c580120e187dadf0f07663e1"
+          },
+          "default-tap-inactive.png": {
+            "bytes": 361025,
+            "sha256": "0de1c3ce89d87d40f152995cc53365c8bb2804b0a4d6accdc15ed22ecc6fc2d9"
+          },
+          "default-tap-world.png": {
+            "bytes": 406896,
+            "sha256": "fb20f725ca1741cba5beb7302e6e5849c1c890bef2a133a1c9e41f3a075d357d"
+          },
+          "default-team-large-bottom.png": {
+            "bytes": 58688,
+            "sha256": "6f160e3c46a59c46b2ea6e3e0d63a341234984ffd463e50ec71ab442f6081d29"
+          },
+          "default-team-large.png": {
+            "bytes": 56566,
+            "sha256": "d949e9c2e91f8fd45d3200027fd0a8634cb2630882a1527bcbaf512a70b47d2f"
+          },
+          "default-team.png": {
+            "bytes": 47836,
+            "sha256": "47f6bda7a765e57868a6e2e22b69d7cab59f63358ea717ea7685ee3b8b665e29"
+          },
+          "default-touch-item.png": {
+            "bytes": 95103,
+            "sha256": "6de45c41e02f4aa9bfffbc988fcccee6aae5ed90064d9ae91624f94bb19015e8"
+          },
+          "default-world-teamless.png": {
+            "bytes": 511650,
+            "sha256": "d2a4617d5be750c2bee1680c86f668e1f11dbd4724fd0032b65160ef4c1e9cd9"
+          },
+          "default-world.png": {
+            "bytes": 510827,
+            "sha256": "3f55b1c45eea7688e1c0671149f5d35d46c86fd3313c29cbdfe338123a9c02c1"
+          },
+          "modern-area.png": {
+            "bytes": 591097,
+            "sha256": "b7d7e2af958d4d75a3d173787cb88b7b8eae9e9f586ce95371e1d9ecd9e9a07a"
+          },
+          "modern-castle.png": {
+            "bytes": 36247,
+            "sha256": "4d338a393c72b8623a20d25bb69a1e1de6a3c5e245b8678cbd9263a4933f0f7d"
+          },
+          "modern-competition.png": {
+            "bytes": 129346,
+            "sha256": "c52b4560eb3cd423dc96f3bd868bc10e113f1de6c1abd4344e7244857b3005d8"
+          },
+          "modern-form-cash.png": {
+            "bytes": 122009,
+            "sha256": "3be937cdf1bc8d57cc7abe7ae5279bc5a079b578baeb9b3ff3dcb05002c7bf4b"
+          },
+          "modern-form-force.png": {
+            "bytes": 122018,
+            "sha256": "093fcf27cfee9fb6e501b51c19c12f197e1e62977066aa76f4d36a1375acd358"
+          },
+          "modern-form-hero.png": {
+            "bytes": 121260,
+            "sha256": "3802b9fc428b5154efa62b79a3e49cf4681524b3f10342bc56843886bb0deb06"
+          },
+          "modern-form-plan.png": {
+            "bytes": 232666,
+            "sha256": "76b1dacaf5c1feaddd4f751f7e9f2ee4e5ce7c68299f257a93ec8159a9a9fa0a"
+          },
+          "modern-form-settings-bottom.png": {
+            "bytes": 238366,
+            "sha256": "c54f11fff5634badc6d17619d811196aa3a3b1aecaa1a68da828e64f9ba29dba"
+          },
+          "modern-form-settings.png": {
+            "bytes": 230803,
+            "sha256": "a603d8b0297be77c4f40787befaa899cba3a25c1513d3adc1c023b633a10938b"
+          },
+          "modern-form-team.png": {
+            "bytes": 121752,
+            "sha256": "298b2a130b801f9bb5a023edeb9562339f8b1e3fa39e650979cd5cf53cfa80ce"
+          },
+          "modern-help-items.png": {
+            "bytes": 91655,
+            "sha256": "fe97e2145cee47399b0dd3c14129a5a007cdf624de50caa69f82c8f0b75de3e7"
+          },
+          "modern-help-world.png": {
+            "bytes": 84828,
+            "sha256": "e97ce22a28ca907ad529e4d5caf5eee640e33d9e7517d8e10a763b4aac40e2c5"
+          },
+          "modern-home-empty.png": {
+            "bytes": 1774179,
+            "sha256": "eb12a58e70450f873fb13b617ae3103f73cee2563fbf9b6145d490d9fdc5a302"
+          },
+          "modern-home.png": {
+            "bytes": 1764609,
+            "sha256": "f807c67403beb73688b2ce27b82d83f9d79d12ec3d3a0485b260a57db064eb6e"
+          },
+          "modern-motion-area-40.png": {
+            "bytes": 949813,
+            "sha256": "18191906801edf3ecf5416936ae3fbdc358cf844b72c12f5050617ff500928d5"
+          },
+          "modern-motion-area-41.png": {
+            "bytes": 951148,
+            "sha256": "7c47ee65c313450eb8ce68779e744c28eb2bd56db3c33dbb1e23172c108aee7e"
+          },
+          "modern-motion-area-5.png": {
+            "bytes": 657195,
+            "sha256": "b45c1dfbe269d76995c62044fdcd6ef749379a6a36ccc642200c076e26c92e8a"
+          },
+          "modern-motion-area-55.png": {
+            "bytes": 956266,
+            "sha256": "74fedc7c294b1f6ed95657e84447ad000e90c9927ba0e5f9c5b9ca0b4fe57d8c"
+          },
+          "modern-motion-area-6.png": {
+            "bytes": 689184,
+            "sha256": "f1bcdca3c56de87e9fd7e5c15b37b86d9f3311e8583cdd408eef13e015443e50"
+          },
+          "modern-motion-world-40.png": {
+            "bytes": 973250,
+            "sha256": "175c9d68d70828948bc258c05cf6f5492e81076e99a19303f2b9bd9518f25421"
+          },
+          "modern-motion-world-41.png": {
+            "bytes": 973201,
+            "sha256": "1834c295c8b658524c39d22637cd90cf5d65a29b3e5790f1c84e183aa5c3c967"
+          },
+          "modern-motion-world-5.png": {
+            "bytes": 567203,
+            "sha256": "850680f453719acf933038c18acb25e2fee44c27e91fa39ad63a1abb082e0941"
+          },
+          "modern-motion-world-55.png": {
+            "bytes": 976243,
+            "sha256": "4628bf6023771463576d053fd889371637291b96aa2daeef39615afce1cc04ea"
+          },
+          "modern-motion-world-6.png": {
+            "bytes": 592599,
+            "sha256": "508cef11417bd50912f66279759bf40b86cfeadbef5f0edee2cb5a063c35b1d0"
+          },
+          "modern-pinch.png": {
+            "bytes": 995985,
+            "sha256": "135e4cf0c327ec3ea1c5ef858eb9a4a9e0fc5338598b6328be1ba1ce333c7acd"
+          },
+          "modern-plan-submit.png": {
+            "bytes": 114907,
+            "sha256": "84f390e204007904b0638f6c7fc715e1df7136ec12dbee8fd16a9311091a9348"
+          },
+          "modern-purchase.png": {
+            "bytes": 146303,
+            "sha256": "7a638d9fc94cd3b558350ed1db21aaa7b8e7038928c2d9f3ccefe03a7f9ca121"
+          },
+          "modern-shop.png": {
+            "bytes": 62555,
+            "sha256": "53cea321e8b07c2ed77809a85a3dd154a195dbdfe10c89605c1b85beea743152"
+          },
+          "modern-tap-area.png": {
+            "bytes": 348767,
+            "sha256": "51bed895adcd6bd4bf74963f5abca93a8adba010ed4b3e3c59d547c38598b700"
+          },
+          "modern-tap-inactive.png": {
+            "bytes": 363992,
+            "sha256": "ac52a59041fa3758df778a06ae80e74463bf04053f441094d997e60b25452667"
+          },
+          "modern-tap-world.png": {
+            "bytes": 409995,
+            "sha256": "a367a3083c6777ea2e138fabfa7595cb1aa2b1ca7de643f17c526d6fbe7ca264"
+          },
+          "modern-team-large-bottom.png": {
+            "bytes": 61776,
+            "sha256": "3940f4afc55bb6d5522cbe1d02def644cbdf2e1930725f9693cb8b502a304a9e"
+          },
+          "modern-team-large.png": {
+            "bytes": 59505,
+            "sha256": "0fe72220857a227732e52a4d985fd51d31c713181638b19bff55042530387d27"
+          },
+          "modern-team.png": {
+            "bytes": 50854,
+            "sha256": "b9c28a079cb627aa02299eb5f7cfa3e9729b019869fa10d8a4b5befb4a234fd2"
+          },
+          "modern-touch-item.png": {
+            "bytes": 95306,
+            "sha256": "048219354a0b3aee0e88cd399d17206f5952956959b400b3aac5bec836c851d1"
+          },
+          "modern-world-teamless.png": {
+            "bytes": 514369,
+            "sha256": "4b2a9f2c862f8d8918a2dc5a801029c5434c139d9722dd019d201d68c8c9cce6"
+          },
+          "modern-world.png": {
+            "bytes": 513641,
+            "sha256": "0558232ff118c80cb2058daf5f5d273c7cf901c98f6ba1dbd7adee2f998861b6"
+          }
+        }
+      },
+      "1920x1080": {
+        "screens_and_motion_frames": 74,
+        "software_renderer": true,
+        "themes": [
+          "default",
+          "Celes (modern)"
+        ],
+        "log": {
+          "bytes": 412,
+          "sha256": "2f0cd4c4cf5d3949ecc1fca58d89a973e0e0c22cf21e04a7762fc2cb69bc51ac"
+        },
+        "geometry": {
+          "bytes": 9050,
+          "sha256": "4dba41560ed93084a90319f3a2d4a7427c3644ec31318999aabcba385d766441"
+        },
+        "images": {
+          "default-area.png": {
+            "bytes": 2115235,
+            "sha256": "232089f5b8e9cc6a887b7bd33480721a56d718b26f526551f4a4b102d1aa63da"
+          },
+          "default-castle.png": {
+            "bytes": 43899,
+            "sha256": "9835fa23bc4980deb21df1915fe3a5edc13819a972b12aeda0a065da4fe92517"
+          },
+          "default-competition.png": {
+            "bytes": 184735,
+            "sha256": "920ed45ee99f28b538da660356f58dcfc162d4e6364dff12188d13113e050bbd"
+          },
+          "default-form-cash.png": {
+            "bytes": 165270,
+            "sha256": "0b28d95a3c2f59528fabf4cdb433ca402889359030bcd18138039474313edef5"
+          },
+          "default-form-force.png": {
+            "bytes": 165334,
+            "sha256": "913df4dab53eb76108c66af4c8db1c51c726a7ca8cb098350ffa62885e9dac75"
+          },
+          "default-form-hero.png": {
+            "bytes": 164577,
+            "sha256": "d65d8c2b39cac3d8705128663f116d5a584636bc37a5f3b409dfa7f3ecfb10cb"
+          },
+          "default-form-plan.png": {
+            "bytes": 567791,
+            "sha256": "130be52566a71003c7bd16a49b2eefd4e18cd49e4f1dc79910068e117a56aade"
+          },
+          "default-form-settings-bottom.png": {
+            "bytes": 454100,
+            "sha256": "6d3a94c0912ea76f0f10ab8e8ea36d988130dce5ecd527341fba98c1c0bf5071"
+          },
+          "default-form-settings.png": {
+            "bytes": 454097,
+            "sha256": "877efb80e521316d684b6d86c4a9bf60f3595b6481f897955871086f8c6c6094"
+          },
+          "default-form-team.png": {
+            "bytes": 165199,
+            "sha256": "aba2c58c3a176cd73e0d6df85ff0a15038be424abcd3dc5e8e6d97c07d5125fb"
+          },
+          "default-help-items.png": {
+            "bytes": 250017,
+            "sha256": "503ae5c4a35c15c7b48665ed2ad94251e86c20de6b54520ff38536fce4c7fae4"
+          },
+          "default-help-world.png": {
+            "bytes": 242985,
+            "sha256": "34c0b605934e75b413ced4e6be3d2afb2d5be6d41573ce0fd30141f205fad845"
+          },
+          "default-home-empty.png": {
+            "bytes": 3780459,
+            "sha256": "bab6ce59c45428f558d257a85272638b841459bb826da1735cc73cb7a7141ac1"
+          },
+          "default-home.png": {
+            "bytes": 3763482,
+            "sha256": "7c053b897d7e2f259bb3cda69566ee00184be6a9334a4f7914bb3d44bb05ec06"
+          },
+          "default-motion-area-40.png": {
+            "bytes": 1449821,
+            "sha256": "0cfac948c9c04ea34672430b3257eb63e3a4f2847062ee34edc1d76380cfc10d"
+          },
+          "default-motion-area-41.png": {
+            "bytes": 1450950,
+            "sha256": "a854933e7bd48c452940e74eb94e6acaba713810b09d1b285aa019ba2e92ffda"
+          },
+          "default-motion-area-5.png": {
+            "bytes": 2453679,
+            "sha256": "d47d6e62ccfad76acb161fab676bd874c9a52a79bf2b84e9782f46ffa010fcd9"
+          },
+          "default-motion-area-55.png": {
+            "bytes": 1467020,
+            "sha256": "b0a9ef000d4ed725b7aa55bb5baa9170abc285da9f5188148f19fcb9aa89de91"
+          },
+          "default-motion-area-6.png": {
+            "bytes": 2571619,
+            "sha256": "6f492aa5449acbc6dd475eef18c0b4de36e1beca5dea179f2292e9b360c20992"
+          },
+          "default-motion-world-40.png": {
+            "bytes": 1425004,
+            "sha256": "c48f2d34a48dad3c0db0c6c4b8799361846c506053d7e2ef9b56d1cbac736bad"
+          },
+          "default-motion-world-41.png": {
+            "bytes": 1424641,
+            "sha256": "7bb171603c0315b90103bffd97702ee23bf38abc44c67a8458da5b03e5075eff"
+          },
+          "default-motion-world-5.png": {
+            "bytes": 2047090,
+            "sha256": "3a1abd1661e60b8417fdaea3443067715d2bd8cadc8a417686bc16946c33783d"
+          },
+          "default-motion-world-55.png": {
+            "bytes": 1429230,
+            "sha256": "92b9d59f4ecf7e2acb7ce38fa981d6bfbcd37e445c6e3cd641942cdb206dc764"
+          },
+          "default-motion-world-6.png": {
+            "bytes": 2134057,
+            "sha256": "af21508c71677e13e4d1407e400ae0b67aed69745193d152046fe75317f16a8c"
+          },
+          "default-pinch.png": {
+            "bytes": 2055716,
+            "sha256": "e1e4cc5f17c5c6b1fe4fbf09b969364a823ac8c699418747de4082e028fea506"
+          },
+          "default-plan-submit.png": {
+            "bytes": 157439,
+            "sha256": "91c30245a07464e1afd6744c155553e9e09a8cac882377deed927d87d6545873"
+          },
+          "default-purchase.png": {
+            "bytes": 191011,
+            "sha256": "01620e66248236f949eae6d3a5ae960e622b9872bb29e4f2891793695e59be66"
+          },
+          "default-shop.png": {
+            "bytes": 71467,
+            "sha256": "8d818bb703bd182701154a434d4ef5623674432b28e287b06bb83ba2eb4f9165"
+          },
+          "default-tap-area.png": {
+            "bytes": 1621000,
+            "sha256": "626dee06334b4440d14b746a2fcc2d1bf9bda8ac8200433f36355b6921939bcd"
+          },
+          "default-tap-inactive.png": {
+            "bytes": 1493290,
+            "sha256": "eced97e73237ac8daa882707238360872d8e7f216308215ac6ec9b35947f27c3"
+          },
+          "default-tap-world.png": {
+            "bytes": 1581226,
+            "sha256": "8353bc5a61510ef381bb4f9d659b77e43ba258f22bc8b86b52573523dea83973"
+          },
+          "default-team-large-bottom.png": {
+            "bytes": 107752,
+            "sha256": "0d907be466167578f3a11bae13c096ae6685128b5d4a236fd0c088989457d714"
+          },
+          "default-team-large.png": {
+            "bytes": 105268,
+            "sha256": "e0955b7aa35b1912dd31612efc7e33d08d721f3557f28b337c4a1f9b79adae88"
+          },
+          "default-team.png": {
+            "bytes": 59495,
+            "sha256": "964f2decbc99045397d47962799ce5b2d1658ce996647e04edf57b15e4a36838"
+          },
+          "default-touch-item.png": {
+            "bytes": 249600,
+            "sha256": "fee8f5abe1ab2c29fdd26ea7e32de6f10241f3dca50f3180545fadc600f50af0"
+          },
+          "default-world-teamless.png": {
+            "bytes": 1783368,
+            "sha256": "ea3f0afdb022cf3c5fef22279b757d4f20fff54b5322370675e658b2184c228b"
+          },
+          "default-world.png": {
+            "bytes": 1782639,
+            "sha256": "0a3f1c199895136d4bd116361b24202da76676aeb7b800f8cf3dee8ea3b00f01"
+          },
+          "modern-area.png": {
+            "bytes": 2245023,
+            "sha256": "23e776a4535dcf01838221bfd765ddc6964ede533a081d6c08740f4a3327f7f6"
+          },
+          "modern-castle.png": {
+            "bytes": 162962,
+            "sha256": "2d1a779b0379ddf0e3dd7192c703b4a87c0f6b4cfd170c8ca5ce7334bf230c2c"
+          },
+          "modern-competition.png": {
+            "bytes": 184735,
+            "sha256": "920ed45ee99f28b538da660356f58dcfc162d4e6364dff12188d13113e050bbd"
+          },
+          "modern-form-cash.png": {
+            "bytes": 165270,
+            "sha256": "0b28d95a3c2f59528fabf4cdb433ca402889359030bcd18138039474313edef5"
+          },
+          "modern-form-force.png": {
+            "bytes": 165334,
+            "sha256": "913df4dab53eb76108c66af4c8db1c51c726a7ca8cb098350ffa62885e9dac75"
+          },
+          "modern-form-hero.png": {
+            "bytes": 164577,
+            "sha256": "d65d8c2b39cac3d8705128663f116d5a584636bc37a5f3b409dfa7f3ecfb10cb"
+          },
+          "modern-form-plan.png": {
+            "bytes": 567791,
+            "sha256": "130be52566a71003c7bd16a49b2eefd4e18cd49e4f1dc79910068e117a56aade"
+          },
+          "modern-form-settings-bottom.png": {
+            "bytes": 454100,
+            "sha256": "6d3a94c0912ea76f0f10ab8e8ea36d988130dce5ecd527341fba98c1c0bf5071"
+          },
+          "modern-form-settings.png": {
+            "bytes": 454097,
+            "sha256": "877efb80e521316d684b6d86c4a9bf60f3595b6481f897955871086f8c6c6094"
+          },
+          "modern-form-team.png": {
+            "bytes": 165199,
+            "sha256": "aba2c58c3a176cd73e0d6df85ff0a15038be424abcd3dc5e8e6d97c07d5125fb"
+          },
+          "modern-help-items.png": {
+            "bytes": 250517,
+            "sha256": "cf1ab060023277b6e7d6df10d526658d35d84981ab3c5cfd8e10218b512c56b9"
+          },
+          "modern-help-world.png": {
+            "bytes": 243523,
+            "sha256": "24d36421f8a951fd9c4d1c7abce6267add153aa2362d340523d6aa80e8bd425f"
+          },
+          "modern-home-empty.png": {
+            "bytes": 3780459,
+            "sha256": "bab6ce59c45428f558d257a85272638b841459bb826da1735cc73cb7a7141ac1"
+          },
+          "modern-home.png": {
+            "bytes": 3763482,
+            "sha256": "7c053b897d7e2f259bb3cda69566ee00184be6a9334a4f7914bb3d44bb05ec06"
+          },
+          "modern-motion-area-40.png": {
+            "bytes": 1449821,
+            "sha256": "0cfac948c9c04ea34672430b3257eb63e3a4f2847062ee34edc1d76380cfc10d"
+          },
+          "modern-motion-area-41.png": {
+            "bytes": 1450950,
+            "sha256": "a854933e7bd48c452940e74eb94e6acaba713810b09d1b285aa019ba2e92ffda"
+          },
+          "modern-motion-area-5.png": {
+            "bytes": 2453679,
+            "sha256": "d47d6e62ccfad76acb161fab676bd874c9a52a79bf2b84e9782f46ffa010fcd9"
+          },
+          "modern-motion-area-55.png": {
+            "bytes": 1467020,
+            "sha256": "b0a9ef000d4ed725b7aa55bb5baa9170abc285da9f5188148f19fcb9aa89de91"
+          },
+          "modern-motion-area-6.png": {
+            "bytes": 2571619,
+            "sha256": "6f492aa5449acbc6dd475eef18c0b4de36e1beca5dea179f2292e9b360c20992"
+          },
+          "modern-motion-world-40.png": {
+            "bytes": 1425004,
+            "sha256": "c48f2d34a48dad3c0db0c6c4b8799361846c506053d7e2ef9b56d1cbac736bad"
+          },
+          "modern-motion-world-41.png": {
+            "bytes": 1424641,
+            "sha256": "7bb171603c0315b90103bffd97702ee23bf38abc44c67a8458da5b03e5075eff"
+          },
+          "modern-motion-world-5.png": {
+            "bytes": 2047090,
+            "sha256": "3a1abd1661e60b8417fdaea3443067715d2bd8cadc8a417686bc16946c33783d"
+          },
+          "modern-motion-world-55.png": {
+            "bytes": 1429230,
+            "sha256": "92b9d59f4ecf7e2acb7ce38fa981d6bfbcd37e445c6e3cd641942cdb206dc764"
+          },
+          "modern-motion-world-6.png": {
+            "bytes": 2134057,
+            "sha256": "af21508c71677e13e4d1407e400ae0b67aed69745193d152046fe75317f16a8c"
+          },
+          "modern-pinch.png": {
+            "bytes": 2186491,
+            "sha256": "74fd48b05c6711e3a7385352a1c0301586bb1190b72e2db88304ca414feecd1c"
+          },
+          "modern-plan-submit.png": {
+            "bytes": 157439,
+            "sha256": "91c30245a07464e1afd6744c155553e9e09a8cac882377deed927d87d6545873"
+          },
+          "modern-purchase.png": {
+            "bytes": 191011,
+            "sha256": "01620e66248236f949eae6d3a5ae960e622b9872bb29e4f2891793695e59be66"
+          },
+          "modern-shop.png": {
+            "bytes": 190229,
+            "sha256": "e8c2639769827fbbc9b65a897c2a8ae1eac68a38e3fbf1d50bf28d0184e9ba9c"
+          },
+          "modern-tap-area.png": {
+            "bytes": 1747659,
+            "sha256": "a3c044345463971e8f7740bca1ab34034ea803f54e8995effd25e8bdc7c0e443"
+          },
+          "modern-tap-inactive.png": {
+            "bytes": 1620168,
+            "sha256": "37058fcb5b716297951205273ef91ac9e28ba6f042f9af5c9282f19f13076503"
+          },
+          "modern-tap-world.png": {
+            "bytes": 1707752,
+            "sha256": "e50e8f171cdf08e69b8dbb6f53449c0495ab3afd62a7eacd995c31d677ff7eb0"
+          },
+          "modern-team-large-bottom.png": {
+            "bytes": 225732,
+            "sha256": "a4273b73db57bea48646e0121e9c26ac46dad5d77c7ab2e6669fd1374d61b532"
+          },
+          "modern-team-large.png": {
+            "bytes": 222946,
+            "sha256": "b43b8d8ee9d2d2ce7a1de75064da9836aa44e516a0c426f562ec4aff454dd036"
+          },
+          "modern-team.png": {
+            "bytes": 177987,
+            "sha256": "9aa7a6641cf63869091bd319d9befaa93cd44b13fe5e3387167d395c2e0ff360"
+          },
+          "modern-touch-item.png": {
+            "bytes": 250091,
+            "sha256": "5df65bd4500886e15af69290f93de5b9f4b11a4d76cb9da52c1ec9c97ac9ea14"
+          },
+          "modern-world-teamless.png": {
+            "bytes": 1911468,
+            "sha256": "fae6da2f944848ea1793564f3cd8d96b48f9ca6fe89f38778cb1d72d50a0c7b6"
+          },
+          "modern-world.png": {
+            "bytes": 1910942,
+            "sha256": "452afbc8c934190af1f8fb161aaf7a392d4400eeaf3f82ba62948d6b42adb1d2"
+          }
+        }
+      }
+    },
+    "responses": "Synthetic authenticated response fixtures; no production database",
+    "controls": "Real GUI2 and synthetic SDL touch. All128Area/64Castle centre hits checked; active/inactive taps assert selection and expanded details; pinch/lift/pan, refresh during motion, form settings/reviewed single purchase, ten-member roster and bounded selection memory checked. Home destinations are callback fixtures, not full end-to-end navigation.",
+    "profile": "Actual zero/117 collection, long name, wallet refresh, equal padding, 11 action callbacks and hold checks in both resolutions/themes.",
+    "selection_stress": "512 selections per theme/resolution; warmed peak RSS unchanged in both resolutions/themes in final release runs.",
+    "consecutive_motion_evidence": [
+      {
+        "resolution": "1280x720",
+        "theme": "default",
+        "scene": "world",
+        "steps": [
+          5,
+          6
+        ],
+        "changed_pixel_bytes": 769346,
+        "frames": [
+          "build/audit-court-mobile-1192627/render-final-1280x720/default-motion-world-5.bmp",
+          "build/audit-court-mobile-1192627/render-final-1280x720/default-motion-world-6.bmp"
+        ],
+        "sha256": [
+          "3d6227c96637e0f1fc2cf0ba5df732d2dec198c9b92d392282395ecb67f87e53",
+          "6dff59c66e8707ee1e0680994397575c1d734cf26f2d05f7f592098513cef723"
+        ]
+      },
+      {
+        "resolution": "1280x720",
+        "theme": "default",
+        "scene": "world",
+        "steps": [
+          40,
+          41
+        ],
+        "changed_pixel_bytes": 1261857,
+        "frames": [
+          "build/audit-court-mobile-1192627/render-final-1280x720/default-motion-world-40.bmp",
+          "build/audit-court-mobile-1192627/render-final-1280x720/default-motion-world-41.bmp"
+        ],
+        "sha256": [
+          "0d028fed819fcb19ffb732311bd08c1ca9b646946e6a4660fbaa3f8ff7e9e352",
+          "fad76cff5d8a5a659efde97117579da3e7cef833c443b8ec57ef13391cee5a1a"
+        ]
+      },
+      {
+        "resolution": "1280x720",
+        "theme": "default",
+        "scene": "area",
+        "steps": [
+          5,
+          6
+        ],
+        "changed_pixel_bytes": 903111,
+        "frames": [
+          "build/audit-court-mobile-1192627/render-final-1280x720/default-motion-area-5.bmp",
+          "build/audit-court-mobile-1192627/render-final-1280x720/default-motion-area-6.bmp"
+        ],
+        "sha256": [
+          "3c514ef78265511dc2cfab2a42782302b8ee4571f775f558bad5a7d065e79fe6",
+          "46bec4238195765ff5db163c0cc478851484169217e3061e4c4327be9c75ab6c"
+        ]
+      },
+      {
+        "resolution": "1280x720",
+        "theme": "default",
+        "scene": "area",
+        "steps": [
+          40,
+          41
+        ],
+        "changed_pixel_bytes": 1270519,
+        "frames": [
+          "build/audit-court-mobile-1192627/render-final-1280x720/default-motion-area-40.bmp",
+          "build/audit-court-mobile-1192627/render-final-1280x720/default-motion-area-41.bmp"
+        ],
+        "sha256": [
+          "5356a9d631dd79b32d8c9504db2b832323f97fbcd075769f3c5db3d5858c3374",
+          "59e5b9eb71930d5d08bd289a46ce734f658b44e2f76879a0f8f7aec718648c05"
+        ]
+      },
+      {
+        "resolution": "1280x720",
+        "theme": "modern",
+        "scene": "world",
+        "steps": [
+          5,
+          6
+        ],
+        "changed_pixel_bytes": 769346,
+        "frames": [
+          "build/audit-court-mobile-1192627/render-final-1280x720/modern-motion-world-5.bmp",
+          "build/audit-court-mobile-1192627/render-final-1280x720/modern-motion-world-6.bmp"
+        ],
+        "sha256": [
+          "3d6227c96637e0f1fc2cf0ba5df732d2dec198c9b92d392282395ecb67f87e53",
+          "6dff59c66e8707ee1e0680994397575c1d734cf26f2d05f7f592098513cef723"
+        ]
+      },
+      {
+        "resolution": "1280x720",
+        "theme": "modern",
+        "scene": "world",
+        "steps": [
+          40,
+          41
+        ],
+        "changed_pixel_bytes": 1261857,
+        "frames": [
+          "build/audit-court-mobile-1192627/render-final-1280x720/modern-motion-world-40.bmp",
+          "build/audit-court-mobile-1192627/render-final-1280x720/modern-motion-world-41.bmp"
+        ],
+        "sha256": [
+          "0d028fed819fcb19ffb732311bd08c1ca9b646946e6a4660fbaa3f8ff7e9e352",
+          "fad76cff5d8a5a659efde97117579da3e7cef833c443b8ec57ef13391cee5a1a"
+        ]
+      },
+      {
+        "resolution": "1280x720",
+        "theme": "modern",
+        "scene": "area",
+        "steps": [
+          5,
+          6
+        ],
+        "changed_pixel_bytes": 903111,
+        "frames": [
+          "build/audit-court-mobile-1192627/render-final-1280x720/modern-motion-area-5.bmp",
+          "build/audit-court-mobile-1192627/render-final-1280x720/modern-motion-area-6.bmp"
+        ],
+        "sha256": [
+          "3c514ef78265511dc2cfab2a42782302b8ee4571f775f558bad5a7d065e79fe6",
+          "46bec4238195765ff5db163c0cc478851484169217e3061e4c4327be9c75ab6c"
+        ]
+      },
+      {
+        "resolution": "1280x720",
+        "theme": "modern",
+        "scene": "area",
+        "steps": [
+          40,
+          41
+        ],
+        "changed_pixel_bytes": 1270519,
+        "frames": [
+          "build/audit-court-mobile-1192627/render-final-1280x720/modern-motion-area-40.bmp",
+          "build/audit-court-mobile-1192627/render-final-1280x720/modern-motion-area-41.bmp"
+        ],
+        "sha256": [
+          "5356a9d631dd79b32d8c9504db2b832323f97fbcd075769f3c5db3d5858c3374",
+          "59e5b9eb71930d5d08bd289a46ce734f658b44e2f76879a0f8f7aec718648c05"
+        ]
+      },
+      {
+        "resolution": "1920x1080",
+        "theme": "default",
+        "scene": "world",
+        "steps": [
+          5,
+          6
+        ],
+        "changed_pixel_bytes": 2903815,
+        "frames": [
+          "build/audit-court-mobile-1192627/render-final-1920x1080/default-motion-world-5.bmp",
+          "build/audit-court-mobile-1192627/render-final-1920x1080/default-motion-world-6.bmp"
+        ],
+        "sha256": [
+          "dc97ee8d819eeb0d408d8655880e730fb5419cd6b751faf845026df348c27f79",
+          "cea73d489c3083f65da96a562093801922d68c0e9f2127af505fdc3ee8d328dd"
+        ]
+      },
+      {
+        "resolution": "1920x1080",
+        "theme": "default",
+        "scene": "world",
+        "steps": [
+          40,
+          41
+        ],
+        "changed_pixel_bytes": 3596220,
+        "frames": [
+          "build/audit-court-mobile-1192627/render-final-1920x1080/default-motion-world-40.bmp",
+          "build/audit-court-mobile-1192627/render-final-1920x1080/default-motion-world-41.bmp"
+        ],
+        "sha256": [
+          "7c727edd435a80ddc8f2908b8b3ed407b93185df2fa18cc3b48909db446b32c1",
+          "57dc94dd37fbab3556465fc15220aaace2fc6214df083e8f991d631a0e9e8b6f"
+        ]
+      },
+      {
+        "resolution": "1920x1080",
+        "theme": "default",
+        "scene": "area",
+        "steps": [
+          5,
+          6
+        ],
+        "changed_pixel_bytes": 3417205,
+        "frames": [
+          "build/audit-court-mobile-1192627/render-final-1920x1080/default-motion-area-5.bmp",
+          "build/audit-court-mobile-1192627/render-final-1920x1080/default-motion-area-6.bmp"
+        ],
+        "sha256": [
+          "05e08dbfefef7f026946afa003d5eccd2207595fea2d9eec76a10d35a9958c31",
+          "3d1a706f84aaafb3c46b155009abff65ba8fce6b25bc88907dc70b71c5f653c4"
+        ]
+      },
+      {
+        "resolution": "1920x1080",
+        "theme": "default",
+        "scene": "area",
+        "steps": [
+          40,
+          41
+        ],
+        "changed_pixel_bytes": 3511975,
+        "frames": [
+          "build/audit-court-mobile-1192627/render-final-1920x1080/default-motion-area-40.bmp",
+          "build/audit-court-mobile-1192627/render-final-1920x1080/default-motion-area-41.bmp"
+        ],
+        "sha256": [
+          "aab52da072b2712736b5763e6188d43289b662aa3b747431ae023fdc3f8a55f0",
+          "823d2bb91f2a4621ea818ce6d53a176b59b5c93967b56d2219f44fdaefffc472"
+        ]
+      },
+      {
+        "resolution": "1920x1080",
+        "theme": "modern",
+        "scene": "world",
+        "steps": [
+          5,
+          6
+        ],
+        "changed_pixel_bytes": 2903815,
+        "frames": [
+          "build/audit-court-mobile-1192627/render-final-1920x1080/modern-motion-world-5.bmp",
+          "build/audit-court-mobile-1192627/render-final-1920x1080/modern-motion-world-6.bmp"
+        ],
+        "sha256": [
+          "dc97ee8d819eeb0d408d8655880e730fb5419cd6b751faf845026df348c27f79",
+          "cea73d489c3083f65da96a562093801922d68c0e9f2127af505fdc3ee8d328dd"
+        ]
+      },
+      {
+        "resolution": "1920x1080",
+        "theme": "modern",
+        "scene": "world",
+        "steps": [
+          40,
+          41
+        ],
+        "changed_pixel_bytes": 3596220,
+        "frames": [
+          "build/audit-court-mobile-1192627/render-final-1920x1080/modern-motion-world-40.bmp",
+          "build/audit-court-mobile-1192627/render-final-1920x1080/modern-motion-world-41.bmp"
+        ],
+        "sha256": [
+          "7c727edd435a80ddc8f2908b8b3ed407b93185df2fa18cc3b48909db446b32c1",
+          "57dc94dd37fbab3556465fc15220aaace2fc6214df083e8f991d631a0e9e8b6f"
+        ]
+      },
+      {
+        "resolution": "1920x1080",
+        "theme": "modern",
+        "scene": "area",
+        "steps": [
+          5,
+          6
+        ],
+        "changed_pixel_bytes": 3417205,
+        "frames": [
+          "build/audit-court-mobile-1192627/render-final-1920x1080/modern-motion-area-5.bmp",
+          "build/audit-court-mobile-1192627/render-final-1920x1080/modern-motion-area-6.bmp"
+        ],
+        "sha256": [
+          "05e08dbfefef7f026946afa003d5eccd2207595fea2d9eec76a10d35a9958c31",
+          "3d1a706f84aaafb3c46b155009abff65ba8fce6b25bc88907dc70b71c5f653c4"
+        ]
+      },
+      {
+        "resolution": "1920x1080",
+        "theme": "modern",
+        "scene": "area",
+        "steps": [
+          40,
+          41
+        ],
+        "changed_pixel_bytes": 3511975,
+        "frames": [
+          "build/audit-court-mobile-1192627/render-final-1920x1080/modern-motion-area-40.bmp",
+          "build/audit-court-mobile-1192627/render-final-1920x1080/modern-motion-area-41.bmp"
+        ],
+        "sha256": [
+          "aab52da072b2712736b5763e6188d43289b662aa3b747431ae023fdc3f8a55f0",
+          "823d2bb91f2a4621ea818ce6d53a176b59b5c93967b56d2219f44fdaefffc472"
+        ]
+      }
+    ]
+  },
+  "performance": {
+    "method": {
+      "renderer": "SDL dummy video driver / software renderer; actual native GUI2 engine",
+      "input": "synthetic SDL events queued by native fixture; timestamp immediately after enqueue",
+      "latency_endpoint": "end of custom Viewport::draw, before optional screenshot write; not physical display presentation or touchscreen latency",
+      "interval": "time between successive Viewport::draw endpoints, including event processing/pacing and other native window work",
+      "percentile": "linear interpolation at (n-1)*p",
+      "warmup": "exclude step<8",
+      "capture_steps": [
+        5,
+        6,
+        40,
+        41,
+        55
+      ],
+      "exclude_following_steps": [
+        6,
+        7,
+        41,
+        42,
+        56
+      ],
+      "exclude_actual_previous_capture_row": true,
+      "same_exclusions_for_both_statistics": true,
+      "capture_counts": "These release runs use the final selected-label-last renderer and corrected native Home fixture. Actual home/tap evidence is maintained separately from motion statistics.",
+      "interval_interpretation": "Viewport redraws only when dirty. A gap in step numbers can include a finger-up or snapshot-only pump without a camera change; inter-redraw interval is not necessarily one rendered-frame duration. Separate consecutive-input-step statistics are retained alongside all warm intervals.",
+      "concurrency": "The final 1280 and 1920 release runs executed concurrently with each other and with Android compilation. Measurements reflect that VPS load; neither is an isolated hardware performance benchmark.",
+      "claim": "No 60-FPS, Android, LDPlayer or physical-touchscreen performance acceptance."
+    },
+    "measurements": {
+      "1280x720": {
+        "default-motion-world": {
+          "input_injection_to_viewport_draw_ms": {
+            "samples": 64,
+            "p50": 8.125,
+            "p95": 10.059,
+            "p99": 11.438,
+            "max": 11.601
+          },
+          "viewport_draw_interval_ms": {
+            "samples": 64,
+            "p50": 22.484,
+            "p95": 27.085,
+            "p99": 32.778,
+            "max": 37.453
+          },
+          "consecutive_input_step_draw_interval_ms": {
+            "samples": 63,
+            "p50": 22.431,
+            "p95": 26.235,
+            "p99": 29.093,
+            "max": 30.032
+          },
+          "nonconsecutive_draw_intervals": [
+            {
+              "phase": "default-motion-world",
+              "step": 39,
+              "viewport_frame": 38,
+              "texture_builds": 7,
+              "input_ms": 7.42955,
+              "interval_ms": 37.4532,
+              "cx": 0.498076,
+              "cy": 0.482481,
+              "zoom": 2.75,
+              "previous_draw_step": 37,
+              "step_gap": 2
+            }
+          ],
+          "texture_build_counts": [
+            7
+          ],
+          "pure_camera_texture_allocations": 0
+        },
+        "default-motion-area": {
+          "input_injection_to_viewport_draw_ms": {
+            "samples": 64,
+            "p50": 9.88,
+            "p95": 14.18,
+            "p99": 15.119,
+            "max": 15.345
+          },
+          "viewport_draw_interval_ms": {
+            "samples": 64,
+            "p50": 28.436,
+            "p95": 40.226,
+            "p99": 44.063,
+            "max": 47.922
+          },
+          "consecutive_input_step_draw_interval_ms": {
+            "samples": 63,
+            "p50": 28.29,
+            "p95": 39.71,
+            "p99": 44.124,
+            "max": 47.922
+          },
+          "nonconsecutive_draw_intervals": [
+            {
+              "phase": "default-motion-area",
+              "step": 39,
+              "viewport_frame": 44,
+              "texture_builds": 7,
+              "input_ms": 9.67796,
+              "interval_ms": 41.0219,
+              "cx": 0.498934,
+              "cy": 0.482481,
+              "zoom": 2.75,
+              "previous_draw_step": 37,
+              "step_gap": 2
+            }
+          ],
+          "texture_build_counts": [
+            7
+          ],
+          "pure_camera_texture_allocations": 0
+        },
+        "modern-motion-world": {
+          "input_injection_to_viewport_draw_ms": {
+            "samples": 64,
+            "p50": 8.13,
+            "p95": 10.505,
+            "p99": 14.095,
+            "max": 19.164
+          },
+          "viewport_draw_interval_ms": {
+            "samples": 64,
+            "p50": 22.801,
+            "p95": 30.514,
+            "p99": 39.296,
+            "max": 48.387
+          },
+          "consecutive_input_step_draw_interval_ms": {
+            "samples": 63,
+            "p50": 22.782,
+            "p95": 28.764,
+            "p99": 32.273,
+            "max": 33.957
+          },
+          "nonconsecutive_draw_intervals": [
+            {
+              "phase": "modern-motion-world",
+              "step": 39,
+              "viewport_frame": 38,
+              "texture_builds": 7,
+              "input_ms": 8.09587,
+              "interval_ms": 48.3873,
+              "cx": 0.498076,
+              "cy": 0.482481,
+              "zoom": 2.75,
+              "previous_draw_step": 37,
+              "step_gap": 2
+            }
+          ],
+          "texture_build_counts": [
+            7
+          ],
+          "pure_camera_texture_allocations": 0
+        },
+        "modern-motion-area": {
+          "input_injection_to_viewport_draw_ms": {
+            "samples": 64,
+            "p50": 9.611,
+            "p95": 13.822,
+            "p99": 26.788,
+            "max": 30.301
+          },
+          "viewport_draw_interval_ms": {
+            "samples": 64,
+            "p50": 27.826,
+            "p95": 39.081,
+            "p99": 46.867,
+            "max": 52.642
+          },
+          "consecutive_input_step_draw_interval_ms": {
+            "samples": 63,
+            "p50": 27.608,
+            "p95": 38.797,
+            "p99": 46.959,
+            "max": 52.642
+          },
+          "nonconsecutive_draw_intervals": [
+            {
+              "phase": "modern-motion-area",
+              "step": 39,
+              "viewport_frame": 43,
+              "texture_builds": 7,
+              "input_ms": 8.12414,
+              "interval_ms": 39.0441,
+              "cx": 0.498934,
+              "cy": 0.482481,
+              "zoom": 2.75,
+              "previous_draw_step": 37,
+              "step_gap": 2
+            }
+          ],
+          "texture_build_counts": [
+            7
+          ],
+          "pure_camera_texture_allocations": 0
+        }
+      },
+      "1920x1080": {
+        "default-motion-world": {
+          "input_injection_to_viewport_draw_ms": {
+            "samples": 64,
+            "p50": 10.741,
+            "p95": 13.611,
+            "p99": 14.775,
+            "max": 15.859
+          },
+          "viewport_draw_interval_ms": {
+            "samples": 64,
+            "p50": 59.656,
+            "p95": 77.135,
+            "p99": 83.911,
+            "max": 92.68
+          },
+          "consecutive_input_step_draw_interval_ms": {
+            "samples": 63,
+            "p50": 59.239,
+            "p95": 74.395,
+            "p99": 78.522,
+            "max": 78.761
+          },
+          "nonconsecutive_draw_intervals": [
+            {
+              "phase": "default-motion-world",
+              "step": 39,
+              "viewport_frame": 38,
+              "texture_builds": 7,
+              "input_ms": 12.8518,
+              "interval_ms": 92.68,
+              "cx": 0.499348,
+              "cy": 0.490958,
+              "zoom": 2.75,
+              "previous_draw_step": 37,
+              "step_gap": 2
+            }
+          ],
+          "texture_build_counts": [
+            7
+          ],
+          "pure_camera_texture_allocations": 0
+        },
+        "default-motion-area": {
+          "input_injection_to_viewport_draw_ms": {
+            "samples": 64,
+            "p50": 10.196,
+            "p95": 12.383,
+            "p99": 13.176,
+            "max": 13.276
+          },
+          "viewport_draw_interval_ms": {
+            "samples": 64,
+            "p50": 55.667,
+            "p95": 74.421,
+            "p99": 92.776,
+            "max": 105.839
+          },
+          "consecutive_input_step_draw_interval_ms": {
+            "samples": 63,
+            "p50": 55.439,
+            "p95": 71.663,
+            "p99": 79.175,
+            "max": 85.104
+          },
+          "nonconsecutive_draw_intervals": [
+            {
+              "phase": "default-motion-area",
+              "step": 39,
+              "viewport_frame": 41,
+              "texture_builds": 7,
+              "input_ms": 12.4093,
+              "interval_ms": 105.839,
+              "cx": 0.498707,
+              "cy": 0.490958,
+              "zoom": 2.75,
+              "previous_draw_step": 37,
+              "step_gap": 2
+            }
+          ],
+          "texture_build_counts": [
+            7
+          ],
+          "pure_camera_texture_allocations": 0
+        },
+        "modern-motion-world": {
+          "input_injection_to_viewport_draw_ms": {
+            "samples": 64,
+            "p50": 10.125,
+            "p95": 12.721,
+            "p99": 15.478,
+            "max": 19.328
+          },
+          "viewport_draw_interval_ms": {
+            "samples": 64,
+            "p50": 53.575,
+            "p95": 66.355,
+            "p99": 71.122,
+            "max": 71.849
+          },
+          "consecutive_input_step_draw_interval_ms": {
+            "samples": 63,
+            "p50": 53.192,
+            "p95": 65.941,
+            "p99": 68.183,
+            "max": 70.695
+          },
+          "nonconsecutive_draw_intervals": [
+            {
+              "phase": "modern-motion-world",
+              "step": 39,
+              "viewport_frame": 38,
+              "texture_builds": 7,
+              "input_ms": 8.63375,
+              "interval_ms": 71.8491,
+              "cx": 0.499348,
+              "cy": 0.490958,
+              "zoom": 2.75,
+              "previous_draw_step": 37,
+              "step_gap": 2
+            }
+          ],
+          "texture_build_counts": [
+            7
+          ],
+          "pure_camera_texture_allocations": 0
+        },
+        "modern-motion-area": {
+          "input_injection_to_viewport_draw_ms": {
+            "samples": 64,
+            "p50": 10.422,
+            "p95": 12.825,
+            "p99": 21.199,
+            "max": 21.915
+          },
+          "viewport_draw_interval_ms": {
+            "samples": 64,
+            "p50": 58.23,
+            "p95": 68.084,
+            "p99": 72.479,
+            "max": 74.554
+          },
+          "consecutive_input_step_draw_interval_ms": {
+            "samples": 63,
+            "p50": 58.156,
+            "p95": 66.846,
+            "p99": 69.932,
+            "max": 71.26
+          },
+          "nonconsecutive_draw_intervals": [
+            {
+              "phase": "modern-motion-area",
+              "step": 39,
+              "viewport_frame": 40,
+              "texture_builds": 7,
+              "input_ms": 10.8173,
+              "interval_ms": 74.5544,
+              "cx": 0.498707,
+              "cy": 0.490958,
+              "zoom": 2.75,
+              "previous_draw_step": 37,
+              "step_gap": 2
+            }
+          ],
+          "texture_build_counts": [
+            7
+          ],
+          "pure_camera_texture_allocations": 0
+        }
+      }
+    },
+    "details_file": "/home/uni/Documents/future/wesnoth_client/build/audit-court-mobile-1192627/frame-measurements-release.json",
+    "details_hash": {
+      "bytes": 37539,
+      "sha256": "1a36e858be6cecd3b8724b2e13484ac31d9db2304bfb5995af175660b6b406bf"
+    },
+    "interpretation": "p95 injection-to-viewport draw10-15ms. Software whole-window cadence does not meet60FPS; GPU/LDPlayer and physical presentation latency remain unverified. Raw105.839ms inter-redraw interval spans missing unchanged finger-lift draw37-to39; input-to-draw12.409ms; no camera texture allocation. Final release source measured; earlier pre-label results are retained as a separate sensitivity comparison."
+  },
+  "android": {
+    "status": "passed",
+    "version_code": 1192627,
+    "launcher": "org.wesnoth.offline.OfflineInitActivity",
+    "apk": {
+      "path": "build/android-account-game/app/build/outputs/apk/debug/app-debug.apk",
+      "bytes": 56930266,
+      "sha256": "08725a18e602f9ca13ffa9d0c8d2f674fd8ae68f9ecc4cb0cdbe595caefd0844"
+    },
+    "retained_previous_apk": {
+      "path": "build/android-account-game-before-menu-polish-20261102T013442Z-2cfccbc5a04c4f4db30bb6acfc2f600d/app/build/outputs/apk/debug/app-debug.apk",
+      "bytes": 54036110,
+      "sha256": "0a393ffa14906500a9398a54248e9bfda54cbeb5fd0a16b140b8a3688a1b30a3"
+    },
+    "journal": {
+      "path": "build/.wesnoth-account-game-update-1192627.json",
+      "bytes": 328589,
+      "sha256": "5baae6504937fb529c2d6845d1090be3a883bf3e36b0c5d1223c2010e13862f3"
+    },
+    "original_signer_sha256": "7e346dc5ec05098674444abdb61508270da51de9e57421133340c07834343074",
+    "assets": {
+      "alliance-public-profile.json": {
+        "bytes": 1499,
+        "sha256": "f526e6ad272c0a959522c7b8ecc926dea279f1c7e378b3a53e3b95efb09ee159"
+      },
+      "alliance-ui-manifest.json": {
+        "bytes": 1005,
+        "sha256": "f0721253bae6a55f4bfee0617282a75710125d9cb037abf9879c49229da0a92b"
+      },
+      "alliance-ui/background/citadel-dawn.png": {
+        "bytes": 2739237,
+        "sha256": "ff3271e5ac176041517c42739ab15afbd2d57c69b56fbf290164d793e42b36ce"
+      },
+      "alliance-ui/court/area-overview.png": {
+        "bytes": 1338390,
+        "sha256": "563dcf1a3b9ee18ad64be9ce8de6b346e13b062c7502b795328594ae6372b79a"
+      },
+      "alliance-ui/court/area.png": {
+        "bytes": 3702885,
+        "sha256": "5d30464217f1230c9decba4873f9ec6a83f7338279fc6109fc4e40f37d5d69e1"
+      },
+      "alliance-ui/court/geometry.json": {
+        "bytes": 114903,
+        "sha256": "ed32a8577ddc086c4eaeb9d1d1cc508afda8ef7ee1d1ed385094946e9ddc60c0"
+      },
+      "alliance-ui/court/world-overview.png": {
+        "bytes": 1531015,
+        "sha256": "a462a23d9834ea75bfb7b2d04d10b29c57720c20c7cb3ad56bc48be1894b5fbc"
+      },
+      "alliance-ui/court/world.png": {
+        "bytes": 3361958,
+        "sha256": "63a36826ac5452e8d1fd7612c97b20c5c8a5d565267eb0723b0d09c0da18c9a8"
+      },
+      "alliance-ui/hero/refumee.png": {
+        "bytes": 2092869,
+        "sha256": "cb05c9f0da6d16a068355e2b7fb59201ecf1296ebcafdfdb11763f43f30c04f8"
+      },
+      "alliance-ui/hero/thea.png": {
+        "bytes": 2190871,
+        "sha256": "1e3fe73953569a247e6055780e84125cf3bbe5148546fe449a3c7057d1a3f7f7"
+      },
+      "startup/Akademie Alte.ttf": {
+        "bytes": 61620,
+        "sha256": "3b5c0ac12ccba9a49cdc01348d984d62141309ba23535fa179dd75377e4a79c2"
+      },
+      "startup/Lato-Regular.ttf": {
+        "bytes": 657212,
+        "sha256": "6f6940be0835c3ddec9199e5fc42be4cbc61ebcfd58c623fdf719366253f1780"
+      }
+    },
+    "previous_public_profile_bytes_unchanged": true,
+    "previous_gamedata_manifest_bytes_unchanged": true,
+    "scope": "Independent aapt2/apksigner and exact ZIP bytes; original and previous signer equality; unchanged disposable public trust and OBB manifest. No Windows/LDPlayer execution or Android visual claim."
+  },
+  "offline_build": {
+    "network": "Docker --network none",
+    "python": "3.12.10",
+    "native_steps": 56,
+    "gradle_tasks": 33,
+    "verified_receipt_and_repeat_preparation": true
+  },
+  "preservation": {
+    "status": "passed",
+    "baseline_files": 6373,
+    "unchanged": {
+      "other_client_tracked": 410,
+      "shared_client_sources": 1703,
+      "prior_journals": 25,
+      "prior_build_files": 3714,
+      "server_tracked": 507
+    },
+    "expected_client_changes": [
+      "wesnoth_client/tests/test_android_account_game.py",
+      "wesnoth_client/tests/test_android_account_windows.py",
+      "wesnoth_client/tests/test_court_map.py",
+      "wesnoth_client/tools/Install-AndroidAccountGame.ps1",
+      "wesnoth_client/tools/Rebuild-WindowsAndroidAccountGame.ps1",
+      "wesnoth_client/tools/android-presentation/mobile_home.hpp",
+      "wesnoth_client/tools/build_android_account_game.py",
+      "wesnoth_client/tools/native-account-game/CMakeLists.txt",
+      "wesnoth_client/tools/native-account-game/app.build.gradle",
+      "wesnoth_client/tools/native-account-game/ui-assets.json",
+      "wesnoth_client/AGENTS.md",
+      "wesnoth_client/docs/BASELINE.md",
+      "wesnoth_client/docs/NEXT_TEST.md",
+      "wesnoth_client/docs/WORKFLOW.md"
+    ],
+    "missing": [],
+    "retained_previous_stages": {
+      "android-account-engine": "android-account-engine-before-menu-polish-20261102T013442Z-2cfccbc5a04c4f4db30bb6acfc2f600d",
+      "android-account-game": "android-account-game-before-menu-polish-20261102T013442Z-2cfccbc5a04c4f4db30bb6acfc2f600d"
+    },
+    "interrupted_development_attempt_retained": true,
+    "completed_development_apk_retained": true,
+    "scope": "Baseline taken after initial presentation edits; exact shared/server/stage/journal preservation. Tracked release diff additionally compared to original HEAD. No private runtime/configuration inventory. Four final client checkpoint documents rechecked after documentation update; shared/server/build counts unaffected."
+  },
+  "optional_android_input_companion": {
+    "world_build": {
+      "purpose": "local-map-input-companion",
+      "game_modified": false,
+      "device_test_performed": false,
+      "test_signer_sha256": "572904e7ddbf6c69cac9e0dfa239350a411adc0191f67bb8a56ad20c45fa26d6",
+      "apk_sha256": "ac5b29553ffbed1a3a1cbd1d6e69716a9567b100047a4f2ba05781ab8d244e76",
+      "sources": {
+        "AndroidManifest.xml": "afbf47d75c10f4292bb5e16cef0b64bc49b266a56d582fb61ae0b4ecb7bb06a9",
+        "MapGestureCheck.java": "9f90b9452e7d938797981b508ea8d7b948dc35ff269699d848662223edc24715"
+      }
+    },
+    "area_build": {
+      "purpose": "local-map-input-companion",
+      "game_modified": false,
+      "device_test_performed": false,
+      "test_signer_sha256": "572904e7ddbf6c69cac9e0dfa239350a411adc0191f67bb8a56ad20c45fa26d6",
+      "apk_sha256": "569ebf8733bb56e81a8caf7583341e1abb94f7550bdc5e7ea20f2e20d23300b7",
+      "sources": {
+        "AndroidManifest.xml": "afbf47d75c10f4292bb5e16cef0b64bc49b266a56d582fb61ae0b4ecb7bb06a9",
+        "MapGestureCheck.java": "9f90b9452e7d938797981b508ea8d7b948dc35ff269699d848662223edc24715"
+      }
+    },
+    "same_separate_signer": true,
+    "device_execution": "not run on VPS; optional Windows U3/U4",
+    "semantics": "Foreground package/activity check plus explicit MapIsOpen; not automatic semantic map detection. Synthetic gestures do not establish physical-touch usability."
+  },
+  "artwork": "Both1024px overviews regenerated with Cairo and compared byte-for-byte. Original PNGs/geometry unchanged; exact APK assets verified.",
+  "entry_effect_scope": "150ms dirty-driven fade with final clear frame; existing preference-aware native button cue; original menu music calls unchanged. No audio audition on VPS (fixture uses nosound/nomusic).",
+  "corrections_and_retained_attempts": [
+    "Initial native API mismatches and stale unit-test release literals corrected; logs retained.",
+    "Sparse authored polygons left gaps in mist; changed to cached full-map mist with active clear patches.",
+    "Fade final frame and cancelled chooser cleanup corrected; interrupted development build retained.",
+    "Independent review caught a new companion signer per run; fixed retained test-only signer, two offline builds passed.",
+    "Initial home fixture closed on built-in button return values before assertions; corrected test callback return values and reran actual home screenshots.",
+    "Tap screenshot exposed markers over selected text; selection ring/label moved to final draw layer; completed development APK/journal retained and fresh preserving Android build performed."
+  ],
+  "limitations": [
+    "No current Windows or LDPlayer execution claimed.",
+    "No60FPS or physical touchscreen acceptance claimed.",
+    "No live production authentication, paid action, balance or database read on VPS.",
+    "Startup, signing, trust, extraction and cancellation covered by existing focused regressions and APK checks; no Android startup screenshot captured on VPS."
+  ],
+  "handoff": "docs/SMOOTH_MAPS_1192627.md",
+  "logs": {
+    "account-build-tests-02.log": {
+      "bytes": 31119,
+      "sha256": "7ca8999e7282f3dd010c801a43ada82eb8b7f843c149efb63850fc271abc9d86"
+    },
+    "windows-wrapper-tests-02.log": {
+      "bytes": 6832,
+      "sha256": "549b06498ff3dcf05b04f335e1b02c94034ff2aae72bad465765182ca42ad2f4"
+    },
+    "court-tests-final.log": {
+      "bytes": 1532,
+      "sha256": "e7bb3fbf89f4ef7ad10cfff055b9c891eb71c7a091894807b84a8089a99fb0ee"
+    },
+    "startup-public-final.log": {
+      "bytes": 4802,
+      "sha256": "8d5f1df1ff561a87b1741a40178d2b6bf393869155ec420842ca1da4e0571781"
+    },
+    "gesture-sanitizers-final.log": {
+      "bytes": 28,
+      "sha256": "9aa7b9b332facb3cdea28d26dfbb1b88f1546eb44fda80abace590a44c90953e"
+    },
+    "compile-release.log": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "android-prepare-release.log": {
+      "bytes": 2003,
+      "sha256": "86f74182e71f6367328d549c110dd2024fc1f1b722602e8266df2f41040ab0ef"
+    },
+    "android-build-release.log": {
+      "bytes": 15608,
+      "sha256": "3cf0bf291d3c49849edbc2e3502a0a1c3ab12869f38e32b47f378b61d4b422ac"
+    },
+    "android-verify-release.log": {
+      "bytes": 1487,
+      "sha256": "f2c4d8adfa14ec6ea6dd439c9c0378846bd5646963bebdbea402b5de8d575448"
+    },
+    "android-prepare-recheck-release.log": {
+      "bytes": 1794,
+      "sha256": "1b3d9f3937a4949892a31cc4920ab181d3837afa355fc1908fa086c10657776c"
+    },
+    "independent-apk-check-release.log": {
+      "bytes": 272,
+      "sha256": "45540e5af0764cc1dd40c1ee80d2a3bafef7191a6aae5e64c2ee508f876ec4f7"
+    },
+    "input-companion-final.log": {
+      "bytes": 1541,
+      "sha256": "a0997fe94a5e6a342f0edf54957bb15022c04b5a73801952530027aa9e54a8bc"
+    },
+    "overview-recheck.log": {
+      "bytes": 55,
+      "sha256": "f82889d538c7aa1ff583b4f456b74a259655b341519bb6ba9947b2e9a7458d15"
+    },
+    "handoff-parse.log": {
+      "bytes": 78,
+      "sha256": "b29dad2a125cea4de2e8c2f19aa2c61708b5a512f7a920db27225853e363af11"
+    }
+  },
+  "source_files": {
+    "tests/court_mobile_render_fixture.cpp": {
+      "bytes": 22995,
+      "sha256": "8634d26ab43332e88648fdc7cc40eb669d9d82cef5ea7567dae064ad11319e0d"
+    },
+    "tools/android-presentation/court_mobile_gesture.hpp": {
+      "bytes": 4009,
+      "sha256": "e824e518964698aceb53fe74bf28faebd0e5c52653b8bdbc70bec674632fb254"
+    },
+    "tools/android-presentation/court_mobile_layout.inc": {
+      "bytes": 3353,
+      "sha256": "4b9592baac80a3c94234a9df56a55366fda7c589cc0b81c58da9df08ffb07492"
+    },
+    "tools/android-presentation/court_mobile_members.inc": {
+      "bytes": 3813,
+      "sha256": "b9a841fc897d29cb5123134ff65a8c9664c0e74daee80eac28b4dd597228dc9f"
+    },
+    "tools/android-presentation/court_mobile_overlay.py": {
+      "bytes": 8360,
+      "sha256": "f23e39cce31c6989c79b3c2b8742362e8db1de20ce255fecc16e93f78b3ebc16"
+    },
+    "tools/android-presentation/court_mobile_viewport.hpp": {
+      "bytes": 9891,
+      "sha256": "90bf7d60ad4465fff568b28249945a48e2a044b8998571588445eb7cce553d71"
+    },
+    "tools/android-presentation/court_mobile_workspace.inc": {
+      "bytes": 6081,
+      "sha256": "9f96efe8b255a7080105440e9953e30a689b8b627d51e9bdbeee34f4409d8685"
+    },
+    "tools/android-presentation/court_overviews.c": {
+      "bytes": 1406,
+      "sha256": "708ff43bfe4d069dcdbf465b3a96e3f9382305eca83c888cf24275989c5c6bb6"
+    },
+    "tools/android-presentation/mobile_home.hpp": {
+      "bytes": 22940,
+      "sha256": "5fe2f4f4f1230f917c035b7a2a43d8f55a16d48f53930ffd608fa52ba36059fa"
+    },
+    "tools/build_android_account_game.py": {
+      "bytes": 55115,
+      "sha256": "b56ffa426ad4b12d5a3f9a224be0d6792d53b8834452ffe98ffc6403ecd7eaa8"
+    }
+  },
+  "implementation_commit": "da5876cda97c170a0e6ba0d7143a6df649d176fa",
+  "handoff_implementation_ancestor": "da5876cda97c170a0e6ba0d7143a6df649d176fa"
+}

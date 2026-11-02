@@ -12,7 +12,7 @@ class CourtMapTest(unittest.TestCase):
     def test_exact_manifest_and_shared_geometry(self):
         manifest=json.loads((ROOT/'tools/native-account-game/ui-assets.json').read_text())
         entries={r['path']:r for r in manifest['files'] if r['path'].startswith('court/')}
-        self.assertEqual(set(entries),{'court/world.png','court/area.png','court/geometry.json'})
+        self.assertEqual(set(entries),{'court/world.png','court/area.png','court/geometry.json','court/world-overview.png','court/area-overview.png'})
         for name,entry in entries.items():
             data=(ROOT/'tools/native-account-game/ui-assets'/name).read_bytes()
             self.assertEqual((len(data),hashlib.sha256(data).hexdigest()),(entry['bytes'],entry['sha256']))
@@ -38,8 +38,8 @@ class CourtMapTest(unittest.TestCase):
             self.assertIn(path,builder.NEW_INPUTS)
             self.assertTrue((ROOT/path).is_file())
         self.assertIn('alliance_native/court_protocol.hpp',builder.NEW_INPUTS)
-        self.assertEqual(builder.VERSION_CODE,1192626)
-        self.assertIn(1192625,builder.PREVIOUS_VERSION_CODES)
+        self.assertEqual(builder.VERSION_CODE,1192627)
+        self.assertIn(1192626,builder.PREVIOUS_VERSION_CODES)
 
     def test_touch_overlay_preserves_native_execution_and_refuses_changed_sources(self):
         import importlib.util

@@ -1,0 +1,5 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="org.wesnoth.mapcheck">
+    <uses-sdk android:minSdkVersion="23" android:targetSdkVersion="28" />
+    <application android:label="Wesnoth map check" android:debuggable="true" />
+    <instrumentation android:name=".MapGestureCheck" android:targetPackage="org.wesnoth.mapcheck" android:functionalTest="true" />
+</manifest>
