@@ -1,0 +1,908 @@
+{
+  "release": 1192628,
+  "date": "2026-11-02",
+  "status": "VPS functional and offline build verification complete; Windows T1-T5 and device performance pending",
+  "implementation_commit": "3f12c4f31cf874da86270b110651eda616182377",
+  "baseline_commits": {
+    "wesnoth_client": "2d78f0716cbb133bfc9df2d24ced859ce376531e",
+    "wesnoth_server": "355bb1be2f1eaa56ffa8f7cb75d7aa3a37a613af"
+  },
+  "protocol": 5,
+  "schema": 5,
+  "backend_and_worker_release": 1192626,
+  "windows_runtime": "runtime-v3",
+  "scope": "Client Android presentation/build/test integration only. PNG assets and shared worker-bound sources unchanged.",
+  "accepted_previous_evidence": "User reports All pass for1192627 and likes the map implementation. Retained as user-observed acceptance; no new per-step measurements or numerical account/wallet baseline supplied.",
+  "changes": [
+    "World and each Area fit their actual viewport width once on first rendered frame",
+    "Map navigation and existing action controls share one top touch toolbar",
+    "Cairo plus/minus symbols replace font-dependent zoom labels",
+    "Per-map camera position and physical scale survive return, refresh and details-panel changes",
+    "Centre remains full overview; teamless World displays one Find Team plus New Team",
+    "Forms retain existing reviewed submission controls and unchanged journals/consent/action callbacks"
+  ],
+  "tests": {
+    "python_unique": 132,
+    "skips": 0,
+    "delivery": {
+      "release": 1192628,
+      "scope": "Android delivery/version/preservation fixtures and bounded companion release gate; no full Android build or Windows device execution",
+      "runtime": "Python3.12.10; PowerShell7.4.6; Docker --network none",
+      "tests": {
+        "total_unique": 126,
+        "skips": 0,
+        "logs": {
+          "account-build-tests.log": {
+            "tests": 81,
+            "sha256": "6fe2e23e030f42ed2ff0341ab77cf38978f198940922ff4d9d6d2109464384a3"
+          },
+          "windows-wrapper-tests.log": {
+            "tests": 39,
+            "sha256": "6d1e70022ccf8e7efed172580b0432edeb782019b28c1b0e6ef70c233335b722"
+          },
+          "court-map-tests.log": {
+            "tests": 6,
+            "sha256": "c3305e7fa3a2bdba99b3e6aa6e77186a32abcf38a879975bb4e4c9151da12d1f"
+          },
+          "camera-binding-tests.log": {
+            "tests": 4,
+            "repeated_existing_tests": true,
+            "sha256": "c0884da069b3c28391cc4610ac1531e94ff8d67c1d5b89f3d4e2ba361ef89008",
+            "result": "passed; zero skips",
+            "scope": "Post-binding exact header copy, touch/camera source fingerprint invalidation, generated-stage forwarding, retained1192627 preparation and repeat preparation"
+          }
+        },
+        "total_executions": 130,
+        "post_binding_focused_cases": [
+          "AccountBuildTests.test_mobile_headers_have_exact_bound_stage_files",
+          "AccountBuildTests.test_native_touch_header_change_invalidates_owned_stage_without_rewriting_it",
+          "AccountBuildTests.test_only_owned_overlays_replace_the_exact_original_objects",
+          "AccountUpdateTests.test_completed1192627_and_original_journal_survive_map_toolbar_update"
+        ]
+      },
+      "source_files": {
+        "tools/build_android_account_game.py": "032c4d291697308fb6d5e3a2b13367892dbe0de2dce268f4b5841097892ea40a",
+        "tools/Rebuild-WindowsAndroidAccountGame.ps1": "ae087cb7299c9e883ed5399ae8e8a2b12e236ca4f5e66ecd4fde8ce662545db9",
+        "tools/Install-AndroidAccountGame.ps1": "bc6b78ea6d9f89f73f3929d121a2776c7a953fdc5b618837c02ca95bb7387e93",
+        "tools/native-account-game/app.build.gradle": "d6129fb09c1031b42c9699228e257b0c610644c732b5f66fb31743c3c8d20b4b",
+        "tools/run_android_court_map.py": "f22c5f574d8bac73b75036f11420a0c323cce85dde8293fe2b3f54c63e668dd1",
+        "tests/test_android_account_game.py": "b7e9aa16542b92479890ddeb693108bc0c1961e1288a9dcc6030fe881515f49b",
+        "tests/test_android_account_windows.py": "d82725b39a5405d030c5f1f64a5c5f0ff04c5fb8272c8fb4d88c49e6bb712634",
+        "tests/test_court_map.py": "dc60fa38732cbbe2d6051cd0ed2513693b03c63e620c2fe70692844b84a62e5a"
+      },
+      "changes": [
+        "Target1192628 and separate immutable update journal",
+        "Acceptcompleted1192627 and preserve both stages/original journal",
+        "Install1192628 in place; prior1192627 accepted and unknownfuture1192629 refused",
+        "Optional map input companion requires1192628 before build/install/instrumentation",
+        "Bind court_mobile_camera.hpp into hashed Android inputs and exact generated-stage copies; edits invalidate an owned stage without rewriting it"
+      ],
+      "limits": [
+        "Artifact preservation is exercised with owned fixtures here; root performs actual offline build and inventory separately",
+        "PowerShell uses simulated tools under Linux, not Windows or LDPlayer",
+        "No backend/shared engine or gameplay identity change"
+      ],
+      "bound_presentation_header": {
+        "path": "tools/android-presentation/court_mobile_camera.hpp",
+        "sha256": "cf11a9baf6fb25a0075f1a2c237e05821a762a288fe5e9ee03cc9c93343f348d"
+      },
+      "presentation_source_snapshot": {
+        "tools/android-presentation/court_mobile_camera.hpp": "cf11a9baf6fb25a0075f1a2c237e05821a762a288fe5e9ee03cc9c93343f348d",
+        "tools/android-presentation/court_mobile_gesture.hpp": "e824e518964698aceb53fe74bf28faebd0e5c52653b8bdbc70bec674632fb254",
+        "tools/android-presentation/court_mobile_layout.inc": "3c958257f9e9dc04c6f00232804d2a7bcab891d241357341ea2c480dd600d631",
+        "tools/android-presentation/court_mobile_members.inc": "a9239e5ae24a932a2113291dc22243f6da7d76a4887418b4c61736856599a975",
+        "tools/android-presentation/court_mobile_overlay.py": "befbaad0f8c4a5fc3b7574d3576146c89bd4b77ebc93af176037d3eadba23777",
+        "tools/android-presentation/court_mobile_viewport.hpp": "8fe8c3ed673b928acfde828e53d86648e65b972883aab4ed827767b6e36a62b1",
+        "tools/android-presentation/court_mobile_workspace.inc": "e4b7061df4917c94022b12494b6d70c0e3e256a22061cc7805833fda90c52b9c"
+      },
+      "delivery_review": {
+        "document": "docs/MAP_TOOLBAR_1192628.md",
+        "scope": "Read source/helper behavior; parse exact two PowerShell blocks without executing their Windows commands",
+        "parser_inputs": "delivery-parser-inputs.json",
+        "parser_results": "delivery-parser-results.json",
+        "implementation_ancestor_check": "3f12c4f31cf874da86270b110651eda616182377; guard present and exact blocks extracted for final parse",
+        "corrections": [
+          "Retain broad user-reported1192627 All pass without inventing per-step measurements",
+          "Use Team-aware My Team/Find Team/New Team labels",
+          "Link existing full optional companion commands; explicitly require1192628",
+          "Resume only first unaccepted Court check"
+        ],
+        "result": "Both final exact PowerShell blocks parsed successfully; no command execution",
+        "files": {
+          "delivery-parser-inputs.json": "80069a49e7101827126295ffc897b1a9acb3177aae5a6ade73c97743a8edf2cb",
+          "delivery-parser-results.json": "818a2f83112fbc18b47a22a124af5572c0b2b5d2545a1f45e1f9cded3797d37a",
+          "delivery-block-1.ps1": "31259c8865012979e27151d624ee8fa9eae5840f7e870255e0e4409149202de1",
+          "delivery-block-2.ps1": "4c83e1174d2f05a470758df12209ebe8eb376e6db83ef384677de423b4bb1794"
+        }
+      }
+    },
+    "asan_ubsan_gesture_camera": {
+      "status": "passed",
+      "log": {
+        "path": "build/audit-court-mobile-1192628/gesture-check.log",
+        "bytes": 28,
+        "sha256": "9aa7b9b332facb3cdea28d26dfbb1b88f1546eb44fda80abace590a44c90953e"
+      },
+      "executable": {
+        "path": "build/audit-court-mobile-1192628/gesture-check",
+        "bytes": 738120,
+        "sha256": "1ff28cb03723af2270f8298fd9f6de665d570d5816cab6e6434e297407b433f6"
+      },
+      "coverage": [
+        "both artwork aspect ratios and viewport widths",
+        "first-width-fit bounds",
+        "zoom-out and Centre overview",
+        "height-change physical scale and focal-point retention",
+        "pinch, extra pointer, finger lift, continued pan, inertia, interruption, pointer devices and map edges"
+      ]
+    }
+  },
+  "native": {
+    "format": 1,
+    "release": 1192628,
+    "purpose": "court-map-toolbar-native-render-verification",
+    "source_commit": "3f12c4f31cf874da86270b110651eda616182377",
+    "status": "native functional/layout checks passed; target performance remains unverified",
+    "source_files": [
+      {
+        "path": "tests/court_mobile_render_fixture.cpp",
+        "bytes": 28231,
+        "sha256": "07711b5f23c90738e76251379b6089b546145e1db00d984ff80db82557066cb1"
+      },
+      {
+        "path": "tests/court_mobile_gesture_check.cpp",
+        "bytes": 3463,
+        "sha256": "4fc6eb95a39cda7399f8759cb09d60599570c4ad22c9cd19acef3d314ceaf931"
+      },
+      {
+        "path": "tests/test_court_mobile_overlay.py",
+        "bytes": 3589,
+        "sha256": "c5de106ba7d329c41b2c5fa56e622af6856d199319f9c2ac3eed5fcbe7be1e0c"
+      },
+      {
+        "path": "tools/android-presentation/court_mobile_overlay.py",
+        "bytes": 8804,
+        "sha256": "befbaad0f8c4a5fc3b7574d3576146c89bd4b77ebc93af176037d3eadba23777"
+      },
+      {
+        "path": "tools/android-presentation/court_mobile_camera.hpp",
+        "bytes": 1130,
+        "sha256": "cf11a9baf6fb25a0075f1a2c237e05821a762a288fe5e9ee03cc9c93343f348d"
+      },
+      {
+        "path": "tools/android-presentation/court_mobile_gesture.hpp",
+        "bytes": 4009,
+        "sha256": "e824e518964698aceb53fe74bf28faebd0e5c52653b8bdbc70bec674632fb254"
+      },
+      {
+        "path": "tools/android-presentation/court_mobile_viewport.hpp",
+        "bytes": 10114,
+        "sha256": "8fe8c3ed673b928acfde828e53d86648e65b972883aab4ed827767b6e36a62b1"
+      },
+      {
+        "path": "tools/android-presentation/court_mobile_layout.inc",
+        "bytes": 6021,
+        "sha256": "3c958257f9e9dc04c6f00232804d2a7bcab891d241357341ea2c480dd600d631"
+      },
+      {
+        "path": "tools/android-presentation/court_mobile_members.inc",
+        "bytes": 5378,
+        "sha256": "a9239e5ae24a932a2113291dc22243f6da7d76a4887418b4c61736856599a975"
+      },
+      {
+        "path": "tools/android-presentation/court_mobile_workspace.inc",
+        "bytes": 6201,
+        "sha256": "e4b7061df4917c94022b12494b6d70c0e3e256a22061cc7805833fda90c52b9c"
+      }
+    ],
+    "generated_workspace": {
+      "path": "build/audit-court-mobile-1192628/court_mobile_workspace.hpp",
+      "bytes": 60953,
+      "sha256": "178d7e7d17cdfde29f08db6ae2d9c6d24ff99067c226ee489426f3698fb07f4e"
+    },
+    "final_native_fixture": {
+      "path": "build/audit-court-mobile-1192628/render_probe.cpp",
+      "bytes": 28231,
+      "sha256": "07711b5f23c90738e76251379b6089b546145e1db00d984ff80db82557066cb1"
+    },
+    "final_native_binary": {
+      "path": "build/audit-court-mobile-1192628/mobile-render-engine",
+      "bytes": 75008160,
+      "sha256": "c60f28dba89c5222834b1590c8c1d378ab76ca9ba3fe461d371fa793aeea7f16"
+    },
+    "initial_regression_inputs": {
+      "path": "build/audit-court-mobile-1192628/regression-render-inputs.json",
+      "bytes": 583,
+      "sha256": "2fee081e04ad5b2148547a5620bc49479da83c976d020da768b7d8e18a83d191"
+    },
+    "evidence_manifest": {
+      "path": "build/audit-court-mobile-1192628/render-evidence-manifest.json",
+      "bytes": 52173,
+      "sha256": "67de1a93936069daf6a03069b25001485a7603182bb6a77c78112f1e4076708b"
+    },
+    "runs": [
+      {
+        "folder": "render-release-1280x720",
+        "native_pass_marker": true,
+        "scenario_executions": 62,
+        "png_count": 76,
+        "themes": [
+          "default",
+          "Celes"
+        ],
+        "scope": "before hiding duplicate Find Team in teamless World",
+        "exit_code": 0,
+        "exit_evidence": "launcher collected native Docker exit0",
+        "initial_geometry": [
+          "default-map-controls initial-width-fit World viewport 1208x535 artwork-width 1208 zoom 1.5053",
+          "default-map-controls initial-width-fit A001 viewport 1208x535 artwork-width 1208 zoom 1.27077",
+          "default-motion-world initial-width-fit World viewport 1208x535 artwork-width 1208 zoom 1.5053",
+          "default-motion-area initial-width-fit A001 viewport 1208x535 artwork-width 1208 zoom 1.27077",
+          "default-stress initial-width-fit World viewport 1208x535 artwork-width 1208 zoom 1.5053",
+          "default-tap-world initial-width-fit World viewport 1208x535 artwork-width 1208 zoom 1.5053",
+          "default-tap-area initial-width-fit A001 viewport 1208x535 artwork-width 1208 zoom 1.27077",
+          "default-tap-inactive initial-width-fit World viewport 1208x535 artwork-width 1208 zoom 1.5053",
+          "default-world initial-width-fit World viewport 1208x535 artwork-width 1208 zoom 1.5053",
+          "default-world-teamless initial-width-fit World viewport 1208x535 artwork-width 1208 zoom 1.5053",
+          "default-pinch initial-width-fit World viewport 1208x535 artwork-width 1208 zoom 1.5053",
+          "default-area initial-width-fit A001 viewport 1208x535 artwork-width 1208 zoom 1.27077",
+          "modern-map-controls initial-width-fit World viewport 1208x535 artwork-width 1208 zoom 1.5053",
+          "modern-map-controls initial-width-fit A001 viewport 1208x535 artwork-width 1208 zoom 1.27077",
+          "modern-motion-world initial-width-fit World viewport 1208x535 artwork-width 1208 zoom 1.5053",
+          "modern-motion-area initial-width-fit A001 viewport 1208x535 artwork-width 1208 zoom 1.27077",
+          "modern-stress initial-width-fit World viewport 1208x535 artwork-width 1208 zoom 1.5053",
+          "modern-tap-world initial-width-fit World viewport 1208x535 artwork-width 1208 zoom 1.5053",
+          "modern-tap-area initial-width-fit A001 viewport 1208x535 artwork-width 1208 zoom 1.27077",
+          "modern-tap-inactive initial-width-fit World viewport 1208x535 artwork-width 1208 zoom 1.5053",
+          "modern-world initial-width-fit World viewport 1208x535 artwork-width 1208 zoom 1.5053",
+          "modern-world-teamless initial-width-fit World viewport 1208x535 artwork-width 1208 zoom 1.5053",
+          "modern-pinch initial-width-fit World viewport 1208x535 artwork-width 1208 zoom 1.5053",
+          "modern-area initial-width-fit A001 viewport 1208x535 artwork-width 1208 zoom 1.27077"
+        ]
+      },
+      {
+        "folder": "render-release-1920x1080",
+        "native_pass_marker": true,
+        "scenario_executions": 62,
+        "png_count": 76,
+        "themes": [
+          "default",
+          "Celes"
+        ],
+        "scope": "before hiding duplicate Find Team in teamless World",
+        "exit_code": 0,
+        "exit_evidence": "retained Docker daemon die event after launcher shell exit143",
+        "initial_geometry": [
+          "default-map-controls initial-width-fit World viewport 1848x871 artwork-width 1848 zoom 1.41447",
+          "default-map-controls initial-width-fit A001 viewport 1848x871 artwork-width 1848 zoom 1.19409",
+          "default-motion-world initial-width-fit World viewport 1848x871 artwork-width 1848 zoom 1.41447",
+          "default-motion-area initial-width-fit A001 viewport 1848x871 artwork-width 1848 zoom 1.19409",
+          "default-stress initial-width-fit World viewport 1848x871 artwork-width 1848 zoom 1.41447",
+          "default-tap-world initial-width-fit World viewport 1848x871 artwork-width 1848 zoom 1.41447",
+          "default-tap-area initial-width-fit A001 viewport 1848x871 artwork-width 1848 zoom 1.19409",
+          "default-tap-inactive initial-width-fit World viewport 1848x871 artwork-width 1848 zoom 1.41447",
+          "default-world initial-width-fit World viewport 1848x871 artwork-width 1848 zoom 1.41447",
+          "default-world-teamless initial-width-fit World viewport 1848x871 artwork-width 1848 zoom 1.41447",
+          "default-pinch initial-width-fit World viewport 1848x871 artwork-width 1848 zoom 1.41447",
+          "default-area initial-width-fit A001 viewport 1848x871 artwork-width 1848 zoom 1.19409",
+          "modern-map-controls initial-width-fit World viewport 1848x871 artwork-width 1848 zoom 1.41447",
+          "modern-map-controls initial-width-fit A001 viewport 1848x871 artwork-width 1848 zoom 1.19409",
+          "modern-motion-world initial-width-fit World viewport 1848x871 artwork-width 1848 zoom 1.41447",
+          "modern-motion-area initial-width-fit A001 viewport 1848x871 artwork-width 1848 zoom 1.19409",
+          "modern-stress initial-width-fit World viewport 1848x871 artwork-width 1848 zoom 1.41447",
+          "modern-tap-world initial-width-fit World viewport 1848x871 artwork-width 1848 zoom 1.41447",
+          "modern-tap-area initial-width-fit A001 viewport 1848x871 artwork-width 1848 zoom 1.19409",
+          "modern-tap-inactive initial-width-fit World viewport 1848x871 artwork-width 1848 zoom 1.41447",
+          "modern-world initial-width-fit World viewport 1848x871 artwork-width 1848 zoom 1.41447",
+          "modern-world-teamless initial-width-fit World viewport 1848x871 artwork-width 1848 zoom 1.41447",
+          "modern-pinch initial-width-fit World viewport 1848x871 artwork-width 1848 zoom 1.41447",
+          "modern-area initial-width-fit A001 viewport 1848x871 artwork-width 1848 zoom 1.19409"
+        ]
+      },
+      {
+        "folder": "render-final-1280x720",
+        "native_pass_marker": true,
+        "scenario_executions": 12,
+        "png_count": 12,
+        "themes": [
+          "default",
+          "Celes"
+        ],
+        "scope": "final source, including single visible Find Team plus New Team",
+        "exit_code": 0,
+        "exit_evidence": "launcher collected native Docker exit0",
+        "initial_geometry": [
+          "default-map-controls initial-width-fit World viewport 1208x535 artwork-width 1208 zoom 1.5053",
+          "default-map-controls initial-width-fit A001 viewport 1208x535 artwork-width 1208 zoom 1.27077",
+          "default-world initial-width-fit World viewport 1208x535 artwork-width 1208 zoom 1.5053",
+          "default-world-teamless initial-width-fit World viewport 1208x535 artwork-width 1208 zoom 1.5053",
+          "default-area initial-width-fit A001 viewport 1208x535 artwork-width 1208 zoom 1.27077",
+          "modern-map-controls initial-width-fit World viewport 1208x535 artwork-width 1208 zoom 1.5053",
+          "modern-map-controls initial-width-fit A001 viewport 1208x535 artwork-width 1208 zoom 1.27077",
+          "modern-world initial-width-fit World viewport 1208x535 artwork-width 1208 zoom 1.5053",
+          "modern-world-teamless initial-width-fit World viewport 1208x535 artwork-width 1208 zoom 1.5053",
+          "modern-area initial-width-fit A001 viewport 1208x535 artwork-width 1208 zoom 1.27077"
+        ]
+      },
+      {
+        "folder": "render-final-1920x1080",
+        "native_pass_marker": true,
+        "scenario_executions": 12,
+        "png_count": 12,
+        "themes": [
+          "default",
+          "Celes"
+        ],
+        "scope": "final source, including single visible Find Team plus New Team",
+        "exit_code": 0,
+        "exit_evidence": "launcher collected native Docker exit0",
+        "initial_geometry": [
+          "default-map-controls initial-width-fit World viewport 1848x871 artwork-width 1848 zoom 1.41447",
+          "default-map-controls initial-width-fit A001 viewport 1848x871 artwork-width 1848 zoom 1.19409",
+          "default-world initial-width-fit World viewport 1848x871 artwork-width 1848 zoom 1.41447",
+          "default-world-teamless initial-width-fit World viewport 1848x871 artwork-width 1848 zoom 1.41447",
+          "default-area initial-width-fit A001 viewport 1848x871 artwork-width 1848 zoom 1.19409",
+          "modern-map-controls initial-width-fit World viewport 1848x871 artwork-width 1848 zoom 1.41447",
+          "modern-map-controls initial-width-fit A001 viewport 1848x871 artwork-width 1848 zoom 1.19409",
+          "modern-world initial-width-fit World viewport 1848x871 artwork-width 1848 zoom 1.41447",
+          "modern-world-teamless initial-width-fit World viewport 1848x871 artwork-width 1848 zoom 1.41447",
+          "modern-area initial-width-fit A001 viewport 1848x871 artwork-width 1848 zoom 1.19409"
+        ]
+      }
+    ],
+    "unit_checks": {
+      "guarded_overlay_tests": {
+        "passed": 6,
+        "skipped": 0,
+        "log": {
+          "path": "build/audit-court-mobile-1192628/overlay-tests.log",
+          "bytes": 944,
+          "sha256": "464eec4df0c237a0cf6d4c21b21f3399a636167179367e7c9a0f77b37f923a99"
+        }
+      },
+      "address_undefined_sanitizers": {
+        "status": "passed",
+        "log": {
+          "path": "build/audit-court-mobile-1192628/gesture-check.log",
+          "bytes": 28,
+          "sha256": "9aa7b9b332facb3cdea28d26dfbb1b88f1546eb44fda80abace590a44c90953e"
+        },
+        "executable": {
+          "path": "build/audit-court-mobile-1192628/gesture-check",
+          "bytes": 738120,
+          "sha256": "1ff28cb03723af2270f8298fd9f6de665d570d5816cab6e6434e297407b433f6"
+        },
+        "coverage": [
+          "both artwork aspect ratios and viewport widths",
+          "first-width-fit bounds",
+          "zoom-out and Centre overview",
+          "height-change physical scale and focal-point retention",
+          "pinch, extra pointer, finger lift, continued pan, inertia, interruption, pointer devices and map edges"
+        ]
+      }
+    },
+    "functional_checks": [
+      "first actual World and Area frame fills map viewport width",
+      "all visible geographic controls share one top row, do not overlap or clip, and meet48 reference pixels/72 at1920",
+      "minus uses a blank label with Cairo symbol; actual action decreases zoom",
+      "Centre remains overview",
+      "one-tap active/inactive selection and details",
+      "Search/List/map toggling preserves camera",
+      "refresh during gestures preserves camera and selection",
+      "World to Area to Back to Area retains independent cameras",
+      "single visible Find Team plus New Team for teamless World",
+      "reviewed mutation payload and exactly one fixture command",
+      "form scrolling, ten-member roster, competition bracket, Help/items, all11 home callbacks and passive profile"
+    ],
+    "limitations": [
+      "Actual native GUI2 with SDL dummy video/software renderer; authenticated response fixtures and synthetic touch, not live server or Android input",
+      "No physical touchscreen, LDPlayer/GPU, network gameplay, audio audition or60FPS claim",
+      "1920 regression launcher shell ended143; engine continued and Docker daemon die event records exit0 plus native PASS62",
+      "Full matrices precede a narrow duplicate-FindTeam hide; final focused runs cover the changed empty World and affected navigation/forms at both resolutions/themes",
+      "Timing endpoints precede physical display presentation; read inter-redraw cadence as software diagnostic, not60FPS or target latency acceptance",
+      "1920 software redraw cadence includes consecutive warmed intervals>100ms; controlled overview-vs-width-fit comparison supports higher camera/image-size cost as a contributor but does not explain the complete difference from1192627 or establish target-device behavior."
+    ],
+    "detached_run_events": {
+      "path": "build/audit-court-mobile-1192628/render-release-1920x1080/container-events.jsonl",
+      "bytes": 588,
+      "sha256": "0dac5de3ca36549cf650d8f3aa0bc93233844439c58eccfd2feffaf594cd7389"
+    },
+    "frame_analysis": {
+      "path": "build/audit-court-mobile-1192628/frame-measurements-release.json",
+      "bytes": 190600,
+      "sha256": "5ac745b88e0e16369f7af30ea0e5f6507de78df0ed8100619ee556d95bb0b4c2"
+    },
+    "benchmark": {
+      "status": "controlled software comparison complete",
+      "source": {
+        "path": "build/audit-court-mobile-1192628/benchmark_probe.cpp",
+        "bytes": 28347,
+        "sha256": "5810f51667f79b55146fab4dfc207e44bbcdfa571e37231344809aa1058b9dc7"
+      },
+      "binary": {
+        "path": "build/audit-court-mobile-1192628/benchmark-render-engine",
+        "bytes": 75012264,
+        "sha256": "6da60ed88cd7bdaf967ba2d622cd2495810e407463e3e602d26d01769704dca2"
+      },
+      "build_log": {
+        "path": "build/audit-court-mobile-1192628/benchmark-build-02.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "analysis": {
+        "path": "build/audit-court-mobile-1192628/matched-camera-analysis.json",
+        "bytes": 307237,
+        "sha256": "1d79f1ab4937ce517b6006d8ed24c67c4226f3f21081e548cc8b6a7e2b6db538"
+      },
+      "runs": [
+        {
+          "mode": "overview",
+          "exit_code": 0,
+          "scenario_executions": 4,
+          "png_count": 20,
+          "command": {
+            "path": "build/audit-court-mobile-1192628/render-bench-overview-1920x1080/command.json",
+            "bytes": 1087,
+            "sha256": "b5695e1e5189767fa623c1480431aceab3263d183eef0811378ba39b058c0e00"
+          },
+          "log": {
+            "path": "build/audit-court-mobile-1192628/render-bench-overview-1920x1080/combined.log",
+            "bytes": 411,
+            "sha256": "83e702e7e294594009d726480311ce7d686d54d1bcccca7232878a1cd0e665f5"
+          }
+        },
+        {
+          "mode": "widthfit",
+          "exit_code": 0,
+          "scenario_executions": 4,
+          "png_count": 20,
+          "command": {
+            "path": "build/audit-court-mobile-1192628/render-bench-widthfit-1920x1080/command.json",
+            "bytes": 1087,
+            "sha256": "79f0fadfd88a04e40fe280148cb3e6f193102bc8e7b0f2f36bc7e5d75e1e195f"
+          },
+          "log": {
+            "path": "build/audit-court-mobile-1192628/render-bench-widthfit-1920x1080/combined.log",
+            "bytes": 411,
+            "sha256": "73ec5986fb21b50ac6043ab5d3ab835724ca4e3d7e702595228f40fdccbe1c03"
+          }
+        }
+      ]
+    },
+    "performance_summary": {
+      "full_regression_input_to_viewport_p95_ms": {
+        "1280x720": [
+          14.85,
+          17.277
+        ],
+        "1920x1080": [
+          19.127,
+          21.968
+        ]
+      },
+      "controlled_1920_consecutive_redraw_p95_ms": {
+        "overview": [
+          136.308,
+          169.635
+        ],
+        "widthfit": [
+          197.652,
+          237.348
+        ]
+      },
+      "camera_only_viewport_texture_allocations": 0,
+      "selection_stress": "512selections per theme/resolution; no warmed peak-RSS growth",
+      "target_smoothness_accepted": false,
+      "physical_input_or_present_latency_claimed": false
+    },
+    "development_events": [
+      {
+        "file": {
+          "path": "build/audit-court-mobile-1192628/benchmark-build-01.log",
+          "bytes": 1233,
+          "sha256": "d83fec3b29afd1e35d196bc5009440b546b559db4825bd15212811c9b5d9e777"
+        },
+        "scope": "audit-only harness copied-template path typo; corrected in retained benchmark-build-02, no production source issue"
+      },
+      {
+        "scope": "Hostg++ absent; sanitizer execution used existing offline verification container"
+      },
+      {
+        "scope": "1920 full render wrapper ended143; native container passed exit0 as retained daemon event shows"
+      }
+    ],
+    "build_logs": [
+      {
+        "path": "build/audit-court-mobile-1192628/native-build-01.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "build/audit-court-mobile-1192628/native-build-02.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    ],
+    "consecutive_motion_captures": [
+      {
+        "resolution": "1280x720",
+        "theme": "default",
+        "map": "world",
+        "frames": [
+          "render-release-1280x720/default-motion-world-5.png",
+          "render-release-1280x720/default-motion-world-6.png"
+        ],
+        "sha256": [
+          "cb79677756895b32dbfa955dc85b9a31017c95fc0e164a711ce281a766f52cc3",
+          "e22620e167b7d9d17acb2a1f079ee695f13fa34602ff6b384a1d615d405ac05e"
+        ],
+        "different_rendered_frames": true
+      },
+      {
+        "resolution": "1280x720",
+        "theme": "default",
+        "map": "area",
+        "frames": [
+          "render-release-1280x720/default-motion-area-5.png",
+          "render-release-1280x720/default-motion-area-6.png"
+        ],
+        "sha256": [
+          "a50d8217b37498ec7324d3995cb1c0b9ecfac36537b9cdd4d1bcf1eb7b023c86",
+          "0ce5f06d62cb5404951fc4b0deeaacf4a8d13d03a069dd4cc41a392d08a39da5"
+        ],
+        "different_rendered_frames": true
+      },
+      {
+        "resolution": "1280x720",
+        "theme": "modern",
+        "map": "world",
+        "frames": [
+          "render-release-1280x720/modern-motion-world-5.png",
+          "render-release-1280x720/modern-motion-world-6.png"
+        ],
+        "sha256": [
+          "cb79677756895b32dbfa955dc85b9a31017c95fc0e164a711ce281a766f52cc3",
+          "e22620e167b7d9d17acb2a1f079ee695f13fa34602ff6b384a1d615d405ac05e"
+        ],
+        "different_rendered_frames": true
+      },
+      {
+        "resolution": "1280x720",
+        "theme": "modern",
+        "map": "area",
+        "frames": [
+          "render-release-1280x720/modern-motion-area-5.png",
+          "render-release-1280x720/modern-motion-area-6.png"
+        ],
+        "sha256": [
+          "a50d8217b37498ec7324d3995cb1c0b9ecfac36537b9cdd4d1bcf1eb7b023c86",
+          "0ce5f06d62cb5404951fc4b0deeaacf4a8d13d03a069dd4cc41a392d08a39da5"
+        ],
+        "different_rendered_frames": true
+      },
+      {
+        "resolution": "1920x1080",
+        "theme": "default",
+        "map": "world",
+        "frames": [
+          "render-release-1920x1080/default-motion-world-5.png",
+          "render-release-1920x1080/default-motion-world-6.png"
+        ],
+        "sha256": [
+          "ddf0ac1aa4bcf6c9a9c2d31e1e90c707bf46b86e0baedd85cc995b257dc549f0",
+          "d6fa64eb5c69ed12301290926919e0fdb32af68be12a84ceca05a7714fbd8625"
+        ],
+        "different_rendered_frames": true
+      },
+      {
+        "resolution": "1920x1080",
+        "theme": "default",
+        "map": "area",
+        "frames": [
+          "render-release-1920x1080/default-motion-area-5.png",
+          "render-release-1920x1080/default-motion-area-6.png"
+        ],
+        "sha256": [
+          "baf42826f9d6961dcdf103e4fa1a813d1d5b59cb67c26da4f227ece0e05f953d",
+          "e61e57b8e01098ecedb7f68cce535e7495df4cad55b1d21a372153021ab39572"
+        ],
+        "different_rendered_frames": true
+      },
+      {
+        "resolution": "1920x1080",
+        "theme": "modern",
+        "map": "world",
+        "frames": [
+          "render-release-1920x1080/modern-motion-world-5.png",
+          "render-release-1920x1080/modern-motion-world-6.png"
+        ],
+        "sha256": [
+          "ddf0ac1aa4bcf6c9a9c2d31e1e90c707bf46b86e0baedd85cc995b257dc549f0",
+          "d6fa64eb5c69ed12301290926919e0fdb32af68be12a84ceca05a7714fbd8625"
+        ],
+        "different_rendered_frames": true
+      },
+      {
+        "resolution": "1920x1080",
+        "theme": "modern",
+        "map": "area",
+        "frames": [
+          "render-release-1920x1080/modern-motion-area-5.png",
+          "render-release-1920x1080/modern-motion-area-6.png"
+        ],
+        "sha256": [
+          "baf42826f9d6961dcdf103e4fa1a813d1d5b59cb67c26da4f227ece0e05f953d",
+          "e61e57b8e01098ecedb7f68cce535e7495df4cad55b1d21a372153021ab39572"
+        ],
+        "different_rendered_frames": true
+      }
+    ]
+  },
+  "android": {
+    "status": "passed",
+    "version_code": 1192628,
+    "launcher": "org.wesnoth.offline.OfflineInitActivity",
+    "apk": {
+      "path": "build/android-account-game/app/build/outputs/apk/debug/app-debug.apk",
+      "bytes": 56935877,
+      "sha256": "398ac3f6605a48feee51a7f9c46c02752bb2ed172bcdff3c7751c9e8b5b4d921"
+    },
+    "retained_previous_apk": {
+      "path": "build/android-account-game-before-menu-polish-20261102T031457Z-d91a260d0c4e495aa0867d59b809176c/app/build/outputs/apk/debug/app-debug.apk",
+      "bytes": 56930266,
+      "sha256": "08725a18e602f9ca13ffa9d0c8d2f674fd8ae68f9ecc4cb0cdbe595caefd0844"
+    },
+    "journal": {
+      "path": "build/.wesnoth-account-game-update-1192628.json",
+      "bytes": 331228,
+      "sha256": "788854e128bbdc3de9ec3fb4ff3835e673001cb85476f7e367d97a5d72a5b108"
+    },
+    "original_signer_sha256": "7e346dc5ec05098674444abdb61508270da51de9e57421133340c07834343074",
+    "assets": {
+      "alliance-public-profile.json": {
+        "bytes": 1499,
+        "sha256": "f526e6ad272c0a959522c7b8ecc926dea279f1c7e378b3a53e3b95efb09ee159"
+      },
+      "alliance-ui-manifest.json": {
+        "bytes": 1005,
+        "sha256": "f0721253bae6a55f4bfee0617282a75710125d9cb037abf9879c49229da0a92b"
+      },
+      "alliance-ui/background/citadel-dawn.png": {
+        "bytes": 2739237,
+        "sha256": "ff3271e5ac176041517c42739ab15afbd2d57c69b56fbf290164d793e42b36ce"
+      },
+      "alliance-ui/court/area-overview.png": {
+        "bytes": 1338390,
+        "sha256": "563dcf1a3b9ee18ad64be9ce8de6b346e13b062c7502b795328594ae6372b79a"
+      },
+      "alliance-ui/court/area.png": {
+        "bytes": 3702885,
+        "sha256": "5d30464217f1230c9decba4873f9ec6a83f7338279fc6109fc4e40f37d5d69e1"
+      },
+      "alliance-ui/court/geometry.json": {
+        "bytes": 114903,
+        "sha256": "ed32a8577ddc086c4eaeb9d1d1cc508afda8ef7ee1d1ed385094946e9ddc60c0"
+      },
+      "alliance-ui/court/world-overview.png": {
+        "bytes": 1531015,
+        "sha256": "a462a23d9834ea75bfb7b2d04d10b29c57720c20c7cb3ad56bc48be1894b5fbc"
+      },
+      "alliance-ui/court/world.png": {
+        "bytes": 3361958,
+        "sha256": "63a36826ac5452e8d1fd7612c97b20c5c8a5d565267eb0723b0d09c0da18c9a8"
+      },
+      "alliance-ui/hero/refumee.png": {
+        "bytes": 2092869,
+        "sha256": "cb05c9f0da6d16a068355e2b7fb59201ecf1296ebcafdfdb11763f43f30c04f8"
+      },
+      "alliance-ui/hero/thea.png": {
+        "bytes": 2190871,
+        "sha256": "1e3fe73953569a247e6055780e84125cf3bbe5148546fe449a3c7057d1a3f7f7"
+      },
+      "startup/Akademie Alte.ttf": {
+        "bytes": 61620,
+        "sha256": "3b5c0ac12ccba9a49cdc01348d984d62141309ba23535fa179dd75377e4a79c2"
+      },
+      "startup/Lato-Regular.ttf": {
+        "bytes": 657212,
+        "sha256": "6f6940be0835c3ddec9199e5fc42be4cbc61ebcfd58c623fdf719366253f1780"
+      }
+    },
+    "previous_public_profile_bytes_unchanged": true,
+    "previous_gamedata_manifest_bytes_unchanged": true,
+    "scope": "Independent aapt2/apksigner and exact ZIP bytes; original and previous signer equality; unchanged disposable public trust and OBB manifest. No Windows/LDPlayer execution or Android visual claim."
+  },
+  "android_build": {
+    "native_steps": 56,
+    "gradle_tasks_executed": 33,
+    "network": "Docker --network none; Gradle --offline",
+    "logs": {
+      "android-prepare-release.log": {
+        "path": "build/audit-court-mobile-1192628/android-prepare-release.log",
+        "bytes": 2003,
+        "sha256": "ab299c4afbb7f4a6707f8d0e3ea66318bfd92ca3f529338a10bd59a8aa4b7ac4"
+      },
+      "android-build-release.log": {
+        "path": "build/audit-court-mobile-1192628/android-build-release.log",
+        "bytes": 15608,
+        "sha256": "a4b1a68afb921cb0170cc5cabedaa7d1892cc960f01941feded15e15dc91ca6a"
+      },
+      "android-verify-release.log": {
+        "path": "build/audit-court-mobile-1192628/android-verify-release.log",
+        "bytes": 1487,
+        "sha256": "f2c4d8adfa14ec6ea6dd439c9c0378846bd5646963bebdbea402b5de8d575448"
+      },
+      "android-prepare-recheck-release.log": {
+        "path": "build/audit-court-mobile-1192628/android-prepare-recheck-release.log",
+        "bytes": 1794,
+        "sha256": "1b3d9f3937a4949892a31cc4920ab181d3837afa355fc1908fa086c10657776c"
+      },
+      "independent-apk-check-release.log": {
+        "path": "build/audit-court-mobile-1192628/independent-apk-check-release.log",
+        "bytes": 272,
+        "sha256": "fed7d7f30447860a2d7998111b8e5bab622f6deb3bc23b3081d0697ca57ed1bf"
+      },
+      "android-build-container-exit.jsonl": {
+        "path": "build/audit-court-mobile-1192628/android-build-container-exit.jsonl",
+        "bytes": 310,
+        "sha256": "003378fbc5dd4d5d7e25b66c6cbe9e163ad05c2ec733d0495d7eae824ae11a76"
+      },
+      "preservation-check.log": {
+        "path": "build/audit-court-mobile-1192628/preservation-check.log",
+        "bytes": 1559,
+        "sha256": "d2bdf1a4b6401e73228b662ea3c8e530716d1a7a53ed366ec0897c703e1b958b"
+      }
+    },
+    "orchestration": "Initial outer pipeline shell exited143 after starting the build. Native/Gradle build continued; retained daemon die event proves build container exit0 and log ends BUILD PASS. Verification, repeated preparation and independent APK checks completed separately with retained exit0 container states. No repeated compilation or repair."
+  },
+  "preservation": {
+    "status": "passed",
+    "baseline_files": 7576,
+    "unchanged": {
+      "other_client_tracked": 332,
+      "shared_client_sources": 1703,
+      "prior_journals": 26,
+      "prior_build_files": 5085,
+      "server_tracked": 418
+    },
+    "expected_client_changes": [
+      "wesnoth_client/tests/court_mobile_gesture_check.cpp",
+      "wesnoth_client/tests/court_mobile_render_fixture.cpp",
+      "wesnoth_client/tests/test_android_account_game.py",
+      "wesnoth_client/tests/test_court_map.py",
+      "wesnoth_client/tests/test_court_mobile_overlay.py",
+      "wesnoth_client/tools/android-presentation/court_mobile_layout.inc",
+      "wesnoth_client/tools/android-presentation/court_mobile_members.inc",
+      "wesnoth_client/tools/android-presentation/court_mobile_overlay.py",
+      "wesnoth_client/tools/android-presentation/court_mobile_viewport.hpp",
+      "wesnoth_client/tools/android-presentation/court_mobile_workspace.inc",
+      "wesnoth_client/tools/build_android_account_game.py",
+      "wesnoth_client/tools/run_android_court_map.py"
+    ],
+    "missing": [],
+    "retained_previous_stages": {
+      "android-account-engine": "android-account-engine-before-menu-polish-20261102T031457Z-d91a260d0c4e495aa0867d59b809176c",
+      "android-account-game": "android-account-game-before-menu-polish-20261102T031457Z-d91a260d0c4e495aa0867d59b809176c"
+    },
+    "scope": "Baseline taken at the start of1192628 work; intended delivery/UI edits may already be in progress. Shared/server/stage/journal hashes and previousHEADsource diff checked separately. No private runtime/configuration inventory."
+  },
+  "implementation_sources": {
+    "tests/court_mobile_gesture_check.cpp": {
+      "path": "tests/court_mobile_gesture_check.cpp",
+      "bytes": 3463,
+      "sha256": "4fc6eb95a39cda7399f8759cb09d60599570c4ad22c9cd19acef3d314ceaf931"
+    },
+    "tests/court_mobile_render_fixture.cpp": {
+      "path": "tests/court_mobile_render_fixture.cpp",
+      "bytes": 28231,
+      "sha256": "07711b5f23c90738e76251379b6089b546145e1db00d984ff80db82557066cb1"
+    },
+    "tests/test_android_account_game.py": {
+      "path": "tests/test_android_account_game.py",
+      "bytes": 67246,
+      "sha256": "b7e9aa16542b92479890ddeb693108bc0c1961e1288a9dcc6030fe881515f49b"
+    },
+    "tests/test_android_account_windows.py": {
+      "path": "tests/test_android_account_windows.py",
+      "bytes": 31461,
+      "sha256": "d82725b39a5405d030c5f1f64a5c5f0ff04c5fb8272c8fb4d88c49e6bb712634"
+    },
+    "tests/test_court_map.py": {
+      "path": "tests/test_court_map.py",
+      "bytes": 9094,
+      "sha256": "dc60fa38732cbbe2d6051cd0ed2513693b03c63e620c2fe70692844b84a62e5a"
+    },
+    "tests/test_court_mobile_overlay.py": {
+      "path": "tests/test_court_mobile_overlay.py",
+      "bytes": 3589,
+      "sha256": "c5de106ba7d329c41b2c5fa56e622af6856d199319f9c2ac3eed5fcbe7be1e0c"
+    },
+    "tools/Install-AndroidAccountGame.ps1": {
+      "path": "tools/Install-AndroidAccountGame.ps1",
+      "bytes": 12212,
+      "sha256": "bc6b78ea6d9f89f73f3929d121a2776c7a953fdc5b618837c02ca95bb7387e93"
+    },
+    "tools/Rebuild-WindowsAndroidAccountGame.ps1": {
+      "path": "tools/Rebuild-WindowsAndroidAccountGame.ps1",
+      "bytes": 3599,
+      "sha256": "ae087cb7299c9e883ed5399ae8e8a2b12e236ca4f5e66ecd4fde8ce662545db9"
+    },
+    "tools/android-presentation/court_mobile_camera.hpp": {
+      "path": "tools/android-presentation/court_mobile_camera.hpp",
+      "bytes": 1130,
+      "sha256": "cf11a9baf6fb25a0075f1a2c237e05821a762a288fe5e9ee03cc9c93343f348d"
+    },
+    "tools/android-presentation/court_mobile_layout.inc": {
+      "path": "tools/android-presentation/court_mobile_layout.inc",
+      "bytes": 6021,
+      "sha256": "3c958257f9e9dc04c6f00232804d2a7bcab891d241357341ea2c480dd600d631"
+    },
+    "tools/android-presentation/court_mobile_members.inc": {
+      "path": "tools/android-presentation/court_mobile_members.inc",
+      "bytes": 5378,
+      "sha256": "a9239e5ae24a932a2113291dc22243f6da7d76a4887418b4c61736856599a975"
+    },
+    "tools/android-presentation/court_mobile_overlay.py": {
+      "path": "tools/android-presentation/court_mobile_overlay.py",
+      "bytes": 8804,
+      "sha256": "befbaad0f8c4a5fc3b7574d3576146c89bd4b77ebc93af176037d3eadba23777"
+    },
+    "tools/android-presentation/court_mobile_viewport.hpp": {
+      "path": "tools/android-presentation/court_mobile_viewport.hpp",
+      "bytes": 10114,
+      "sha256": "8fe8c3ed673b928acfde828e53d86648e65b972883aab4ed827767b6e36a62b1"
+    },
+    "tools/android-presentation/court_mobile_workspace.inc": {
+      "path": "tools/android-presentation/court_mobile_workspace.inc",
+      "bytes": 6201,
+      "sha256": "e4b7061df4917c94022b12494b6d70c0e3e256a22061cc7805833fda90c52b9c"
+    },
+    "tools/build_android_account_game.py": {
+      "path": "tools/build_android_account_game.py",
+      "bytes": 55139,
+      "sha256": "032c4d291697308fb6d5e3a2b13367892dbe0de2dce268f4b5841097892ea40a"
+    },
+    "tools/native-account-game/app.build.gradle": {
+      "path": "tools/native-account-game/app.build.gradle",
+      "bytes": 795,
+      "sha256": "d6129fb09c1031b42c9699228e257b0c610644c732b5f66fb31743c3c8d20b4b"
+    },
+    "tools/run_android_court_map.py": {
+      "path": "tools/run_android_court_map.py",
+      "bytes": 3140,
+      "sha256": "f22c5f574d8bac73b75036f11420a0c323cce85dde8293fe2b3f54c63e668dd1"
+    }
+  },
+  "handoff": {
+    "document": {
+      "path": "docs/MAP_TOOLBAR_1192628.md",
+      "bytes": 5137,
+      "sha256": "c4708cd25041ba61cd73efa7bd45dd7ca88ffaf7eb4294bd22fde86ab7e6df76"
+    },
+    "powershell_parser": {
+      "powershell": "7.4.6",
+      "parsed_only": true,
+      "blocks": [
+        {
+          "block": 1,
+          "parse_errors": 0,
+          "tokens": 68,
+          "parsed_only": true
+        },
+        {
+          "block": 2,
+          "parse_errors": 0,
+          "tokens": 51,
+          "parsed_only": true
+        }
+      ]
+    },
+    "next": "Client-only pull, preserve/rebuild/install; keep five services running; record WAN once; T1-T5 then first unaccepted Court check."
+  },
+  "limits": [
+    "Native response fixtures and synthetic input are separate from Windows/LDPlayer and physical touchscreen evidence.",
+    "Software rendering timings do not establish60FPS on the target device; see matched-camera investigation.",
+    "No live production database/private runtime or credential files accessed; no backend/gameplay/migration changes.",
+    "Prior screenshots/logs and interrupted orchestration evidence are retained; only completed native/build checks are claimed."
+  ]
+}
