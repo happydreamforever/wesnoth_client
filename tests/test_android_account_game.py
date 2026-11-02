@@ -107,10 +107,11 @@ class AccountBuildTests(unittest.TestCase):
                 A.mobile_title_overlay(base.replace(old, b'changed', 1))
     def test_mobile_headers_have_exact_bound_stage_files(self):
         headers = A.presentation_headers(ROOT)
-        self.assertEqual(set(headers), {'mobile_home.hpp', 'presentation_icons.hpp', 'court_help.hpp', 'court_touch_actions.hpp', 'court_mobile_gesture.hpp', 'court_mobile_viewport.hpp', 'court_mobile_members.inc', 'court_mobile_workspace.inc'})
+        self.assertEqual(set(headers), {'mobile_home.hpp', 'presentation_icons.hpp', 'court_help.hpp', 'court_touch_actions.hpp', 'court_mobile_gesture.hpp', 'court_mobile_camera.hpp', 'court_mobile_viewport.hpp', 'court_mobile_members.inc', 'court_mobile_workspace.inc'})
         for name, data in headers.items():
             self.assertTrue(data)
             self.assertIn('tools/android-presentation/' + name, A.NEW_INPUTS)
+            self.assertEqual(data, (ROOT / 'tools/android-presentation' / name).read_bytes())
 
     def test_command_overlay_rejects_changed_engine_and_preserves_pinned_source(self):
         source = ROOT / 'engine/src/synced_commands.cpp'
@@ -205,28 +206,29 @@ class AccountBuildTests(unittest.TestCase):
         self.assertEqual(len(A.REPLACED_SOURCES), 22)
 
     def test_native_touch_header_change_invalidates_owned_stage_without_rewriting_it(self):
-        with tempfile.TemporaryDirectory(prefix='native-touch-binding-') as temporary:
-            repo = Path(temporary)
-            for name in A.NEW_INPUTS:
-                path = repo / name; path.parent.mkdir(parents=True, exist_ok=True); path.write_bytes(b'fixture source')
-            header = repo / 'alliance_game/native_touch_layout.hpp'
-            self.assertTrue(header.is_file())
-            with patch.object(A.G, 'selected_inputs', side_effect=lambda repo: ({}, {'project_files': {}}, {})), \
-                    patch.object(A.PUBLIC, 'bundle', return_value=({}, {'public_server': {}, 'bundled_assets': {}})):
-                first = A.selected_inputs(repo)[1]
-                stage = repo / 'owned-stage'
-                A.prepare_owned(stage, 'fixture', 'owner.json', first, {'source.cpp': b'preserved'})
-                header.write_bytes(b'changed touch target definitions')
-                changed = A.selected_inputs(repo)[1]
-                self.assertNotEqual(first['project_files']['alliance_game/native_touch_layout.hpp'], changed['project_files']['alliance_game/native_touch_layout.hpp'])
-                with self.assertRaises(A.BuildError):
-                    A.prepare_owned(stage, 'fixture', 'owner.json', changed, {'source.cpp': b'new'})
-                self.assertEqual((stage / 'source.cpp').read_bytes(), b'preserved')
+        for header_name in ('alliance_game/native_touch_layout.hpp', 'tools/android-presentation/court_mobile_camera.hpp'):
+            with self.subTest(header=header_name), tempfile.TemporaryDirectory(prefix='native-touch-binding-') as temporary:
+                repo = Path(temporary)
+                for name in A.NEW_INPUTS:
+                    path = repo / name; path.parent.mkdir(parents=True, exist_ok=True); path.write_bytes(b'fixture source')
+                header = repo / header_name
+                self.assertTrue(header.is_file())
+                with patch.object(A.G, 'selected_inputs', side_effect=lambda repo: ({}, {'project_files': {}}, {})), \
+                        patch.object(A.PUBLIC, 'bundle', return_value=({}, {'public_server': {}, 'bundled_assets': {}})):
+                    first = A.selected_inputs(repo)[1]
+                    stage = repo / 'owned-stage'
+                    A.prepare_owned(stage, 'fixture', 'owner.json', first, {'source.cpp': b'preserved'})
+                    header.write_bytes(b'changed touch or camera definitions')
+                    changed = A.selected_inputs(repo)[1]
+                    self.assertNotEqual(first['project_files'][header_name], changed['project_files'][header_name])
+                    with self.assertRaises(A.BuildError):
+                        A.prepare_owned(stage, 'fixture', 'owner.json', changed, {'source.cpp': b'new'})
+                    self.assertEqual((stage / 'source.cpp').read_bytes(), b'preserved')
 
     def test_templates_keep_package_data_and_no_plaintext(self):
         manifest = (ROOT / 'tools/native-account-game/AndroidManifest.xml').read_text()
         self.assertNotIn('.AccountSetupActivity', manifest); self.assertIn('.OfflineInitActivity', manifest); self.assertIn('android:allowBackup="false"', manifest)
-        self.assertIn('versionCode 1192627', (ROOT / 'tools/native-account-game/app.build.gradle').read_text())
+        self.assertIn('versionCode 1192628', (ROOT / 'tools/native-account-game/app.build.gradle').read_text())
         data = (ROOT / 'tools/native-account-game/OfflineDataInstaller.java').read_text()
         self.assertIn('main.1192600.org.wesnoth.offline.obb', data)
         self.assertNotIn('usesCleartextTraffic="true"', manifest)
@@ -399,9 +401,9 @@ class AccountUpdateTests(unittest.TestCase):
 
     def test_changed_source_binding_preserves_both_old_stages_byte_for_byte(self):
         record = self.prepare()
-        self.assertEqual(record['target_version'], 1192627)
-        self.assertEqual(A.PREVIOUS_VERSION_CODES, frozenset((1192608, 1192609, 1192610, 1192611, 1192612, 1192613, 1192614, 1192615, 1192616, 1192617, 1192618, 1192619, 1192620, 1192621, 1192622, 1192623, 1192624, 1192625, 1192626)))
-        self.assertEqual(A.UPDATE_JOURNAL, '.wesnoth-account-game-update-1192627.json')
+        self.assertEqual(record['target_version'], 1192628)
+        self.assertEqual(A.PREVIOUS_VERSION_CODES, frozenset((1192608, 1192609, 1192610, 1192611, 1192612, 1192613, 1192614, 1192615, 1192616, 1192617, 1192618, 1192619, 1192620, 1192621, 1192622, 1192623, 1192624, 1192625, 1192626, 1192627)))
+        self.assertEqual(A.UPDATE_JOURNAL, '.wesnoth-account-game-update-1192628.json')
         for name, entry in record['stages'].items():
             self.assertFalse((self.repo / 'build' / name).exists())
             self.assertEqual(A.stage_snapshot(self.repo / 'build' / entry['backup']), self.original[name])
@@ -411,7 +413,7 @@ class AccountUpdateTests(unittest.TestCase):
         self.select_previous_version(1192609)
         self.keep_practice_delivery()
         record = self.prepare()
-        self.assertEqual(record['target_version'], 1192627)
+        self.assertEqual(record['target_version'], 1192628)
         for name, entry in record['stages'].items():
             self.assertFalse((self.repo / 'build' / name).exists())
             self.assertEqual(A.stage_snapshot(self.repo / 'build' / entry['backup']), self.original[name])
@@ -422,7 +424,7 @@ class AccountUpdateTests(unittest.TestCase):
         self.keep_practice_delivery()
         self.keep_planning_delivery()
         record = self.prepare()
-        self.assertEqual(record['target_version'], 1192627)
+        self.assertEqual(record['target_version'], 1192628)
         for name, entry in record['stages'].items():
             self.assertFalse((self.repo / 'build' / name).exists())
             self.assertEqual(A.stage_snapshot(self.repo / 'build' / entry['backup']), self.original[name])
@@ -434,7 +436,7 @@ class AccountUpdateTests(unittest.TestCase):
         self.keep_planning_delivery()
         self.keep_lifecycle_delivery()
         record = self.prepare()
-        self.assertEqual(record['target_version'], 1192627)
+        self.assertEqual(record['target_version'], 1192628)
         for name, entry in record['stages'].items():
             self.assertFalse((self.repo / 'build' / name).exists())
             self.assertEqual(A.stage_snapshot(self.repo / 'build' / entry['backup']), self.original[name])
@@ -447,7 +449,7 @@ class AccountUpdateTests(unittest.TestCase):
         self.keep_lifecycle_delivery()
         self.keep_individual_delivery()
         record = self.prepare()
-        self.assertEqual(record['target_version'], 1192627)
+        self.assertEqual(record['target_version'], 1192628)
         for name, entry in record['stages'].items():
             self.assertFalse((self.repo / 'build' / name).exists())
             self.assertEqual(A.stage_snapshot(self.repo / 'build' / entry['backup']), self.original[name])
@@ -461,7 +463,7 @@ class AccountUpdateTests(unittest.TestCase):
         self.keep_individual_delivery()
         self.keep_separate_delivery()
         record = self.prepare()
-        self.assertEqual(record['target_version'], 1192627)
+        self.assertEqual(record['target_version'], 1192628)
         for name, entry in record['stages'].items():
             self.assertFalse((self.repo / 'build' / name).exists())
             self.assertEqual(A.stage_snapshot(self.repo / 'build' / entry['backup']), self.original[name])
@@ -476,7 +478,7 @@ class AccountUpdateTests(unittest.TestCase):
         self.keep_separate_delivery()
         self.keep_training_delivery()
         record = self.prepare()
-        self.assertEqual(record['target_version'], 1192627)
+        self.assertEqual(record['target_version'], 1192628)
         for name, entry in record['stages'].items():
             self.assertFalse((self.repo / 'build' / name).exists())
             self.assertEqual(A.stage_snapshot(self.repo / 'build' / entry['backup']), self.original[name])
@@ -491,7 +493,7 @@ class AccountUpdateTests(unittest.TestCase):
         self.keep_separate_delivery()
         self.keep_training_delivery()
         record = self.prepare()
-        self.assertEqual(record['target_version'], 1192627)
+        self.assertEqual(record['target_version'], 1192628)
         for name, entry in record['stages'].items():
             self.assertFalse((self.repo / 'build' / name).exists())
             self.assertEqual(A.stage_snapshot(self.repo / 'build' / entry['backup']), self.original[name])
@@ -503,7 +505,7 @@ class AccountUpdateTests(unittest.TestCase):
         previous.write_bytes(b'internal frozen release journal\n')
         self.previous_delivery[previous] = previous.read_bytes()
         record = self.prepare()
-        self.assertEqual(record['target_version'], 1192627)
+        self.assertEqual(record['target_version'], 1192628)
         for name, entry in record['stages'].items():
             self.assertFalse((self.repo / 'build' / name).exists())
             self.assertEqual(A.stage_snapshot(self.repo / 'build' / entry['backup']), self.original[name])
@@ -515,7 +517,7 @@ class AccountUpdateTests(unittest.TestCase):
         previous.write_bytes(b'internal frozen release journal\n')
         self.previous_delivery[previous] = previous.read_bytes()
         record = self.prepare()
-        self.assertEqual(record['target_version'], 1192627)
+        self.assertEqual(record['target_version'], 1192628)
         for name, entry in record['stages'].items():
             self.assertFalse((self.repo / 'build' / name).exists())
             self.assertEqual(A.stage_snapshot(self.repo / 'build' / entry['backup']), self.original[name])
@@ -527,7 +529,7 @@ class AccountUpdateTests(unittest.TestCase):
         previous.write_bytes(b'internal frozen release journal\n')
         self.previous_delivery[previous] = previous.read_bytes()
         record = self.prepare()
-        self.assertEqual(record['target_version'], 1192627)
+        self.assertEqual(record['target_version'], 1192628)
         for name, entry in record['stages'].items():
             self.assertFalse((self.repo / 'build' / name).exists())
             self.assertEqual(A.stage_snapshot(self.repo / 'build' / entry['backup']), self.original[name])
@@ -539,7 +541,7 @@ class AccountUpdateTests(unittest.TestCase):
         previous.write_bytes(b'internal frozen release journal\n')
         self.previous_delivery[previous] = previous.read_bytes()
         record = self.prepare()
-        self.assertEqual(record['target_version'], 1192627)
+        self.assertEqual(record['target_version'], 1192628)
         for name, entry in record['stages'].items():
             self.assertFalse((self.repo / 'build' / name).exists())
             self.assertEqual(A.stage_snapshot(self.repo / 'build' / entry['backup']), self.original[name])
@@ -579,7 +581,7 @@ class AccountUpdateTests(unittest.TestCase):
         previous.write_bytes(b'completed product update journal, retained exactly\n')
         self.previous_delivery[previous] = previous.read_bytes()
         record = self.prepare()
-        self.assertEqual(record['target_version'], 1192627)
+        self.assertEqual(record['target_version'], 1192628)
         self.assertEqual(record['target_inputs']['public_server'], self.old_inputs['public_server'])
         for name, entry in record['stages'].items():
             self.assertEqual(A.stage_snapshot(self.repo / 'build' / entry['backup']), self.original[name])
@@ -608,7 +610,7 @@ class AccountUpdateTests(unittest.TestCase):
         previous.write_bytes(b'completed product update journal, retained exactly\n')
         self.previous_delivery[previous] = previous.read_bytes()
         record = self.prepare()
-        self.assertEqual(record['target_version'], 1192627)
+        self.assertEqual(record['target_version'], 1192628)
         self.assertEqual(record['target_inputs']['public_server'], self.old_inputs['public_server'])
         for name, entry in record['stages'].items():
             self.assertEqual(A.stage_snapshot(self.repo / 'build' / entry['backup']), self.original[name])
@@ -620,7 +622,7 @@ class AccountUpdateTests(unittest.TestCase):
         previous.write_bytes(b'completed world release journal, retained exactly\n')
         self.previous_delivery[previous] = previous.read_bytes()
         record = self.prepare()
-        self.assertEqual(record['target_version'], 1192627)
+        self.assertEqual(record['target_version'], 1192628)
         for name, entry in record['stages'].items():
             self.assertEqual(A.stage_snapshot(self.repo / 'build' / entry['backup']), self.original[name])
         self.assertEqual(self.prepare(), record)
@@ -632,7 +634,7 @@ class AccountUpdateTests(unittest.TestCase):
         previous.write_bytes(b'completed world release journal, retained exactly\n')
         self.previous_delivery[previous] = previous.read_bytes()
         record = self.prepare()
-        self.assertEqual(record['target_version'], 1192627)
+        self.assertEqual(record['target_version'], 1192628)
         for name, entry in record['stages'].items():
             self.assertEqual(A.stage_snapshot(self.repo / 'build' / entry['backup']), self.original[name])
         self.assertEqual(self.prepare(), record)
@@ -644,7 +646,19 @@ class AccountUpdateTests(unittest.TestCase):
         previous.write_bytes(b'completed world release journal, retained exactly\n')
         self.previous_delivery[previous] = previous.read_bytes()
         record = self.prepare()
-        self.assertEqual(record['target_version'], 1192627)
+        self.assertEqual(record['target_version'], 1192628)
+        for name, entry in record['stages'].items():
+            self.assertEqual(A.stage_snapshot(self.repo / 'build' / entry['backup']), self.original[name])
+        self.assertEqual(self.prepare(), record)
+        self.assertEqual(previous.read_bytes(), self.previous_delivery[previous])
+
+    def test_completed1192627_and_original_journal_survive_map_toolbar_update(self):
+        self.select_previous_version(1192627)
+        previous = self.repo / 'build/.wesnoth-account-game-update-1192627.json'
+        previous.write_bytes(b'completed smooth-map release journal, retained exactly\n')
+        self.previous_delivery[previous] = previous.read_bytes()
+        record = self.prepare()
+        self.assertEqual(record['target_version'], 1192628)
         for name, entry in record['stages'].items():
             self.assertEqual(A.stage_snapshot(self.repo / 'build' / entry['backup']), self.original[name])
         self.assertEqual(self.prepare(), record)
@@ -813,7 +827,7 @@ class AccountUpdateTests(unittest.TestCase):
                         {'title_screen.cpp': b'new title'})
         (self.engine / 'receipt.json').write_bytes(b'completed current engine')
         inputs = dict(self.current_inputs, account_engine_receipt=A.fingerprint(self.engine / 'receipt.json'))
-        A.prepare_owned(self.game, A.KIND, A.MARKER, inputs, {'app/build.gradle': b'versionCode 1192627'})
+        A.prepare_owned(self.game, A.KIND, A.MARKER, inputs, {'app/build.gradle': b'versionCode 1192628'})
         self.assertEqual(self.prepare(), record)
 
     def test_missing_or_incomplete_old_stage_is_not_blindly_backed_up(self):
@@ -829,7 +843,7 @@ class AccountUpdateTests(unittest.TestCase):
         self.assertFalse((self.repo / 'build' / A.UPDATE_JOURNAL).exists())
 
     def test_stage_from_other_release_is_not_accepted_as_current_previous(self):
-        for version in (1192600, 1192601, 1192602, 1192603, 1192604, 1192605, 1192606, 1192607, 1192627, 1192628, '1192608', True):
+        for version in (1192600, 1192601, 1192602, 1192603, 1192604, 1192605, 1192606, 1192607, 1192628, 1192629, '1192608', True):
             with self.subTest(version=version):
                 self.game_receipt['validation']['apk']['version_code'] = version
                 (self.game / 'receipt.json').write_bytes(A.B.json_bytes(self.game_receipt))

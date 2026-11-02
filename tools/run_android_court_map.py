@@ -17,7 +17,7 @@ def main():
         return r.stdout+r.stderr
     if adb('get-state').strip()!='device':raise RuntimeError('Existing LDPlayer device is unavailable')
     installed=adb('shell','dumpsys','package','org.wesnoth.offline')
-    if re.findall(r'\bversionCode=(\d+)\b',installed)!=['1192627']:raise RuntimeError('Install verified game 1192627 first')
+    if re.findall(r'\bversionCode=(\d+)\b',installed)!=['1192628']:raise RuntimeError('Install verified game 1192628 first')
     activity=adb('shell','dumpsys','activity','activities')
     resumed=[line for line in activity.splitlines() if 'ResumedActivity' in line or 'mFocusedActivity' in line]
     if not any('org.wesnoth.offline/.OfflineGameActivity' in line for line in resumed):raise RuntimeError('Keep the Court map open in the foreground')

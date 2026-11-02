@@ -1,10 +1,21 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "tools/android-presentation/court_mobile_gesture.hpp"
+#include "tools/android-presentation/court_mobile_camera.hpp"
 #include <cassert>
 #include <iostream>
 using namespace alliance_game::court_mobile;
 static bool near(double a,double b){return std::abs(a-b)<1e-8;}
 int main(){
+    // Real map aspect ratios and touch layouts at both supported resolutions.
+    for(const double aspect:{1.5,1672./941.})for(const double width:{1196.,1836.}){
+        Camera first;resize_camera(first,width,width*.44,aspect,false);fit_width(first);
+        auto a=first.project({0,0}),b=first.project({1,1});assert(near(a.x,0)&&near(b.x,width));
+        const double initial=first.zoom;first.zoom_at(1/1.4,{first.width/2,first.height/2});assert(first.zoom<initial);
+        first.centre();resize_camera(first,first.width,first.height,aspect,true);assert(near(first.zoom,1)); // Same-size redraw preserves Centre overview.
+        first.zoom_at(2.5,{first.width/2,first.height/2});first.cy=.55;first.clamp();const Camera saved=first;
+        resize_camera(first,width,saved.height*.7,aspect,true);assert(near(first.scale(),saved.scale())&&near(first.cy,saved.cy));
+        resize_camera(first,width,saved.height,aspect,true);assert(near(first.scale(),saved.scale())&&near(first.zoom,saved.zoom)&&near(first.cy,saved.cy));
+    }
     Camera camera;camera.resize(1200,600,1.5);camera.zoom_at(3,{600,300});
     Gesture gesture;auto now=Clock::now();auto advance=[&]{now+=std::chrono::milliseconds(16);};
     gesture.down(1,10,{500,250},now);gesture.down(1,20,{700,350},now);

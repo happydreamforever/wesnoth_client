@@ -5,7 +5,7 @@ from pathlib import Path
 WORKSPACE_PIN = 'aeb9a9d638b9fdb8f8961e54d706cf452385fd46237d410eb13f52ca667804d8'
 ACCOUNT_PIN = 'a2be9cb9acc20a143cecf3d740898d4f526430195f8780d4e6fcbfff4426bec9'
 ROOT = Path(__file__).resolve().parent
-HEADERS = ('court_mobile_gesture.hpp', 'court_mobile_viewport.hpp',
+HEADERS = ('court_mobile_gesture.hpp', 'court_mobile_camera.hpp', 'court_mobile_viewport.hpp',
            'court_mobile_members.inc', 'court_mobile_workspace.inc')
 
 def replace(source, before, after, count=1):
@@ -28,7 +28,7 @@ def generate_workspace(source):
         raise ValueError('Pinned Court workspace changed; originals preserved.')
     s=source.decode('utf-8')
     s=replace(s, '#include "alliance_game/court_map.hpp"', '#include "alliance_game/court_map.hpp"\n#include "court_mobile_viewport.hpp"')
-    s=replace(s, 'court_map::Camera world_camera,area_camera,bracket_camera;', 'court_map::Camera world_camera,area_camera,bracket_camera;\n    std::map<std::string,court_map::Camera> area_cameras;std::map<std::string,std::string> map_selections;')
+    s=replace(s, 'court_map::Camera world_camera,area_camera,bracket_camera;', 'court_map::Camera world_camera,area_camera,bracket_camera;\n    std::map<std::string,court_map::Camera> area_cameras;std::map<std::string,std::string> map_selections;std::map<std::string,bool> map_camera_initialized;')
     s=replace(s, 'struct Action {std::string label;std::function<void()> run;};', 'struct Action {std::string label;std::function<void()> run;bool navigation=false;};')
     old=section(s,'inline std::string workspace_window(){','class Workspace final:')
     form=section(old,'    auto& form_layer=','    auto& more=')
@@ -46,6 +46,7 @@ def generate_workspace(source):
     for name in ('Enter Area','Open Castle','Find Team','Area Teams','Battle history','Wallet history','My applications'):
         s=replace(s,'add("'+name+'",','add_navigation("'+name+'",')
     s=replace(s,'primary.set_active(!job_&&!actions_.empty());','primary.set_active(mobile_can_run(0));')
+    s=replace(s,'std::vector<std::string> names{"More actions"};','std::vector<std::string> names{"More"};')
     s=replace(s,'if(job_)return;if(form_)submit();else if(!actions_.empty())actions_[0].run();','if(form_)submit();else if(mobile_can_run(0))actions_[0].run();')
     # Form and mutation controls retain their existing busy guard.
     s=replace(s,'more.set_active(!job_);','more.set_active(!job_||(!mutation_&&std::any_of(actions_.begin(),actions_.end(),[](const auto& a){return a.navigation;})));')
@@ -79,5 +80,6 @@ def generate_workspace(source):
     s=replace(s,'    auto bind=[this]', '''    find_widget<gui2::menu_button>("court_choices").set_visible(gui2::widget::visibility::invisible);
     gui2::event::connect_signal_notify_modified(find_widget<gui2::menu_button>("court_choices"),[this](auto&&...){if(updating_)return;int n=find_widget<gui2::menu_button>("court_choices").get_value();if(n>0&&std::size_t(n)<=mobile_candidates_.size()){auto id=mobile_candidates_[n-1];mobile_choose(id);}});
     gui2::event::connect_signal_mouse_left_click(find_widget<gui2::button>("court_collapse"),[this](auto&&...){mobile_gesture_.stop();mobile_expanded_=!mobile_expanded_;mobile_layout();});
+    gui2::event::connect_signal_mouse_left_click(find_widget<gui2::button>("court_search_toggle"),[this](auto&&...){mobile_cancel();state_.map=false;mobile_list_dirty_=true;refresh_widgets();keyboard_capture(&find_widget<gui2::text_box>("court_search"));});
     auto bind=[this]''')
     return s.encode('utf-8')

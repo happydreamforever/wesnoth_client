@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #pragma once
 #include "court_mobile_gesture.hpp"
+#include "court_mobile_camera.hpp"
 #include "alliance_game/product_ui_layout.hpp"
 #include "alliance_game/menu_icons.hpp"
 #include "gui/widgets/drawing.hpp"
@@ -35,7 +36,7 @@ struct Viewport;
 void court_mobile_frame_probe(const Viewport&);
 #endif
 struct Viewport {
-    Camera* camera=nullptr;std::vector<Marker> markers;std::string selected,area,bracket;
+    Camera* camera=nullptr;bool* camera_initialized=nullptr;std::vector<Marker> markers;std::string selected,area,bracket;
     bool dirty=true;std::uint64_t frames=0,texture_builds=0;int w=0,h=0;
     texture overview,detail,fog,label;std::array<texture,6> symbols;
     std::string label_text;double label_scale=0;
@@ -100,7 +101,9 @@ struct Viewport {
         const auto q=camera->inverse(p);for(const auto& m:markers)if(court_map::contains(*m.node,q))return {m.id};return {};
     }
     void draw(int width,int height){
-        if(!camera||width<1||height<1)return;w=width;h=height;camera->resize(w,h,bracket.empty()?(area.empty()?1.5:1672./941.):camera->aspect);
+        if(!camera||width<1||height<1)return;w=width;h=height;
+        resize_camera(*camera,w,h,bracket.empty()?(area.empty()?1.5:1672./941.):camera->aspect,camera_initialized&&*camera_initialized);
+        if(camera_initialized&&!*camera_initialized){fit_width(*camera);*camera_initialized=true;}
         auto clip=::draw::reduce_clip({0,0,w,h});::draw::fill(rect{0,0,w,h},color_t{18,43,33});auto a=camera->project({0,0}),b=camera->project({1,1});rect dest{int(a.x),int(a.y),int(b.x-a.x),int(b.y-a.y)};
         const texture& art=dest.w<=1024&&dest.h<=1024?overview:detail;if(art)::draw::blit(art,dest);if(fog&&bracket.empty())::draw::blit(fog,dest);
         const int size=int(40*scale());std::optional<Point> selection_position;

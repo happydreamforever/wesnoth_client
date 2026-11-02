@@ -15,6 +15,7 @@ inline void Workspace::map(){
     auto& toggle=find_widget<gui2::button>("court_view");toggle.set_visible(((state_.view.empty()&&state_.depth<2)||bracket)?gui2::widget::visibility::visible:gui2::widget::visibility::invisible);toggle.set_label(shown?"List":bracket?"Bracket":"Map");
     if(!shown)return;
     auto& widget=find_widget<gui2::drawing>("court_map");mobile_->camera=&active_camera();
+    mobile_->camera_initialized=bracket?nullptr:&state_.map_camera_initialized[state_.depth?state_.area:std::string{}];
     if(!mobile_attached_){std::vector<std::unique_ptr<gui2::canvas::shape>> shapes;shapes.emplace_back(std::make_unique<court_mobile::MapShape>(mobile_));widget.get_drawing_canvas().set_shapes(std::move(shapes));mobile_attached_=true;}
     if(bracket){const auto art=bracket_art(card->value);if(mobile_->bracket!=art.image){mobile_->overview=mobile_->detail=image::get_texture(art.image);mobile_->bracket=art.image;mobile_->markers.clear();mobile_->fog={};mobile_->camera->aspect=double(art.width)/art.height;mobile_->invalidate();}mobile_tick();return;}
     const auto next_area=state_.depth?state_.area:std::string{};

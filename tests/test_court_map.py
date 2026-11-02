@@ -38,8 +38,8 @@ class CourtMapTest(unittest.TestCase):
             self.assertIn(path,builder.NEW_INPUTS)
             self.assertTrue((ROOT/path).is_file())
         self.assertIn('alliance_native/court_protocol.hpp',builder.NEW_INPUTS)
-        self.assertEqual(builder.VERSION_CODE,1192627)
-        self.assertIn(1192626,builder.PREVIOUS_VERSION_CODES)
+        self.assertEqual(builder.VERSION_CODE,1192628)
+        self.assertIn(1192627,builder.PREVIOUS_VERSION_CODES)
 
     def test_touch_overlay_preserves_native_execution_and_refuses_changed_sources(self):
         import importlib.util
@@ -79,5 +79,52 @@ int main(){
             path=Path(raw);(path/'test.cpp').write_text(source)
             subprocess.run(['g++','-std=c++17','-fsanitize=address,undefined','-fno-omit-frame-pointer','-I',str(ROOT),str(path/'test.cpp'),'-o',str(path/'check')],check=True)
             subprocess.run([str(path/'check')],check=True)
+
+
+class MapInputCompanionVersionTests(unittest.TestCase):
+    """No gestures/builds are admitted until the expected foreground game is checked."""
+    def run_companion(self, installed):
+        import importlib.util
+        import sys
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        spec=importlib.util.spec_from_file_location('map_input_fixture',ROOT/'tools/run_android_court_map.py')
+        driver=importlib.util.module_from_spec(spec);spec.loader.exec_module(driver)
+        self.calls=[];self.build_calls=[]
+        with tempfile.TemporaryDirectory(prefix='court-input-') as raw:
+            out=Path(raw)/'output'
+            def build(sdk,java,output):
+                self.build_calls.append((sdk,java,output));output.mkdir();(output/'map-check.apk').write_bytes(b'companion fixture')
+            def run(argv,**kwargs):
+                args=argv[3:];self.calls.append(args)
+                if args==['get-state']:text='device'
+                elif args==['shell','dumpsys','package','org.wesnoth.offline']:text=installed
+                elif args==['shell','dumpsys','activity','activities']:text='mResumedActivity: org.wesnoth.offline/.OfflineGameActivity'
+                elif args[:2]==['install','-r']:text='Success'
+                elif args[:3]==['shell','am','instrument']:
+                    text='MOBILE MAP GESTURES SENT; VISUAL REVIEW REQUIRED\nINSTRUMENTATION_CODE: -1\nImages: /storage/emulated/0/Android/data/org.wesnoth.mapcheck/files/map-check-world-1'
+                elif args[0]=='pull':text='fixture image transfer'
+                else:self.fail('Unexpected ADB command: '+repr(args))
+                return SimpleNamespace(returncode=0,stdout=text,stderr='')
+            fake_spec=SimpleNamespace(loader=SimpleNamespace(exec_module=lambda module:None))
+            argv=['run_android_court_map.py','--sdk','sdk','--java-home','java','--output',str(out),'--adb','adb','--screen','world','--map-is-open']
+            with patch.object(sys,'argv',argv),patch.object(driver.subprocess,'run',side_effect=run),patch.object(driver.importlib.util,'spec_from_file_location',return_value=fake_spec),patch.object(driver.importlib.util,'module_from_spec',return_value=SimpleNamespace(build=build)):
+                driver.main()
+            return json.loads((out/'device-report.json').read_text())
+
+    def test_current_release_permits_bounded_companion_after_foreground_check(self):
+        report=self.run_companion('versionCode=1192628 minSdk=23')
+        self.assertEqual(len(self.build_calls),1)
+        self.assertEqual(self.calls[:3],[['get-state'],['shell','dumpsys','package','org.wesnoth.offline'],['shell','dumpsys','activity','activities']])
+        self.assertEqual(sum(c[:3]==['shell','am','instrument'] for c in self.calls),1)
+        self.assertFalse(report['physical_touchscreen']);self.assertEqual(report['visual_acceptance'],'pending')
+        self.assertFalse(any('clear' in c or 'uninstall' in c or 'force-stop' in c for c in self.calls))
+
+    def test_other_or_ambiguous_release_stops_before_build_install_or_gestures(self):
+        for installed in ['versionCode=1192627','versionCode=1192629','versionCode=unknown','versionCode=1192628\nversionCode=1192628']:
+            with self.subTest(installed=installed),self.assertRaisesRegex(RuntimeError,'Install verified game 1192628 first'):
+                self.run_companion(installed)
+            self.assertEqual(self.build_calls,[])
+            self.assertEqual(self.calls,[['get-state'],['shell','dumpsys','package','org.wesnoth.offline']])
 
 if __name__=='__main__':unittest.main()
