@@ -29,6 +29,16 @@
       "bytes": 3361958,
       "path": "court/world.png",
       "sha256": "63a36826ac5452e8d1fd7612c97b20c5c8a5d565267eb0723b0d09c0da18c9a8"
+    },
+    {
+      "bytes": 1531015,
+      "path": "court/world-overview.png",
+      "sha256": "a462a23d9834ea75bfb7b2d04d10b29c57720c20c7cb3ad56bc48be1894b5fbc"
+    },
+    {
+      "bytes": 1338390,
+      "path": "court/area-overview.png",
+      "sha256": "563dcf1a3b9ee18ad64be9ce8de6b346e13b062c7502b795328594ae6372b79a"
     }
   ],
   "format": 1

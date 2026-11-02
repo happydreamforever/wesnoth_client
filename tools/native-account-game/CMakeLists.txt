@@ -72,7 +72,7 @@ add_library(main SHARED ${account_base_objects}
  "${REPO}/alliance_game/battle_launch.cpp"
  "${REPO}/alliance_game/practice_plan.cpp"
  "${REPO}/alliance_game/practice_scenario.cpp"
- "${REPO}/alliance_game/account_ui.cpp"
+ "${ACCOUNT_STAGE}/account_ui.cpp"
  "${REPO}/alliance_native/account_protocol.cpp"
  "${REPO}/alliance_native/account_client.cpp"
  "${REPO}/alliance_native/transport.cpp")

@@ -42,9 +42,9 @@ inline config& plain_cell(config& row,const char* type,const std::string& id="",
     auto& child=column.add_child(type);if(*type&&std::string(type)!="grid"){child["id"]=id;child["definition"]="default";}return child;
 }
 inline void spacer(config& row,int width,int height,int grow=0){auto& s=plain_cell(row,"spacer","",grow);s["width"]=width;s["height"]=height;}
-inline void label_style(const char* id,int width,int height,int font,const char* colour,bool script=false) {
+inline void label_style(const char* id,int width,int height,int font,const char* colour,bool script=false,bool fit=false) {
     config definition;definition["id"]=style(id);definition["description"]="Home title and profile";auto& r=definition.add_child("resolution");width=px(width);height=px(height);font=px(font);
-    r["min_width"]=width;r["default_width"]=width;r["max_width"]=width;r["min_height"]=height;r["default_height"]=height;r["max_height"]=height;r["text_font_size"]=font;
+    r["min_width"]=fit?0:width;r["default_width"]=fit?0:width;r["max_width"]=width;r["min_height"]=height;r["default_height"]=height;r["max_height"]=height;r["text_font_size"]=font;
 
     for(const char* state:{"state_enabled","state_disabled"}){auto& d=r.add_child(state).add_child("draw");auto& t=d.add_child("text");
         t["x"]=script?"((width - text_width) / 2)":"0";t["y"]="((height - text_height) / 2)";t["w"]="(text_width)";t["h"]="(text_height)";
@@ -84,11 +84,10 @@ inline void prepare_styles() {
     {config c;c["id"]=style("alliance_mobile_home_crest");c["description"]="Oak crest";auto& cr=c.add_child("resolution");cr["min_width"]=px(260);cr["default_width"]=px(260);cr["max_width"]=px(260);cr["min_height"]=px(30);cr["default_height"]=px(30);cr["max_height"]=px(30);
       auto& draw=cr.add_child("state_enabled").add_child("draw");emerald_chrome::ornament_canvas(draw,px(40),"((width - "+std::to_string(px(40))+") / 2)",std::to_string(-px(10)));
       for(int side=0;side<2;++side){auto& line=draw.add_child("line");line["x1"]=px(side?155:5);line["x2"]=px(side?255:105);line["y1"]=px(17);line["y2"]=px(17);line["color"]=product_ui::gold;}cr.add_child("state_disabled").add_child("draw");gui2::add_single_widget_definition("label",style("alliance_mobile_home_crest"),c);}
-    label_style("alliance_mobile_home_name",172,26,19,product_ui::ivory);
-    label_style("alliance_mobile_home_count",172,22,16,product_ui::gold);
-    label_style("alliance_mobile_home_cash",172,22,16,product_ui::ivory);
+    label_style("alliance_mobile_home_name",232,26,19,product_ui::ivory,false,true);
+    label_style("alliance_mobile_home_count",232,22,16,product_ui::gold,false,true);
+    label_style("alliance_mobile_home_cash",232,22,16,product_ui::ivory,false,true);
     label_style("alliance_mobile_home_tip",240,32,20,product_ui::ivory);
-    label_style("alliance_mobile_home_profile_tip",500,32,20,product_ui::ivory);
     config panel;panel["id"]=style("alliance_mobile_home_profile");panel["description"]="Signed-in player";auto& p=panel.add_child("resolution");
     const int horizontal_padding=px(200)-px(172),vertical_padding=px(82)-px(26)-px(22)-px(22);
     p["left_border"]=horizontal_padding/2;p["right_border"]=horizontal_padding-horizontal_padding/2;
@@ -115,10 +114,7 @@ inline void prepare_styles() {
     tr.add_child("tooltip")["id"]="tooltip";tr.add_child("helptip")["id"]="tooltip";
     auto& tip_label=plain_cell(product_ui::row(tr.add_child("grid")),"label","label");tip_label["definition"]=style("alliance_mobile_home_tip");tip_label["wrap"]=false;
     gui2::current_gui->second.window_types.emplace(style("alliance_mobile_home_tooltip"),gui2::builder_window(tip));
-    tip["id"]=style("alliance_mobile_home_profile_tooltip");tr["width"]=px(520);
-    tr["x"]="(max(8, min(screen_width - "+std::to_string(px(528))+", source_x + source_w / 2 - "+std::to_string(px(260))+")))";
-    tip_label["definition"]=style("alliance_mobile_home_profile_tip");
-    gui2::current_gui->second.window_types.emplace(style("alliance_mobile_home_profile_tooltip"),gui2::builder_window(tip));
+
 }
 inline std::string prepare_window() {
     prepare_styles();const std::string id=style("alliance_mobile_home");auto& windows=gui2::current_gui->second.window_types;if(windows.count(id))return id;
@@ -130,6 +126,7 @@ inline std::string prepare_window() {
     spacer(header,px(16),1);auto& profile=plain_cell(header,"panel","home_profile");profile["definition"]=style("alliance_mobile_home_profile");
     auto& profile_grid=profile.add_child("grid");auto& name=plain_cell(product_ui::row(profile_grid),"label","home_player");name["definition"]=style("alliance_mobile_home_name");name["wrap"]=false;name["label"]="Player";
     auto& count=plain_cell(product_ui::row(profile_grid),"label","home_heroes");count["definition"]=style("alliance_mobile_home_count");count["label"]="Heroes: 0";auto& cash=plain_cell(product_ui::row(profile_grid),"label","home_cash");cash["definition"]=style("alliance_mobile_home_cash");cash["label"]="Crowns: …";
+    for(auto& row:profile_grid.child_range("row"))for(auto& col:row.child_range("column")){col["horizontal_grow"]=true;col.remove_attribute("horizontal_alignment");}
     auto& kicker=plain_cell(product_ui::row(grid),"label","home_kicker");kicker["definition"]=style("alliance_mobile_home_kicker");kicker["label"]=emerald_chrome::serif_text(product_theme::title_kicker);kicker["use_markup"]=true;
     auto& crest=plain_cell(product_ui::row(grid),"label","home_crest");crest["definition"]=style("alliance_mobile_home_crest");
     auto& title=plain_cell(product_ui::row(grid),"label","home_title");title["definition"]=style("alliance_mobile_home_title");title["label"]=emerald_chrome::serif_text(product_theme::title_name);title["use_markup"]=true;
@@ -140,8 +137,11 @@ inline std::string prepare_window() {
 }
 
 inline void set_profile(gui2::window& window,const std::string& username,std::size_t heroes) {
-    auto& name=window.find_widget<gui2::label>("home_player");name.set_label(username);name.set_tooltip(username);name.set_text_ellipse_mode(PANGO_ELLIPSIZE_END);
+    auto& name=window.find_widget<gui2::label>("home_player");
+    const bool changed=name.get_label().str()!=username||window.find_widget<gui2::label>("home_heroes").get_label().str()!="Heroes: "+std::to_string(heroes);
+    name.set_label(username);name.set_tooltip("");name.set_use_tooltip_on_label_overflow(false);name.set_text_ellipse_mode(PANGO_ELLIPSIZE_END);
     window.find_widget<gui2::label>("home_heroes").set_label("Heroes: "+std::to_string(heroes));
+    if(changed)window.invalidate_layout();
 }
 
 
@@ -152,7 +152,7 @@ class CashRefresh final:private events::pump_monitor {
         if(account_session_interaction_active()||!hooks_.request||!hooks_.same_actor||!hooks_.same_actor())return;
         if(job_&&job_->complete()) {auto reply=job_->take();job_.reset();next_=std::chrono::steady_clock::now()+std::chrono::seconds(5);
             if(reply.ok&&court_ui::number(reply.document,"version")==1&&court_ui::text(reply.document,"actor_id")==hooks_.actor_id&&court_ui::text(reply.document,"database_generation")==hooks_.generation)
-                window_.find_widget<gui2::label>("home_cash").set_label("Crowns: "+std::to_string(court_ui::number(court_ui::object(court_ui::object(reply.document,"data"),"wallet"),"available")));
+                {auto& label=window_.find_widget<gui2::label>("home_cash");const auto value="Crowns: "+std::to_string(court_ui::number(court_ui::object(court_ui::object(reply.document,"data"),"wallet"),"available"));if(label.get_label().str()!=value){label.set_label(value);window_.invalidate_layout();}}
             else if(!reply.ok&&court_ui::connection_error(reply.code)){if(hooks_.connection_failure)hooks_.connection_failure(reply);if(unavailable_)unavailable_();}
         }
         if(!job_&&std::chrono::steady_clock::now()>=next_){next_=std::chrono::steady_clock::now()+std::chrono::seconds(5);job_=std::make_unique<court_ui::Job>(hooks_,false,"wallet",court_ui::json::object{});}
@@ -175,10 +175,9 @@ struct Press {
     bool accept_click(){const bool allow=!described&&!cancelled;down=false;return allow;}
 };
 class Interaction : public std::enable_shared_from_this<Interaction> {
-    gui2::window& window_;std::array<Press,actions.size()> presses_{};std::array<std::size_t,actions.size()+1> timers_{};
+    gui2::window& window_;std::array<Press,actions.size()> presses_{};std::array<std::size_t,actions.size()> timers_{};
     void stop(std::size_t i){if(timers_[i])gui2::remove_timer(timers_[i]);timers_[i]=0;}
     void describe(std::size_t i){auto& b=window_.find_widget<gui2::button>(actions[i].id);const auto box=b.get_rectangle();if(box.w&&box.h)gui2::dialogs::tip::show(style("alliance_mobile_home_tooltip"),actions[i].name,point{box.x+box.w/2,box.y},box);}
-    void describe_profile(){auto& label=window_.find_widget<gui2::label>("home_player");const auto box=window_.find_widget<gui2::widget>("home_profile").get_rectangle();if(box.w&&box.h)gui2::dialogs::tip::show(style("alliance_mobile_home_profile_tooltip"),label.get_label(),point{box.x,box.y},box);}
     void focus(std::size_t i,bool focused){auto& b=window_.find_widget<gui2::button>(actions[i].id);for(int n=0;n<4;++n)b.get_canvas(n).set_variable("home_focus",wfl::variant(focused));b.queue_redraw();if(focused&&i<6)describe(i);else gui2::dialogs::tip::remove();}
 public:
     explicit Interaction(gui2::window& window):window_(window){}
@@ -203,13 +202,13 @@ public:
                     handled=halt=true;self->window_.keyboard_capture(&self->window_.find_widget<gui2::button>(actions[next].id));}
             },gui2::event::dispatcher::front_child);
         }
-        auto& profile=window_.find_widget<gui2::label>("home_player");
-        profile.connect_signal<gui2::event::LEFT_BUTTON_DOWN>([self](auto&&...){self->stop(actions.size());std::weak_ptr<Interaction> weak=self;
-            self->timers_[actions.size()]=gui2::add_timer(std::chrono::milliseconds(550),[weak](std::size_t){if(auto owner=weak.lock()){owner->timers_[actions.size()]=0;owner->describe_profile();}});});
-        profile.connect_signal<gui2::event::LEFT_BUTTON_UP>([self](auto&&...){self->stop(actions.size());});
-        profile.connect_signal<gui2::event::MOUSE_LEAVE>([self](auto&&...){self->stop(actions.size());});
-        profile.connect_signal<gui2::event::SHOW_TOOLTIP>([self](gui2::widget&,auto,bool& handled,bool& halt,const point&){self->describe_profile();handled=halt=true;},gui2::event::dispatcher::front_child);
-        window_.connect_signal<gui2::event::SDL_ACTIVATE>([self](auto&&...){self->stop(actions.size());for(std::size_t i=0;i<actions.size();++i){self->stop(i);if(self->presses_[i].down)self->presses_[i].cancel();}});
+        // The profile is informational. No overflow, hover or hold popup.
+        for(const char* id:{"home_player","home_heroes","home_cash"}){
+            auto& label=window_.find_widget<gui2::label>(id);
+            label.set_tooltip("");label.set_use_tooltip_on_label_overflow(false);
+            label.set_link_aware(false);
+        }
+        window_.connect_signal<gui2::event::SDL_ACTIVATE>([self](auto&&...){for(std::size_t i=0;i<actions.size();++i){self->stop(i);if(self->presses_[i].down)self->presses_[i].cancel();}});
         window_.keyboard_capture(&window_.find_widget<gui2::button>("campaign"));
     }
 };

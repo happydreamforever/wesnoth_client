@@ -32,9 +32,9 @@ ENGINE_KIND = 'wesnoth-android-account-engine'
 LOCK = '.wesnoth-account-game-operation.json'
 MARKER = '.wesnoth-account-game.json'
 ENGINE_MARKER = '.wesnoth-account-engine.json'
-VERSION_CODE = 1192626
-PREVIOUS_VERSION_CODES = frozenset(range(1192608, 1192626))
-UPDATE_JOURNAL = '.wesnoth-account-game-update-1192626.json'
+VERSION_CODE = 1192627
+PREVIOUS_VERSION_CODES = frozenset(range(1192608, 1192627))
+UPDATE_JOURNAL = '.wesnoth-account-game-update-1192627.json'
 UPDATE_KIND = 'wesnoth-android-account-game-update'
 UPDATE_STAGES = ('android-account-engine', 'android-account-game')
 PACKAGE = G.PACKAGE
@@ -48,9 +48,10 @@ TEMPLATES.update({name + '.java': 'app/src/main/java/org/wesnoth/offline/' + nam
                   for name in ('AlliancePublicProfile', 'BundledStartup', 'StartupProgress', 'WesnothGameTask', 'ProductTheme', 'StartupFrame')})
 TEMPLATES.update({name + '.java': 'app/src/main/java/org/libsdl/app/' + name + '.java'
                   for name in ('WesnothKeyboard', 'WesnothKeyboardState')})
-PRESENTATION_HEADERS = ('mobile_home.hpp', 'presentation_icons.hpp', 'court_touch_actions.hpp', 'court_help.hpp')
+PRESENTATION_HEADERS = ('mobile_home.hpp', 'presentation_icons.hpp', 'court_touch_actions.hpp', 'court_help.hpp', 'court_mobile_gesture.hpp', 'court_mobile_viewport.hpp', 'court_mobile_members.inc', 'court_mobile_workspace.inc')
 NEW_INPUTS = (*(f'tools/android-presentation/{name}' for name in PRESENTATION_HEADERS), 'tools/build_android_account_game.py', 'tools/android_public_bundle.py',
-              'tools/generate_product_theme.py', 'tools/native-account-game/ui-theme.json',
+              'tools/android-presentation/court_mobile_overlay.py', 'tools/android-presentation/court_mobile_layout.inc',
+              'tools/android-presentation/court_overviews.c', 'tools/generate_product_theme.py', 'tools/native-account-game/ui-theme.json',
               'alliance_game/product_theme.hpp', 'alliance_game/home_ui.hpp', 'alliance_game/menu_icons.hpp', 'alliance_game/emerald_chrome.hpp',
               'alliance_game/native_menu_theme.hpp', 'alliance_game/menu_theme_overlay.py',
               'tools/validate_android_account_profile.py', 'tools/native-account-game/ui-assets.json',
@@ -310,12 +311,24 @@ def cmake_literal(path):
     return '"' + text + '"'
 
 
+def court_mobile_overlays(repo):
+    path = repo / 'tools/android-presentation/court_mobile_overlay.py'
+    module_spec = importlib.util.spec_from_file_location('court_mobile_overlay', path)
+    module = importlib.util.module_from_spec(module_spec)
+    module_spec.loader.exec_module(module)
+    try:
+        return {'court_mobile_workspace.hpp': module.generate_workspace((repo / 'alliance_game/court_ui.hpp').read_bytes()),
+                'account_ui.cpp': module.generate_account_ui((repo / 'alliance_game/account_ui.cpp').read_bytes())}
+    except ValueError as error:
+        raise BuildError(str(error)) from error
+
+
 def engine_generated(repo, prior):
     objects = prior['base_engine']['objects']
     lines = ['set(account_base_objects']
     lines.extend(' ' + cmake_literal(repo / record['path']) for name, record in sorted(objects.items()) if name not in REPLACED_SOURCES)
     lines.append(')\n')
-    return {**shared_connection_overlay(repo), **unified_overlays(repo), **presentation_headers(repo), 'objects.cmake': '\n'.join(lines).encode('utf-8'),
+    return {**shared_connection_overlay(repo), **unified_overlays(repo), **presentation_headers(repo), **court_mobile_overlays(repo), 'objects.cmake': '\n'.join(lines).encode('utf-8'),
             'title_screen.cpp': title_overlay(repo),
             'wesnoth.cpp': main_overlay(repo),
             'game_launcher.cpp': launcher_overlay(repo),
@@ -638,7 +651,7 @@ def previous_version(root, marker, receipt):
     apk = validation.get('apk') if isinstance(validation, dict) else None
     version = apk.get('version_code') if isinstance(apk, dict) else None
     if type(version) is not int or version not in PREVIOUS_VERSION_CODES:
-        raise BuildError('Expected a completed account APK from versions 1192608 through 1192625; nothing was renamed.')
+        raise BuildError('Expected a completed account APK from versions 1192608 through 1192626; nothing was renamed.')
     if 'app/build.gradle' not in marker['files']:
         raise BuildError('The previous account version is not bound to its owned Gradle input.')
     data = call(N.ninja_read, root / 'app/build.gradle', 64 * 1024)
@@ -872,7 +885,7 @@ def main(argv=None):
     parser.add_argument('--public-config', type=Path, help='Public-only .env file; defaults to the repository .env.')
     parser.add_argument('--openssl', type=Path, help='Existing OpenSSL 3 executable for offline public certificate verification.')
     parser.add_argument('--verify', '--verify-only', action='store_true')
-    parser.add_argument('--prepare-update', action='store_true', help='Preserve completed 1192608 through 1192625 stages before the 1192626 Emerald Court world update.')
+    parser.add_argument('--prepare-update', action='store_true', help='Preserve completed 1192608 through 1192626 stages before the 1192627 smooth Emerald Court maps update.')
     args = parser.parse_args(argv)
     try:
         for name, value in vars(args).items():
