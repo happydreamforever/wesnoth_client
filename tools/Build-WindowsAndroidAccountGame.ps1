@@ -9,7 +9,8 @@ param(
     [string]$PublicConfigPath = '',
     [string]$OpenSslPath = 'D:\Test\wesnoth-setup\msys64\mingw64\bin\openssl.exe',
     [string]$CMakePath = 'C:\Program Files\CMake\bin\cmake.exe',
-    [string]$NinjaPath = 'D:\Test\wesnoth-setup\msys64\ucrt64\bin\ninja.exe'
+    [string]$NinjaPath = 'D:\Test\wesnoth-setup\msys64\ucrt64\bin\ninja.exe',
+    [ValidateRange(1,16)][int]$Jobs = 2
 )
 $ErrorActionPreference = 'Stop'
 $buildExit = 2
@@ -80,6 +81,7 @@ try {
     if ($ArchiveDirectory) { $arguments += @('--archive-directory', $ArchiveDirectory) }
     if ($PublicConfigPath) { $arguments += @('--public-config', $PublicConfigPath) }
     $arguments += @('--openssl', $OpenSslPath)
+    if ($PSBoundParameters.ContainsKey('Jobs')) { $arguments += @('--jobs',[string]$Jobs) }
     Write-Host 'Building the unified game offline: reuse verified original engine objects, compile owned game changes, package APK x86_64/API23. Original APK, engine and OBB are preserved.'
     $process = New-Object System.Diagnostics.Process
     $process.StartInfo.FileName = (Get-Item -LiteralPath $PythonPath -Force).FullName

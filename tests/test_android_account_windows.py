@@ -355,13 +355,13 @@ class InstallTests(unittest.TestCase):
 class BuildTests(unittest.TestCase):
  setUp = InstallTests.setUp
  stop_fixture_processes = InstallTests.stop_fixture_processes
- def invoke_build(self):
+ def invoke_build(self, jobs=None):
   helper=self.repo/'tools/Build-WindowsAndroidAccountGame.ps1';shutil.copyfile(ROOT/'tools/Build-WindowsAndroidAccountGame.ps1',helper)
   sdk=self.base/'Android SDK';(sdk/'ndk/26.3.11579264').mkdir(parents=True,exist_ok=True)
   cmake=self.base/'CMake bin/cmake.exe';ninja=self.base/'Ninja bin/ninja.exe';kill=self.base/'Windows/System32/taskkill.exe'
   for file in (cmake,ninja,kill):file.parent.mkdir(parents=True,exist_ok=True);file.write_text(FAKE);file.chmod(0o755)
   self.configpath.write_text(json.dumps(self.config));Path(self.config['calls']).unlink(missing_ok=True)
-  launcher=self.base/'build.ps1';launcher.write_text('& '+ps(helper)+' -PythonPath '+ps(self.python)+' -JavaHome '+ps(self.java.parent.parent)+' -SdkRoot '+ps(sdk)+' -CMakePath '+ps(cmake)+' -NinjaPath '+ps(ninja)+' -GradleUserHome '+ps(self.base/'Gradle cache')+'\nexit $LASTEXITCODE\n')
+  launcher=self.base/'build.ps1';launcher.write_text('& '+ps(helper)+' -PythonPath '+ps(self.python)+' -JavaHome '+ps(self.java.parent.parent)+' -SdkRoot '+ps(sdk)+' -CMakePath '+ps(cmake)+' -NinjaPath '+ps(ninja)+' -GradleUserHome '+ps(self.base/'Gradle cache')+(' -Jobs '+str(jobs) if jobs is not None else '')+'\nexit $LASTEXITCODE\n')
   env=dict(os.environ,OS='Windows_NT',LOCALAPPDATA=str(self.base),USERPROFILE=str(self.base),SystemRoot=str(self.base/'Windows'),ACCOUNT_FIXTURE=str(self.configpath))
   proc=subprocess.run([str(PWSH),'-NoProfile','-File',str(launcher)],env=env,capture_output=True,text=True,timeout=30)
   self.output=proc.stdout+proc.stderr
@@ -375,6 +375,9 @@ class BuildTests(unittest.TestCase):
   self.assertEqual(len(self.calls),1);args=self.calls[0]['args']
   self.assertIn('--cmake',args);self.assertIn('--ninja',args);self.assertIn('--gradle-user-home',args)
   self.assertIn('ANDROID ACCOUNT GAME BUILD COMPLETE',self.output)
+ def test_configured_jobs_reach_the_account_builder(self):
+  self.assertEqual(self.invoke_build(jobs=3),0,self.output)
+  args=self.calls[0]['args'];self.assertEqual(args[args.index('--jobs')+1],'3')
  def test_failed_build_or_stderr_only_marker_cannot_pass(self):
   for cfg in ({'build_exit':1},{'build_marker':'not complete','build_stderr':'ANDROID ACCOUNT GAME BUILD PASS'}):
    with self.subTest(cfg=cfg):
@@ -386,7 +389,7 @@ class BuildTests(unittest.TestCase):
 class RebuildTests(unittest.TestCase):
  setUp = InstallTests.setUp
  stop_fixture_processes = InstallTests.stop_fixture_processes
- def invoke_rebuild(self):
+ def invoke_rebuild(self, jobs=None):
   helper=self.repo/'tools/Rebuild-WindowsAndroidAccountGame.ps1'
   shutil.copyfile(ROOT/'tools/Rebuild-WindowsAndroidAccountGame.ps1',helper)
   child=self.base/'fake shell/powershell.exe';child.parent.mkdir(exist_ok=True)
@@ -396,7 +399,7 @@ class RebuildTests(unittest.TestCase):
   launcher.write_text('& '+ps(helper)+' -PythonPath '+ps(self.python)+' -JavaHome '+ps(self.java.parent.parent)+
    ' -SdkRoot '+ps(self.base/'Android SDK')+' -CMakePath '+ps(self.base/'cmake.exe')+
    ' -NinjaPath '+ps(self.base/'ninja.exe')+' -GradleUserHome '+ps(self.base/'Gradle cache')+
-   ' -ArchiveDirectory '+ps(self.base/'Original archives')+'\nexit $LASTEXITCODE\n')
+   ' -ArchiveDirectory '+ps(self.base/'Original archives')+(' -Jobs '+str(jobs) if jobs is not None else '')+'\nexit $LASTEXITCODE\n')
   env=dict(os.environ,OS='Windows_NT',LOCALAPPDATA=str(self.base),USERPROFILE=str(self.base),
    ACCOUNT_FIXTURE=str(self.configpath),PATH=str(child.parent)+os.pathsep+os.environ['PATH'])
   proc=subprocess.run([str(PWSH),'-NoProfile','-File',str(launcher)],env=env,capture_output=True,text=True,timeout=30)
@@ -406,6 +409,9 @@ class RebuildTests(unittest.TestCase):
   for path,data in self.protected_files.items():self.assertEqual(path.read_bytes(),data)
   self.assertTrue(list((self.repo/'diagnostics').glob('android-account-rebuild-*.txt')),self.output)
   return proc.returncode
+ def test_configured_jobs_reach_the_preserving_child_build(self):
+  self.assertEqual(self.invoke_rebuild(jobs=3),0,self.output)
+  args=self.calls[1]['args'];self.assertEqual(args[args.index('-Jobs')+1],'3')
  def test_preparation_precedes_build_and_preserves_literal_arguments(self):
   self.assertEqual(self.invoke_rebuild(),0,self.output)
   self.assertEqual([x['tool'] for x in self.calls],['python.exe','powershell.exe'])

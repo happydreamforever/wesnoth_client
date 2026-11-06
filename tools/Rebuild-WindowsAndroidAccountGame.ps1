@@ -9,7 +9,8 @@ param(
     [string]$PublicConfigPath = '',
     [string]$OpenSslPath = 'D:\Test\wesnoth-setup\msys64\mingw64\bin\openssl.exe',
     [string]$CMakePath = 'C:\Program Files\CMake\bin\cmake.exe',
-    [string]$NinjaPath = 'D:\Test\wesnoth-setup\msys64\ucrt64\bin\ninja.exe'
+    [string]$NinjaPath = 'D:\Test\wesnoth-setup\msys64\ucrt64\bin\ninja.exe',
+    [ValidateRange(1,16)][int]$Jobs = 2
 )
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path $PSScriptRoot -Parent
@@ -41,6 +42,7 @@ try {
     if ($ArchiveDirectory) { $arguments += @('-ArchiveDirectory', $ArchiveDirectory) }
     if ($PublicConfigPath) { $arguments += @('-PublicConfigPath', $PublicConfigPath) }
     $arguments += @('-OpenSslPath', $OpenSslPath)
+    if ($PSBoundParameters.ContainsKey('Jobs')) { $arguments += @('-Jobs',[string]$Jobs) }
     & powershell.exe @arguments
     if ($LASTEXITCODE -ne 0) { throw 'Account update build stopped. Original stages remain in their recorded backups. Send the rebuild/build logs.' }
     Write-Host 'ANDROID ACCOUNT GAME REBUILD COMPLETE'
